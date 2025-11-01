@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="ShapeAppearanceOverlay.App.AppIcon" parent="@style/ShapeAppearanceOverlay.Material3.Corner.Full">
+    <style name="ShapeAppearanceOverlay.App.AppIcon" parent="@style/ShapeAppearanceOverlay.MaterialComponents.SmallComponent">
         <item name="cornerSize">16dp</item>
     </style>
 </resources>
