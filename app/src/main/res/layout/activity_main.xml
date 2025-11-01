@@ -17,7 +17,7 @@
         app:tabIndicatorFullWidth="false"
         app:tabSelectedTextColor="?attr/colorPrimary"
         app:tabTextColor="?attr/colorOnSurfaceVariant"
-        app:tabIconTint="?attr/colorPrimary"
+        app:tabIconTint="@color/tab_icon_tint"
         app:tabMode="fixed"
         app:tabRippleColor="@android:color/transparent" />
 
@@ -42,6 +42,7 @@
         android:background="?attr/colorSurface">
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/search_layout"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"

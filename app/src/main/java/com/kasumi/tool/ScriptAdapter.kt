@@ -10,6 +10,7 @@ import com.google.android.material.button.MaterialButton
 class ScriptAdapter(
     private val data: List<ScriptItem>,
     private val onDownload: (ScriptItem) -> Unit,
+    private val onCopy: (ScriptItem) -> Unit,
     private val onDelete: (ScriptItem) -> Unit
 ) : RecyclerView.Adapter<ScriptAdapter.VH>() {
 
@@ -17,6 +18,7 @@ class ScriptAdapter(
         val name: TextView = v.findViewById(R.id.txt_script_name)
         val gameName: TextView = v.findViewById(R.id.txt_game_name)
         val btnDownload: MaterialButton = v.findViewById(R.id.btn_download)
+        val btnCopy: MaterialButton = v.findViewById(R.id.btn_copy)
         val btnDelete: MaterialButton = v.findViewById(R.id.btn_delete)
     }
 
@@ -34,6 +36,7 @@ class ScriptAdapter(
         
         // Luôn hiển thị cả 2 nút
         holder.btnDownload.setOnClickListener { onDownload(item) }
+        holder.btnCopy.setOnClickListener { onCopy(item) }
         holder.btnDelete.setOnClickListener { onDelete(item) }
     }
 }
