@@ -68,6 +68,25 @@
                 android:text="Tải xuống" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_copy"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:textAllCaps="false"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorPrimary"
+                app:strokeColor="?attr/colorPrimary"
+                app:strokeWidth="2dp"
+                app:cornerRadius="14dp"
+                app:icon="@android:drawable/ic_menu_copy"
+                app:iconTint="?attr/colorPrimary"
+                app:iconGravity="textStart"
+                android:text="@string/copy_script" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"

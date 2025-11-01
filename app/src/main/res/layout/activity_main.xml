@@ -4,20 +4,39 @@
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+    android:background="@drawable/background_gradient"
+    android:padding="12dp">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/top_app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/card_gradient_bg"
+        android:minHeight="72dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        app:title="@string/app_name"
+        app:subtitle="@string/app_subtitle"
+        app:titleCentered="false"
+        app:titleTextColor="?attr/colorOnSurface"
+        app:subtitleTextColor="?attr/colorOnSurfaceVariant"
+        app:logo="@drawable/app_icon"
+        app:contentInsetStartWithNavigation="0dp" />
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:elevation="8dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/card_gradient_bg"
+        android:elevation="4dp"
         app:tabIndicatorColor="?attr/colorPrimary"
         app:tabIndicatorHeight="4dp"
         app:tabIndicatorFullWidth="false"
         app:tabSelectedTextColor="?attr/colorPrimary"
         app:tabTextColor="?attr/colorOnSurfaceVariant"
-        app:tabIconTint="?attr/colorPrimary"
+        app:tabIconTint="@color/tab_icon_tint"
         app:tabMode="fixed"
         app:tabRippleColor="@android:color/transparent" />
 
@@ -36,10 +55,11 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:visibility="visible"
+        android:layout_marginBottom="12dp"
         android:padding="18dp"
         android:paddingBottom="12dp"
-        android:elevation="4dp"
-        android:background="?attr/colorSurface">
+        android:background="@drawable/card_gradient_bg"
+        android:elevation="4dp">
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="0dp"
@@ -116,7 +136,9 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingTop="8dp" />
+        android:paddingTop="8dp"
+        android:paddingBottom="12dp"
+        android:clipToPadding="false" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_installed"
@@ -124,7 +146,9 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="gone"
-        android:paddingTop="8dp" />
+        android:paddingTop="8dp"
+        android:paddingBottom="12dp"
+        android:clipToPadding="false" />
 
     <ScrollView
         android:id="@+id/log_container"
@@ -133,7 +157,8 @@
         android:layout_weight="1"
         android:visibility="gone"
         android:padding="18dp"
-        android:background="?android:attr/colorBackground">
+        android:background="@drawable/card_gradient_bg"
+        android:clipToPadding="false">
 
         <TextView
             android:id="@+id/log_view"

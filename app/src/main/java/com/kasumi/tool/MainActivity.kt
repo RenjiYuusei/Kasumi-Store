@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -20,12 +22,14 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.Gson
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.tabs.TabLayout
 import android.app.PendingIntent
 import com.google.android.material.progressindicator.LinearProgressIndicator
@@ -68,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private val filteredItems = mutableListOf<ApkItem>()     // danh sách sau khi lọc để hiển thị
     private val preloadedIds = mutableSetOf<String>()
     private lateinit var tabLayout: TabLayout
+    private lateinit var toolbar: MaterialToolbar
     private lateinit var sourceBar: View
     private lateinit var searchInput: EditText
     private lateinit var btnRefreshSource: Button
@@ -96,6 +101,13 @@ class MainActivity : AppCompatActivity() {
         // Force dark mode
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         setContentView(R.layout.activity_main)
+
+        toolbar = findViewById(R.id.top_app_bar)
+        setSupportActionBar(toolbar)
+        AppCompatResources.getDrawable(this, R.drawable.app_icon)?.mutate()?.let { drawable ->
+            drawable.setTintList(null)
+            toolbar.logo = drawable
+        }
 
         listView = findViewById(R.id.recycler)
         scriptListView = findViewById(R.id.recycler_installed)
@@ -152,7 +164,8 @@ class MainActivity : AppCompatActivity() {
 
         scriptAdapter = ScriptAdapter(scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
-            onDelete = { script -> deleteScript(script) }
+            onDelete = { script -> deleteScript(script) },
+            onCopy = { script -> copyScript(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
         scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
@@ -1157,7 +1170,41 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Hủy", null)
             .show()
     }
-    
+
+    private suspend fun fetchScriptBody(url: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw IllegalStateException("HTTP ${resp.code}")
+            }
+            resp.body?.string() ?: throw IllegalStateException("Empty response")
+        }
+    }
+
+    private suspend fun prepareScriptContent(script: ScriptItem, action: String): String {
+        script.localPath?.let { path ->
+            log("$action nội dung script local: ${script.name}")
+            return withContext(Dispatchers.IO) {
+                val file = File(path)
+                if (!file.exists()) throw IllegalStateException("Script local không tồn tại")
+                file.readText()
+            }
+        }
+
+        val url = script.url ?: throw IllegalStateException("Script không có URL")
+        val shouldFetchContent = url.contains("/source/hard/")
+        return if (shouldFetchContent) {
+            log("$action script đặc biệt (full content): ${script.name}")
+            fetchScriptBody(url)
+        } else {
+            log("$action script loadstring: ${script.name}")
+            "loadstring(game:HttpGet(\"$url\"))()"
+        }
+    }
+
     private fun downloadScript(script: ScriptItem, targetFolder: String) {
         lifecycleScope.launch {
             try {
@@ -1165,45 +1212,23 @@ class MainActivity : AppCompatActivity() {
                     toast("Script không có URL")
                     return@launch
                 }
-                
+
                 setBusy(true)
                 log("Đang tải script: ${script.name}")
-                
-                // Chỉ fetch nội dung file nếu là script đặc biệt trong /source/hard/
-                val shouldFetchContent = script.url.contains("/source/hard/")
-                
-                val scriptContent = if (shouldFetchContent) {
-                    // Fetch toàn bộ nội dung file (có config)
-                    log("Tải script đặc biệt (full content): ${script.name}")
-                    withContext(Dispatchers.IO) {
-                        val req = Request.Builder()
-                            .url(script.url)
-                            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) {
-                                throw IllegalStateException("HTTP ${resp.code}")
-                            }
-                            resp.body?.string() ?: throw IllegalStateException("Empty response")
-                        }
-                    }
-                } else {
-                    // Wrap URL trong loadstring (script thông thường)
-                    log("Tạo script loadstring: ${script.name}")
-                    "loadstring(game:HttpGet(\"${script.url}\"))()"
-                }
-                
+
+                val scriptContent = prepareScriptContent(script, "Tải")
+
                 val scriptFile = getScriptFile(script, targetFolder)
                 scriptFile.parentFile?.mkdirs()
-                
+
                 withContext(Dispatchers.IO) {
                     scriptFile.writeText(scriptContent)
                 }
-                
+
                 log("✓ Đã lưu script vào: /Delta/$targetFolder/${script.name}.txt")
                 toast("Đã lưu script vào $targetFolder")
                 applyScriptFilter(currentScriptQuery)
-                
+
             } catch (e: Exception) {
                 toast("Lỗi tải script: ${e.message}")
                 log("Lỗi tải script: ${e.message}")
@@ -1212,7 +1237,29 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
+    private fun copyScript(script: ScriptItem) {
+        lifecycleScope.launch {
+            try {
+                setBusy(true)
+                log("Đang sao chép script: ${script.name}")
+
+                val scriptContent = prepareScriptContent(script, "Sao chép")
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("Script ${script.name}", scriptContent)
+                clipboard.setPrimaryClip(clip)
+
+                toast("Đã sao chép script vào clipboard")
+                log("✓ Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                toast("Lỗi copy script: ${e.message}")
+                log("Lỗi copy script: ${e.message}")
+            } finally {
+                setBusy(false)
+            }
+        }
+    }
+
     private fun deleteScript(script: ScriptItem) {
         try {
             // Check and delete from both folders
