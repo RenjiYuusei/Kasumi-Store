@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kasumi</string>
+    <string name="app_title">Kasumi Toolbox</string>
+    <string name="app_subtitle">Quản lý ứng dụng &amp; script tiện lợi</string>
+    <string name="app_icon">Biểu tượng ứng dụng</string>
     <string name="install">Cài đặt</string>
     <string name="delete">Xóa</string>
     <string name="open">Mở</string>
     <string name="info">Thông tin</string>
     <string name="uninstall">Gỡ cài đặt</string>
     <string name="refresh">Làm mới</string>
-    <string name="search_hint">Tìm kiếm ứng dụng…</string>
+    <string name="search_hint">Tìm kiếm ứng dụng hoặc script…</string>
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
@@ -17,4 +20,10 @@
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
+    <string name="copy_script">Sao chép</string>
+    <string name="copy_success">Đã sao chép script vào clipboard</string>
+    <string name="copy_failed">Không thể sao chép script: %1$s</string>
+    <string name="copy_no_source">Script không có nguồn hợp lệ</string>
+    <string name="clipboard_unavailable">Không tìm thấy clipboard</string>
+    <string name="copy_unknown_error">Lỗi không xác định</string>
 </resources>

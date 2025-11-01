@@ -10,7 +10,8 @@ import com.google.android.material.button.MaterialButton
 class ScriptAdapter(
     private val data: List<ScriptItem>,
     private val onDownload: (ScriptItem) -> Unit,
-    private val onDelete: (ScriptItem) -> Unit
+    private val onDelete: (ScriptItem) -> Unit,
+    private val onCopy: (ScriptItem) -> Unit
 ) : RecyclerView.Adapter<ScriptAdapter.VH>() {
 
     inner class VH(v: View) : RecyclerView.ViewHolder(v) {
@@ -18,6 +19,7 @@ class ScriptAdapter(
         val gameName: TextView = v.findViewById(R.id.txt_game_name)
         val btnDownload: MaterialButton = v.findViewById(R.id.btn_download)
         val btnDelete: MaterialButton = v.findViewById(R.id.btn_delete)
+        val btnCopy: MaterialButton = v.findViewById(R.id.btn_copy)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -32,8 +34,9 @@ class ScriptAdapter(
         holder.name.text = item.name
         holder.gameName.text = item.gameName
         
-        // Luôn hiển thị cả 2 nút
+        // Luôn hiển thị các hành động
         holder.btnDownload.setOnClickListener { onDownload(item) }
         holder.btnDelete.setOnClickListener { onDelete(item) }
+        holder.btnCopy.setOnClickListener { onCopy(item) }
     }
 }

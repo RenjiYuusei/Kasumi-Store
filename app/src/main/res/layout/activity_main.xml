@@ -1,20 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?android:attr/colorBackground">
+    android:orientation="vertical"
+    android:background="@drawable/bg_main_gradient"
+    android:paddingBottom="8dp">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/top_app_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_surface_card"
+        android:elevation="0dp"
+        app:title="@string/app_title"
+        app:titleCentered="true"
+        app:titleTextColor="?attr/colorOnSurface"
+        app:subtitle="@string/app_subtitle"
+        app:subtitleTextColor="?attr/colorOnSurfaceVariant"
+        app:navigationIcon="@drawable/ic_apps"
+        app:navigationIconTint="?attr/colorPrimary" />
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tab_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
-        android:elevation="8dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_surface_card"
+        android:elevation="0dp"
         app:tabIndicatorColor="?attr/colorPrimary"
         app:tabIndicatorHeight="4dp"
-        app:tabIndicatorFullWidth="false"
+        app:tabIndicatorFullWidth="true"
+        app:tabIndicatorAnimationDuration="250"
         app:tabSelectedTextColor="?attr/colorPrimary"
         app:tabTextColor="?attr/colorOnSurfaceVariant"
         app:tabIconTint="?attr/colorPrimary"
@@ -33,13 +56,17 @@
         android:id="@+id/source_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:visibility="visible"
-        android:padding="18dp"
+        android:paddingStart="18dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="18dp"
         android:paddingBottom="12dp"
-        android:elevation="4dp"
-        android:background="?attr/colorSurface">
+        android:background="@drawable/bg_surface_card">
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="0dp"
@@ -88,9 +115,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
         android:padding="12dp"
         android:visibility="gone"
-        android:background="@color/md_theme_primaryContainer">
+        android:background="@drawable/bg_primary_card">
         
         <TextView
             android:id="@+id/txt_stats"
@@ -116,7 +146,10 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingTop="8dp" />
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:paddingTop="8dp"
+        android:clipToPadding="false" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_installed"
@@ -124,7 +157,10 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="gone"
-        android:paddingTop="8dp" />
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:paddingTop="8dp"
+        android:clipToPadding="false" />
 
     <ScrollView
         android:id="@+id/log_container"
@@ -132,8 +168,11 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="gone"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
         android:padding="18dp"
-        android:background="?android:attr/colorBackground">
+        android:background="@android:color/transparent">
 
         <TextView
             android:id="@+id/log_view"
@@ -145,7 +184,7 @@
             android:typeface="monospace"
             android:textIsSelectable="true"
             android:padding="16dp"
-            android:background="?attr/colorSurface"
+            android:background="@drawable/bg_surface_card"
             android:text="Đang tải nhật ký..." />
     </ScrollView>
 

@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -152,7 +154,8 @@ class MainActivity : AppCompatActivity() {
 
         scriptAdapter = ScriptAdapter(scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
-            onDelete = { script -> deleteScript(script) }
+            onDelete = { script -> deleteScript(script) },
+            onCopy = { script -> copyScriptToClipboard(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
         scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
@@ -879,7 +882,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun guessNameFromHeaders(disposition: String?): String? {
         if (disposition == null) return null
-        val regex = Regex("filename=\\\"?(.*?)\\\"?(;|$)")
+        val regex = Regex("filename=\\"?(.*?)\\"?(;|$)")
         val m = regex.find(disposition)
         return m?.groupValues?.getOrNull(1)
     }
@@ -1128,7 +1131,37 @@ class MainActivity : AppCompatActivity() {
         }
         scriptAdapter.notifyDataSetChanged()
     }
-    
+
+    private suspend fun fetchScriptContent(script: ScriptItem): String {
+        script.localPath?.let { path ->
+            return withContext(Dispatchers.IO) {
+                val file = File(path)
+                if (!file.exists()) {
+                    throw IllegalStateException("Script không tồn tại")
+                }
+                file.readText()
+            }
+        }
+
+        val url = script.url ?: throw IllegalStateException("Script không có URL")
+        return if (url.contains("/source/hard/")) {
+            withContext(Dispatchers.IO) {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        throw IllegalStateException("HTTP ${resp.code}")
+                    }
+                    resp.body?.string() ?: throw IllegalStateException("Empty response")
+                }
+            }
+        } else {
+            "loadstring(game:HttpGet(\"$url\"))()"
+        }
+    }
+
     private fun getScriptFile(script: ScriptItem, folderName: String): File {
         return if (script.localPath != null) {
             File(script.localPath)
@@ -1169,28 +1202,13 @@ class MainActivity : AppCompatActivity() {
                 setBusy(true)
                 log("Đang tải script: ${script.name}")
                 
-                // Chỉ fetch nội dung file nếu là script đặc biệt trong /source/hard/
-                val shouldFetchContent = script.url.contains("/source/hard/")
-                
-                val scriptContent = if (shouldFetchContent) {
-                    // Fetch toàn bộ nội dung file (có config)
+                val isSpecial = script.url.contains("/source/hard/")
+                val scriptContent = if (isSpecial) {
                     log("Tải script đặc biệt (full content): ${script.name}")
-                    withContext(Dispatchers.IO) {
-                        val req = Request.Builder()
-                            .url(script.url)
-                            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) {
-                                throw IllegalStateException("HTTP ${resp.code}")
-                            }
-                            resp.body?.string() ?: throw IllegalStateException("Empty response")
-                        }
-                    }
+                    fetchScriptContent(script)
                 } else {
-                    // Wrap URL trong loadstring (script thông thường)
                     log("Tạo script loadstring: ${script.name}")
-                    "loadstring(game:HttpGet(\"${script.url}\"))()"
+                    fetchScriptContent(script)
                 }
                 
                 val scriptFile = getScriptFile(script, targetFolder)
@@ -1203,7 +1221,7 @@ class MainActivity : AppCompatActivity() {
                 log("✓ Đã lưu script vào: /Delta/$targetFolder/${script.name}.txt")
                 toast("Đã lưu script vào $targetFolder")
                 applyScriptFilter(currentScriptQuery)
-                
+
             } catch (e: Exception) {
                 toast("Lỗi tải script: ${e.message}")
                 log("Lỗi tải script: ${e.message}")
@@ -1212,7 +1230,52 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
+    private fun copyScriptToClipboard(script: ScriptItem) {
+        lifecycleScope.launch {
+            setBusy(true)
+            try {
+                val scriptContent = when {
+                    script.localPath != null -> {
+                        log("Đọc script local để sao chép: ${script.name}")
+                        fetchScriptContent(script)
+                    }
+                    script.url?.contains("/source/hard/") == true -> {
+                        log("Tải script đặc biệt để sao chép: ${script.name}")
+                        fetchScriptContent(script)
+                    }
+                    script.url != null -> {
+                        log("Sinh loadstring để sao chép: ${script.name}")
+                        fetchScriptContent(script)
+                    }
+                    else -> {
+                        toast(getString(R.string.copy_failed, getString(R.string.copy_no_source)))
+                        log("Script không có nguồn để sao chép: ${script.name}")
+                        return@launch
+                    }
+                }
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard == null) {
+                    toast(getString(R.string.copy_failed, getString(R.string.clipboard_unavailable)))
+                    log("Clipboard không khả dụng để sao chép script")
+                    return@launch
+                }
+
+                val clip = ClipData.newPlainText(script.name, scriptContent)
+                clipboard.setPrimaryClip(clip)
+                toast(getString(R.string.copy_success))
+                log("✓ Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                val msg = e.message ?: getString(R.string.copy_unknown_error)
+                toast(getString(R.string.copy_failed, msg))
+                log("Lỗi sao chép script: $msg")
+            } finally {
+                setBusy(false)
+            }
+        }
+    }
+
     private fun deleteScript(script: ScriptItem) {
         try {
             // Check and delete from both folders
@@ -1264,14 +1327,14 @@ data class ApkItem(
             list.forEachIndexed { i, it ->
                 if (i > 0) sb.append(',')
                 sb.append('{')
-                sb.append("\"id\":\"${it.id}\",")
-                sb.append("\"name\":\"${escape(it.name)}\",")
-                sb.append("\"sourceType\":\"${it.sourceType}\",")
-                sb.append("\"url\":${if (it.url != null) "\"${escape(it.url)}\"" else "null"},")
-                sb.append("\"uri\":${if (it.uri != null) "\"${escape(it.uri)}\"" else "null"},")
-                sb.append("\"versionName\":${if (it.versionName != null) "\"${escape(it.versionName)}\"" else "null"},")
-                sb.append("\"versionCode\":${it.versionCode?.toString() ?: "null"},")
-                sb.append("\"iconUrl\":${if (it.iconUrl != null) "\"${escape(it.iconUrl)}\"" else "null"}")
+                sb.append(""id":"${it.id}",")
+                sb.append(""name":"${escape(it.name)}",")
+                sb.append(""sourceType":"${it.sourceType}",")
+                sb.append(""url":${if (it.url != null) ""${escape(it.url)}"" else "null"},")
+                sb.append(""uri":${if (it.uri != null) ""${escape(it.uri)}"" else "null"},")
+                sb.append(""versionName":${if (it.versionName != null) ""${escape(it.versionName)}"" else "null"},")
+                sb.append(""versionCode":${it.versionCode?.toString() ?: "null"},")
+                sb.append(""iconUrl":${if (it.iconUrl != null) ""${escape(it.iconUrl)}"" else "null"}")
                 sb.append('}')
             }
             sb.append(']')
@@ -1300,7 +1363,7 @@ data class ApkItem(
             return list
         }
 
-        private fun escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
+        private fun escape(s: String) = s.replace("\", "\\\").replace(""", "\\"")
 
         private fun splitTopLevel(s: String): List<String> {
             val res = mutableListOf<String>()
@@ -1331,10 +1394,10 @@ data class ApkItem(
             for (p in parts) {
                 val idx = p.indexOf(":")
                 if (idx > 0) {
-                    val key = p.substring(0, idx).trim().removeSurrounding("\"", "\"")
+                    val key = p.substring(0, idx).trim().removeSurrounding(""", """)
                     var valueStr = p.substring(idx + 1).trim()
-                    var value: String? = if (valueStr == "null") null else valueStr.removeSurrounding("\"", "\"")
-                    if (value != null) value = value.replace("\\\"", "\"").replace("\\\\", "\\")
+                    var value: String? = if (valueStr == "null") null else valueStr.removeSurrounding(""", """)
+                    if (value != null) value = value.replace("\\"", """).replace("\\\", "\")
                     map[key] = value
                 }
             }
