@@ -19,6 +19,11 @@
     "gameName": "Blox Fruits",
     "url": "https://raw.githubusercontent.com/ThundarZ/Welcome/refs/heads/main/Main/BloxFruit/FindFruit.lua"
   },
+  {
+   "name": "QuantumOnyx",
+    "gameName": "Blox Fruits",
+    "url": "https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"
+  },
     {
     "name": "Lonely Hub Kaitun",
     "gameName": "Blox Fruits",
