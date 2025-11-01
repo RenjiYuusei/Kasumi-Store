@@ -8,8 +8,10 @@
     android:layout_marginTop="8dp"
     android:layout_marginBottom="8dp"
     app:cardCornerRadius="20dp"
-    app:cardElevation="4dp"
-    app:strokeWidth="0dp">
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="?attr/colorSurface"
+    app:strokeColor="?attr/colorSurfaceVariant"
+    app:strokeWidth="1dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -66,6 +68,21 @@
                 app:icon="@android:drawable/stat_sys_download"
                 app:iconGravity="textStart"
                 android:text="Tải xuống" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_copy"
+                style="@style/Widget.Material3.Button.ElevatedButton"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:textAllCaps="false"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                app:cornerRadius="14dp"
+                app:icon="@drawable/ic_copy"
+                app:iconGravity="textStart"
+                android:text="@string/copy" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_delete"

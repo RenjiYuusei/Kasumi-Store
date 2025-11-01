@@ -6,81 +6,119 @@
     android:layout_height="match_parent"
     android:background="?android:attr/colorBackground">
 
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tab_layout"
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/colorSurface"
-        android:elevation="8dp"
-        app:tabIndicatorColor="?attr/colorPrimary"
-        app:tabIndicatorHeight="4dp"
-        app:tabIndicatorFullWidth="false"
-        app:tabSelectedTextColor="?attr/colorPrimary"
-        app:tabTextColor="?attr/colorOnSurfaceVariant"
-        app:tabIconTint="?attr/colorPrimary"
-        app:tabMode="fixed"
-        app:tabRippleColor="@android:color/transparent" />
+        android:elevation="4dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:minHeight="64dp"
+            app:titleCentered="true"
+            app:subtitleCentered="true"
+            app:titleTextColor="?attr/colorOnSurface"
+            app:subtitleTextColor="?attr/colorOnSurfaceVariant" />
+
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tab_layout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/colorSurface"
+            app:tabIndicatorColor="?attr/colorPrimary"
+            app:tabIndicatorHeight="4dp"
+            app:tabIndicatorFullWidth="false"
+            app:tabSelectedTextColor="?attr/colorPrimary"
+            app:tabTextColor="?attr/colorOnSurfaceVariant"
+            app:tabIconTint="?attr/colorPrimary"
+            app:tabMode="fixed"
+            app:tabInlineLabel="true"
+            app:tabRippleColor="@android:color/transparent" />
+
+    </com.google.android.material.appbar.AppBarLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:id="@+id/global_progress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:visibility="gone"
         android:indeterminate="true"
         app:indicatorColor="?attr/colorPrimary" />
 
-    <LinearLayout
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/source_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="16dp"
         android:visibility="visible"
-        android:padding="18dp"
-        android:paddingBottom="12dp"
-        android:elevation="4dp"
-        android:background="?attr/colorSurface">
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp"
+        app:cardBackgroundColor="?attr/colorSurface"
+        app:strokeColor="?attr/colorSurfaceVariant"
+        app:strokeWidth="1dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
-            app:endIconMode="clear_text"
-            app:startIconDrawable="@android:drawable/ic_menu_search"
-            app:boxCornerRadiusTopStart="12dp"
-            app:boxCornerRadiusTopEnd="12dp"
-            app:boxCornerRadiusBottomStart="12dp"
-            app:boxCornerRadiusBottomEnd="12dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="18dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="14dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/search_input"
-                android:layout_width="match_parent"
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:hint="@string/search_hint"
-                android:singleLine="true"
-                android:inputType="text" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_weight="1"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                app:endIconMode="clear_text"
+                app:startIconDrawable="@android:drawable/ic_menu_search"
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_sort"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            app:icon="@drawable/ic_sort"
-            android:contentDescription="@string/sort"
-            android:visibility="gone" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/search_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:inputType="text"
+                    android:imeOptions="actionSearch" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_refresh_source"
-            style="@style/Widget.Material3.Button.Icon"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/refresh"
-            app:icon="@android:drawable/ic_popup_sync" />
-    </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_sort"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/sort"
+                android:visibility="gone"
+                app:icon="@drawable/ic_sort" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_refresh_source"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/refresh"
+                android:textAllCaps="false"
+                app:cornerRadius="16dp"
+                app:icon="@android:drawable/ic_popup_sync"
+                app:iconGravity="textStart" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
     <!-- Stats Bar -->
     <LinearLayout
@@ -88,6 +126,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:padding="12dp"
         android:visibility="gone"
         android:background="@color/md_theme_primaryContainer">
@@ -116,7 +156,9 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:paddingTop="8dp" />
+        android:paddingTop="8dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_installed"
@@ -124,7 +166,9 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="gone"
-        android:paddingTop="8dp" />
+        android:paddingTop="8dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp" />
 
     <ScrollView
         android:id="@+id/log_container"

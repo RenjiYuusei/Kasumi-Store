@@ -1,19 +1,22 @@
 package com.kasumi.tool
 
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import org.json.JSONArray
-import org.json.JSONObject
 import android.provider.Settings
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -21,30 +24,29 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.gson.Gson
-import com.google.android.material.tabs.TabLayout
-import android.app.PendingIntent
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import androidx.core.content.pm.PackageInfoCompat
- 
+import com.google.android.material.tabs.TabLayout
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.*
 import java.util.concurrent.TimeUnit
-import android.text.Editable
-import android.text.TextWatcher
 import java.util.zip.ZipInputStream
 
 class MainActivity : AppCompatActivity() {
@@ -96,6 +98,11 @@ class MainActivity : AppCompatActivity() {
         // Force dark mode
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         setContentView(R.layout.activity_main)
+
+        findViewById<MaterialToolbar>(R.id.toolbar).apply {
+            title = getString(R.string.app_name)
+            subtitle = getString(R.string.app_tagline)
+        }
 
         listView = findViewById(R.id.recycler)
         scriptListView = findViewById(R.id.recycler_installed)
@@ -152,7 +159,8 @@ class MainActivity : AppCompatActivity() {
 
         scriptAdapter = ScriptAdapter(scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
-            onDelete = { script -> deleteScript(script) }
+            onDelete = { script -> deleteScript(script) },
+            onCopy = { script -> copyScript(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
         scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
@@ -235,12 +243,12 @@ class MainActivity : AppCompatActivity() {
         try {
             when (currentTab) {
                 0 -> { // Apps tab
-                    searchInput.hint = "Tìm kiếm ứng dụng..."
+                    searchInput.hint = getString(R.string.search_hint_apps)
                     val want = currentQuery
                     if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
                 }
                 1 -> { // Script tab
-                    searchInput.hint = "Tìm kiếm script..."
+                    searchInput.hint = getString(R.string.search_hint_scripts)
                     val want = currentScriptQuery
                     if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
                 }
@@ -1240,6 +1248,50 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             toast("Lỗi xóa script: ${e.message}")
             log("Lỗi xóa script: ${e.message}")
+        }
+    }
+
+    private fun copyScript(script: ScriptItem) {
+        lifecycleScope.launch {
+            try {
+                val content = withContext(Dispatchers.IO) {
+                    when {
+                        script.localPath != null -> {
+                            val file = File(script.localPath)
+                            if (!file.exists()) {
+                                throw IllegalStateException(getString(R.string.copy_error_missing))
+                            }
+                            file.readText()
+                        }
+                        !script.url.isNullOrEmpty() -> {
+                            if (script.url.contains("/source/hard/")) {
+                                val req = Request.Builder()
+                                    .url(script.url)
+                                    .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+                                    .build()
+                                client.newCall(req).execute().use { resp ->
+                                    if (!resp.isSuccessful) {
+                                        throw IllegalStateException("HTTP ${resp.code}")
+                                    }
+                                    resp.body?.string() ?: throw IllegalStateException(getString(R.string.copy_error_empty))
+                                }
+                            } else {
+                                "loadstring(game:HttpGet(\"${script.url}\"))()"
+                            }
+                        }
+                        else -> throw IllegalStateException(getString(R.string.copy_error_unknown))
+                    }
+                }
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
+                toast(getString(R.string.copy_success))
+                log("Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                val message = e.message ?: getString(R.string.copy_error_unknown)
+                toast(getString(R.string.copy_error, message))
+                log("Lỗi sao chép script: ${e.message}")
+            }
         }
     }
 }

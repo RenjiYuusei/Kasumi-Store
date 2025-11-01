@@ -7,7 +7,8 @@
     <string name="info">Thông tin</string>
     <string name="uninstall">Gỡ cài đặt</string>
     <string name="refresh">Làm mới</string>
-    <string name="search_hint">Tìm kiếm ứng dụng…</string>
+    <string name="search_hint_apps">Tìm kiếm ứng dụng…</string>
+    <string name="search_hint_scripts">Tìm kiếm script…</string>
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
@@ -17,4 +18,12 @@
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
+    <string name="copy">Sao chép</string>
+    <string name="copy_success">Đã sao chép script vào clipboard</string>
+    <string name="copy_error">Không thể sao chép script: %1$s</string>
+    <string name="copy_error_missing">Không tìm thấy file script</string>
+    <string name="copy_error_empty">Nội dung script trống</string>
+    <string name="copy_error_unknown">Lỗi không xác định</string>
+    <string name="app_tagline">Trình quản lý APK &amp; Script</string>
+    <string name="app_icon_description">Biểu tượng ứng dụng</string>
 </resources>
