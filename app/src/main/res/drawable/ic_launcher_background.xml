@@ -7,6 +7,6 @@
     
     <!-- Dark background -->
     <path
-        android:fillColor="#1C1B1F"
+        android:fillColor="#120F1E"
         android:pathData="M0,0h108v108h-108z"/>
 </vector>

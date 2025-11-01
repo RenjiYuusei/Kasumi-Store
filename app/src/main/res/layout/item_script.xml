@@ -7,44 +7,69 @@
     android:layout_marginEnd="12dp"
     android:layout_marginTop="8dp"
     android:layout_marginBottom="8dp"
-    app:cardCornerRadius="20dp"
-    app:cardElevation="4dp"
+    app:cardCornerRadius="22dp"
+    app:cardElevation="6dp"
     app:strokeWidth="0dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp"
-        android:background="?attr/colorSurface">
+        android:background="@drawable/card_gradient_bg"
+        android:padding="20dp">
 
-        <TextView
-            android:id="@+id/txt_script_name"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textStyle="bold"
-            android:textSize="19sp"
-            android:textColor="?attr/colorOnSurface"
-            android:letterSpacing="0.01"
-            android:maxLines="2"
-            android:ellipsize="end"
-            android:text="Script Name" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/txt_game_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:layout_marginTop="8dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:background="@drawable/game_tag_bg"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:text="Game Name" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/txt_script_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="?attr/colorOnSurface"
+                    android:letterSpacing="0.01"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:text="Script Name" />
+
+                <TextView
+                    android:id="@+id/txt_game_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:layout_marginTop="6dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:background="@drawable/game_tag_bg"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="Game Name" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_copy"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@string/copy_script"
+                android:tooltipText="@string/copy_script"
+                app:icon="@drawable/ic_copy"
+                app:iconTint="?attr/colorOnSurface" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -57,7 +82,7 @@
                 android:id="@+id/btn_download"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="54dp"
                 android:layout_weight="1"
                 android:textAllCaps="false"
                 android:textSize="15sp"
@@ -71,7 +96,7 @@
                 android:id="@+id/btn_delete"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
-                android:layout_height="56dp"
+                android:layout_height="54dp"
                 android:layout_weight="1"
                 android:layout_marginStart="12dp"
                 android:textAllCaps="false"
