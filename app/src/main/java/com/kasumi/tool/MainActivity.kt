@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -30,6 +32,7 @@ import com.google.android.material.tabs.TabLayout
 import android.app.PendingIntent
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import androidx.core.content.pm.PackageInfoCompat
+import com.google.android.material.textfield.TextInputLayout
  
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -69,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private val preloadedIds = mutableSetOf<String>()
     private lateinit var tabLayout: TabLayout
     private lateinit var sourceBar: View
+    private lateinit var searchLayout: TextInputLayout
     private lateinit var searchInput: EditText
     private lateinit var btnRefreshSource: Button
     private lateinit var logContainer: View
@@ -103,6 +107,7 @@ class MainActivity : AppCompatActivity() {
         sourceBar = findViewById(R.id.source_bar)
         logContainer = findViewById(R.id.log_container)
         logView = findViewById(R.id.log_view)
+        searchLayout = findViewById(R.id.search_layout)
         searchInput = findViewById(R.id.search_input)
         btnRefreshSource = findViewById(R.id.btn_refresh_source)
         globalProgress = findViewById(R.id.global_progress)
@@ -152,6 +157,7 @@ class MainActivity : AppCompatActivity() {
 
         scriptAdapter = ScriptAdapter(scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
+            onCopy = { script -> copyScript(script) },
             onDelete = { script -> deleteScript(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
@@ -235,17 +241,19 @@ class MainActivity : AppCompatActivity() {
         try {
             when (currentTab) {
                 0 -> { // Apps tab
-                    searchInput.hint = "Tìm kiếm ứng dụng..."
+                    searchLayout.isHintEnabled = true
+                    searchLayout.hint = getString(R.string.search_hint)
                     val want = currentQuery
                     if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
                 }
                 1 -> { // Script tab
-                    searchInput.hint = "Tìm kiếm script..."
+                    searchLayout.isHintEnabled = true
+                    searchLayout.hint = getString(R.string.search_scripts_hint)
                     val want = currentScriptQuery
                     if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
                 }
                 else -> {
-                    searchInput.hint = ""
+                    searchLayout.isHintEnabled = false
                     if (!searchInput.text.isNullOrEmpty()) searchInput.setText("")
                 }
             }
@@ -1138,7 +1146,44 @@ class MainActivity : AppCompatActivity() {
             File(dir, "${script.name}.txt")
         }
     }
-    
+
+    private fun isSpecialScriptUrl(url: String): Boolean = url.contains("/source/hard/")
+
+    private suspend fun fetchScriptBody(url: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw IllegalStateException("HTTP ${resp.code}")
+            }
+            resp.body?.string() ?: throw IllegalStateException("Empty response")
+        }
+    }
+
+    private suspend fun resolveOnlineScriptContent(script: ScriptItem): String {
+        val url = script.url ?: throw IllegalStateException("Script không có URL")
+        return if (isSpecialScriptUrl(url)) {
+            log("Tải script đặc biệt (full content): ${script.name}")
+            fetchScriptBody(url)
+        } else {
+            log("Tạo script loadstring: ${script.name}")
+            "loadstring(game:HttpGet(\"$url\"))()"
+        }
+    }
+
+    private suspend fun readLocalScript(script: ScriptItem): String {
+        val path = script.localPath ?: throw IllegalStateException("Script không tồn tại")
+        return withContext(Dispatchers.IO) {
+            val file = File(path)
+            if (!file.exists()) {
+                throw IllegalStateException("Script không tồn tại")
+            }
+            file.readText()
+        }
+    }
+
     private fun showDownloadFolderDialog(script: ScriptItem) {
         val options = arrayOf(
             "Auto-execute (Tự động chạy)",
@@ -1157,7 +1202,7 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Hủy", null)
             .show()
     }
-    
+
     private fun downloadScript(script: ScriptItem, targetFolder: String) {
         lifecycleScope.launch {
             try {
@@ -1165,37 +1210,15 @@ class MainActivity : AppCompatActivity() {
                     toast("Script không có URL")
                     return@launch
                 }
-                
+
                 setBusy(true)
                 log("Đang tải script: ${script.name}")
-                
-                // Chỉ fetch nội dung file nếu là script đặc biệt trong /source/hard/
-                val shouldFetchContent = script.url.contains("/source/hard/")
-                
-                val scriptContent = if (shouldFetchContent) {
-                    // Fetch toàn bộ nội dung file (có config)
-                    log("Tải script đặc biệt (full content): ${script.name}")
-                    withContext(Dispatchers.IO) {
-                        val req = Request.Builder()
-                            .url(script.url)
-                            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) {
-                                throw IllegalStateException("HTTP ${resp.code}")
-                            }
-                            resp.body?.string() ?: throw IllegalStateException("Empty response")
-                        }
-                    }
-                } else {
-                    // Wrap URL trong loadstring (script thông thường)
-                    log("Tạo script loadstring: ${script.name}")
-                    "loadstring(game:HttpGet(\"${script.url}\"))()"
-                }
-                
+
+                val scriptContent = resolveOnlineScriptContent(script)
+
                 val scriptFile = getScriptFile(script, targetFolder)
                 scriptFile.parentFile?.mkdirs()
-                
+
                 withContext(Dispatchers.IO) {
                     scriptFile.writeText(scriptContent)
                 }
@@ -1209,6 +1232,37 @@ class MainActivity : AppCompatActivity() {
                 log("Lỗi tải script: ${e.message}")
             } finally {
                 setBusy(false)
+            }
+        }
+    }
+
+    private fun copyScript(script: ScriptItem) {
+        lifecycleScope.launch {
+            var showingProgress = false
+            try {
+                val content = when {
+                    script.localPath != null -> readLocalScript(script)
+                    script.url != null -> {
+                        showingProgress = true
+                        setBusy(true)
+                        resolveOnlineScriptContent(script)
+                    }
+                    else -> throw IllegalStateException("Script không có dữ liệu")
+                }
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(script.name, content)
+                clipboard.setPrimaryClip(clip)
+
+                toast("Đã sao chép script")
+                log("Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                toast("Lỗi copy script: ${e.message}")
+                log("Lỗi copy script: ${e.message}")
+            } finally {
+                if (showingProgress) {
+                    setBusy(false)
+                }
             }
         }
     }
