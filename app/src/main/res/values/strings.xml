@@ -7,7 +7,13 @@
     <string name="info">Thông tin</string>
     <string name="uninstall">Gỡ cài đặt</string>
     <string name="refresh">Làm mới</string>
-    <string name="search_hint">Tìm kiếm ứng dụng…</string>
+    <string name="app_tagline">Quản lý APK &amp; script gọn nhẹ</string>
+    <string name="apps_title">Kho ứng dụng Kasumi</string>
+    <string name="apps_caption">Tìm kiếm, tải nhanh và quản lý các APK cloud.</string>
+    <string name="scripts_title">Script Roblox</string>
+    <string name="scripts_caption">Sao lưu hoặc tải nhanh script yêu thích của bạn.</string>
+    <string name="search_hint_apps">Tìm kiếm ứng dụng…</string>
+    <string name="search_hint_scripts">Tìm kiếm script…</string>
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
@@ -17,4 +23,5 @@
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
+    <string name="copy_script">Sao chép</string>
 </resources>

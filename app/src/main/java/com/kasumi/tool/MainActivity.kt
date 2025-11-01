@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -26,10 +28,11 @@ import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.gson.Gson
-import com.google.android.material.tabs.TabLayout
 import android.app.PendingIntent
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import androidx.core.content.pm.PackageInfoCompat
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.textfield.TextInputEditText
  
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -69,7 +72,10 @@ class MainActivity : AppCompatActivity() {
     private val preloadedIds = mutableSetOf<String>()
     private lateinit var tabLayout: TabLayout
     private lateinit var sourceBar: View
-    private lateinit var searchInput: EditText
+    private lateinit var appsSearchCard: View
+    private lateinit var scriptsSearchCard: View
+    private lateinit var appsSearchInput: TextInputEditText
+    private lateinit var scriptSearchInput: TextInputEditText
     private lateinit var btnRefreshSource: Button
     private lateinit var logContainer: View
     private lateinit var logView: TextView
@@ -79,7 +85,6 @@ class MainActivity : AppCompatActivity() {
     private var currentQuery: String = ""
     private var currentScriptQuery: String = ""
     private var currentTab: Int = 0 // 0: Ứng dụng, 1: Script, 2: Nhật ký
-    private var suppressSearchWatcher: Boolean = false
     private lateinit var globalProgress: LinearProgressIndicator
     private lateinit var statsBar: View
     private lateinit var txtStats: TextView
@@ -101,9 +106,12 @@ class MainActivity : AppCompatActivity() {
         scriptListView = findViewById(R.id.recycler_installed)
         tabLayout = findViewById(R.id.tab_layout)
         sourceBar = findViewById(R.id.source_bar)
+        appsSearchCard = findViewById(R.id.apps_search_card)
+        scriptsSearchCard = findViewById(R.id.scripts_search_card)
         logContainer = findViewById(R.id.log_container)
         logView = findViewById(R.id.log_view)
-        searchInput = findViewById(R.id.search_input)
+        appsSearchInput = findViewById(R.id.search_input_apps)
+        scriptSearchInput = findViewById(R.id.search_input_scripts)
         btnRefreshSource = findViewById(R.id.btn_refresh_source)
         globalProgress = findViewById(R.id.global_progress)
         statsBar = findViewById(R.id.stats_bar)
@@ -120,15 +128,21 @@ class MainActivity : AppCompatActivity() {
         }
         btnSort.setOnClickListener { showSortMenu() }
         btnClearCache.setOnClickListener { clearCache() }
-        searchInput.addTextChangedListener(object : TextWatcher {
+
+        appsSearchInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
-                if (suppressSearchWatcher) return
                 val q = s?.toString() ?: ""
-                if (currentTab == 0) {
-                    applyFilter(q)
-                } else if (currentTab == 1) {
-                    applyScriptFilter(q)
-                }
+                applyFilter(q)
+                if (currentTab == 0) updateStats()
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        scriptSearchInput.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) {
+                val q = s?.toString() ?: ""
+                applyScriptFilter(q)
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -152,7 +166,8 @@ class MainActivity : AppCompatActivity() {
 
         scriptAdapter = ScriptAdapter(scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
-            onDelete = { script -> deleteScript(script) }
+            onDelete = { script -> deleteScript(script) },
+            onCopy = { script -> copyScript(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
         scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
@@ -214,13 +229,12 @@ class MainActivity : AppCompatActivity() {
         tabLayout.addTab(tabLayout.newTab().setText("Script").setIcon(R.drawable.ic_installed))
         tabLayout.addTab(tabLayout.newTab().setText("Nhật ký").setIcon(R.drawable.ic_log))
         showAppsTab()
-        syncSearchInputWithTab()
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
                 when (tab.position) {
-                    0 -> { currentTab = 0; showAppsTab(); syncSearchInputWithTab() }
-                    1 -> { currentTab = 1; showScriptTab(); syncSearchInputWithTab() }
-                    else -> { currentTab = 2; showLogTab(); syncSearchInputWithTab() }
+                    0 -> { currentTab = 0; showAppsTab() }
+                    1 -> { currentTab = 1; showScriptTab() }
+                    else -> { currentTab = 2; showLogTab() }
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
@@ -230,35 +244,13 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun syncSearchInputWithTab() {
-        suppressSearchWatcher = true
-        try {
-            when (currentTab) {
-                0 -> { // Apps tab
-                    searchInput.hint = "Tìm kiếm ứng dụng..."
-                    val want = currentQuery
-                    if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
-                }
-                1 -> { // Script tab
-                    searchInput.hint = "Tìm kiếm script..."
-                    val want = currentScriptQuery
-                    if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
-                }
-                else -> {
-                    searchInput.hint = ""
-                    if (!searchInput.text.isNullOrEmpty()) searchInput.setText("")
-                }
-            }
-        } finally {
-            suppressSearchWatcher = false
-        }
-    }
-
     private fun showAppsTab() {
         listView.visibility = View.VISIBLE
         scriptListView.visibility = View.GONE
         logContainer.visibility = View.GONE
         sourceBar.visibility = View.VISIBLE
+        appsSearchCard.visibility = View.VISIBLE
+        scriptsSearchCard.visibility = View.GONE
         btnRefreshSource.visibility = View.VISIBLE
         btnSort.visibility = View.VISIBLE
         updateStats()
@@ -269,6 +261,8 @@ class MainActivity : AppCompatActivity() {
         scriptListView.visibility = View.GONE
         logContainer.visibility = View.VISIBLE
         sourceBar.visibility = View.GONE
+        appsSearchCard.visibility = View.GONE
+        scriptsSearchCard.visibility = View.GONE
         statsBar.visibility = View.GONE
         // Ensure log is properly initialized and visible
         if (::logView.isInitialized) {
@@ -281,6 +275,8 @@ class MainActivity : AppCompatActivity() {
         logContainer.visibility = View.GONE
         scriptListView.visibility = View.VISIBLE
         sourceBar.visibility = View.VISIBLE
+        appsSearchCard.visibility = View.GONE
+        scriptsSearchCard.visibility = View.VISIBLE
         btnRefreshSource.visibility = View.GONE
         btnSort.visibility = View.GONE
         statsBar.visibility = View.GONE
@@ -1165,37 +1161,21 @@ class MainActivity : AppCompatActivity() {
                     toast("Script không có URL")
                     return@launch
                 }
-                
+
                 setBusy(true)
                 log("Đang tải script: ${script.name}")
-                
-                // Chỉ fetch nội dung file nếu là script đặc biệt trong /source/hard/
-                val shouldFetchContent = script.url.contains("/source/hard/")
-                
-                val scriptContent = if (shouldFetchContent) {
-                    // Fetch toàn bộ nội dung file (có config)
+
+                val scriptContent = if (script.url.contains("/source/hard/")) {
                     log("Tải script đặc biệt (full content): ${script.name}")
-                    withContext(Dispatchers.IO) {
-                        val req = Request.Builder()
-                            .url(script.url)
-                            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) {
-                                throw IllegalStateException("HTTP ${resp.code}")
-                            }
-                            resp.body?.string() ?: throw IllegalStateException("Empty response")
-                        }
-                    }
+                    fetchScriptSource(script.url)
                 } else {
-                    // Wrap URL trong loadstring (script thông thường)
                     log("Tạo script loadstring: ${script.name}")
-                    "loadstring(game:HttpGet(\"${script.url}\"))()"
+                    buildLoadstring(script.url)
                 }
-                
+
                 val scriptFile = getScriptFile(script, targetFolder)
                 scriptFile.parentFile?.mkdirs()
-                
+
                 withContext(Dispatchers.IO) {
                     scriptFile.writeText(scriptContent)
                 }
@@ -1209,6 +1189,66 @@ class MainActivity : AppCompatActivity() {
                 log("Lỗi tải script: ${e.message}")
             } finally {
                 setBusy(false)
+            }
+        }
+    }
+
+    private suspend fun fetchScriptSource(url: String): String {
+        return withContext(Dispatchers.IO) {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("HTTP ${resp.code}")
+                }
+                resp.body?.string() ?: throw IllegalStateException("Empty response")
+            }
+        }
+    }
+
+    private fun buildLoadstring(url: String): String = """loadstring(game:HttpGet("$url"))()"""
+
+    private fun copyScript(script: ScriptItem) {
+        lifecycleScope.launch {
+            var showedBusy = false
+            try {
+                val content = when {
+                    script.localPath != null -> {
+                        log("Sao chép script local: ${script.name}")
+                        withContext(Dispatchers.IO) {
+                            val file = File(script.localPath)
+                            if (!file.exists()) throw IllegalStateException("Không tìm thấy file")
+                            file.readText()
+                        }
+                    }
+                    script.url == null -> {
+                        toast("Script không có URL")
+                        return@launch
+                    }
+                    script.url.contains("/source/hard/") -> {
+                        log("Sao chép script đặc biệt: ${script.name}")
+                        showedBusy = true
+                        setBusy(true)
+                        fetchScriptSource(script.url)
+                    }
+                    else -> {
+                        log("Sao chép script loadstring: ${script.name}")
+                        buildLoadstring(script.url)
+                    }
+                }
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(script.name, content)
+                clipboard.setPrimaryClip(clip)
+                toast("Đã sao chép script")
+                log("✓ Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                toast("Không thể sao chép script: ${e.message}")
+                log("Lỗi copy script: ${e.message}")
+            } finally {
+                if (showedBusy) setBusy(false)
             }
         }
     }

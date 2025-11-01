@@ -4,42 +4,47 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
+
     <group
-        android:translateX="27"
-        android:translateY="27">
-        
-        <!-- Minimal Phone Outline -->
+        android:translateX="18"
+        android:translateY="18">
+
+        <!-- Rounded background panel -->
         <path
-            android:pathData="M18,6 C16.34,6 15,7.34 15,9 L15,45 C15,46.66 16.34,48 18,48 L36,48 C37.66,48 39,46.66 39,45 L39,9 C39,7.34 37.66,6 36,6 Z"
+            android:pathData="M12,0h48a12,12 0,0 1,12,12v48a12,12 0,0 1,-12,12h-48a12,12 0,0 1,-12,-12v-48a12,12 0,0 1,12,-12z"
+            android:fillColor="#1A1428" />
+
+        <!-- Glow ring -->
+        <path
+            android:pathData="M36,8a28,28 0,1 0,0,56a28,28 0,1 0,0,-56z"
+            android:fillColor="#8C7CFF"
+            android:fillAlpha="0.18" />
+
+        <!-- Core circle -->
+        <path
+            android:pathData="M36,18a18,18 0,1 0,0,36a18,18 0,1 0,0,-36z"
+            android:fillColor="#8C7CFF" />
+
+        <!-- Download arrow -->
+        <path
+            android:pathData="M36,24v14"
             android:strokeColor="#FFFFFF"
-            android:strokeWidth="3.5"
-            android:fillColor="#00000000"
+            android:strokeWidth="3.6"
+            android:strokeLineCap="round" />
+
+        <path
+            android:pathData="M30.5,34.5l5.5,5.5 5.5,-5.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.6"
             android:strokeLineCap="round"
-            android:strokeLineJoin="round"/>
-        
-        <!-- Screen -->
+            android:strokeLineJoin="round" />
+
+        <!-- Base indicator -->
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M18,12 L36,12 L36,39 L18,39 Z"/>
-        
-        <!-- Cloud Icon -->
-        <path
-            android:fillColor="#00BCD4"
-            android:pathData="M29,22 C28.5,22 28,22.1 27.6,22.3 C27.4,21.6 26.8,21 26,21 C25.2,21 24.5,21.7 24.5,22.5 C24.5,22.6 24.5,22.7 24.6,22.8 C24.2,23 24,23.4 24,24 C24,24.6 24.4,25 25,25 L29,25 C29.6,25 30,24.6 30,24 C30,22.9 29.6,22 29,22 Z"/>
-        
-        <!-- Download Arrow -->
-        <path
-            android:pathData="M27,27 L27,32 M27,32 L25,30 M27,32 L29,30"
-            android:strokeColor="#00BCD4"
-            android:strokeWidth="2"
+            android:pathData="M28,44h16"
+            android:strokeColor="#E9E1FF"
+            android:strokeWidth="3.2"
             android:strokeLineCap="round"
-            android:strokeLineJoin="round"/>
-        
-        <!-- Home Button -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M27,42 C27,42.8 27.7,43.5 28.5,43.5 C29.3,43.5 30,42.8 30,42 C30,41.2 29.3,40.5 28.5,40.5 C27.7,40.5 27,41.2 27,42 Z"
-            android:fillAlpha="0.8"/>
+            android:strokeAlpha="0.65" />
     </group>
 </vector>
