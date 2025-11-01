@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/toast_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_toast"
+    android:paddingStart="16dp"
+    android:paddingEnd="20dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp"
+    android:gravity="center_vertical">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/toast_icon"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:src="@drawable/app_icon"
+        android:contentDescription="@string/app_name"
+        android:scaleType="centerCrop"
+        android:importantForAccessibility="no"
+        app:shapeAppearanceOverlay="@style/ShapeAppearanceOverlay.Kasumi.AppIcon" />
+
+    <TextView
+        android:id="@+id/toast_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:text="Toast message" />
+
+</LinearLayout>

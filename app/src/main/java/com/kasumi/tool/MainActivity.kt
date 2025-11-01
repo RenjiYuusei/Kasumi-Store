@@ -923,7 +923,16 @@ class MainActivity : AppCompatActivity() {
         if (changed) saveItems()
     }
 
-    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    private fun toast(msg: String) {
+        val view = layoutInflater.inflate(R.layout.view_toast, null)
+        val text = view.findViewById<TextView>(R.id.toast_text)
+        text.text = msg
+
+        Toast(this).apply {
+            duration = Toast.LENGTH_LONG
+            this.view = view
+        }.show()
+    }
 
     // Chức năng sắp xếp và thống kê
     private fun showSortMenu() {
