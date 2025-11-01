@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kasumi</string>
+    <string name="app_subtitle">Quản lý ứng dụng &amp; script</string>
     <string name="install">Cài đặt</string>
     <string name="delete">Xóa</string>
     <string name="open">Mở</string>
@@ -11,6 +12,8 @@
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
+    <string name="copy">Sao chép</string>
+    <string name="copy_success">Đã sao chép script vào clipboard</string>
     <string name="sort_by_name">Tên A-Z</string>
     <string name="sort_by_name_desc">Tên Z-A</string>
     <string name="sort_by_size">Kích thước</string>

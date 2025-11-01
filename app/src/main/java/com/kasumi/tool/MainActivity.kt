@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -150,9 +152,11 @@ class MainActivity : AppCompatActivity() {
         listView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
         listView.adapter = adapter
 
-        scriptAdapter = ScriptAdapter(scriptFilteredItems,
+        scriptAdapter = ScriptAdapter(
+            scriptFilteredItems,
             onDownload = { script -> showDownloadFolderDialog(script) },
-            onDelete = { script -> deleteScript(script) }
+            onDelete = { script -> deleteScript(script) },
+            onCopy = { script -> copyScriptToClipboard(script) }
         )
         scriptListView.layoutManager = LinearLayoutManager(this)
         scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
@@ -1161,54 +1165,100 @@ class MainActivity : AppCompatActivity() {
     private fun downloadScript(script: ScriptItem, targetFolder: String) {
         lifecycleScope.launch {
             try {
-                if (script.url == null) {
-                    toast("Script không có URL")
+                if (script.url == null && script.localPath == null) {
+                    toast("Script không có nguồn hợp lệ")
                     return@launch
                 }
-                
+
                 setBusy(true)
                 log("Đang tải script: ${script.name}")
-                
-                // Chỉ fetch nội dung file nếu là script đặc biệt trong /source/hard/
-                val shouldFetchContent = script.url.contains("/source/hard/")
-                
-                val scriptContent = if (shouldFetchContent) {
-                    // Fetch toàn bộ nội dung file (có config)
-                    log("Tải script đặc biệt (full content): ${script.name}")
-                    withContext(Dispatchers.IO) {
-                        val req = Request.Builder()
-                            .url(script.url)
-                            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-                            .build()
-                        client.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) {
-                                throw IllegalStateException("HTTP ${resp.code}")
-                            }
-                            resp.body?.string() ?: throw IllegalStateException("Empty response")
-                        }
-                    }
-                } else {
-                    // Wrap URL trong loadstring (script thông thường)
-                    log("Tạo script loadstring: ${script.name}")
-                    "loadstring(game:HttpGet(\"${script.url}\"))()"
-                }
-                
+
+                val scriptContent = resolveScriptContent(script, logEvents = true)
+
                 val scriptFile = getScriptFile(script, targetFolder)
                 scriptFile.parentFile?.mkdirs()
-                
+
                 withContext(Dispatchers.IO) {
                     scriptFile.writeText(scriptContent)
                 }
-                
+
                 log("✓ Đã lưu script vào: /Delta/$targetFolder/${script.name}.txt")
                 toast("Đã lưu script vào $targetFolder")
                 applyScriptFilter(currentScriptQuery)
-                
+
             } catch (e: Exception) {
                 toast("Lỗi tải script: ${e.message}")
                 log("Lỗi tải script: ${e.message}")
             } finally {
                 setBusy(false)
+            }
+        }
+    }
+
+    private fun copyScriptToClipboard(script: ScriptItem) {
+        lifecycleScope.launch {
+            try {
+                if (script.url == null && script.localPath == null) {
+                    toast("Script không có nguồn hợp lệ")
+                    return@launch
+                }
+
+                setBusy(true)
+                val content = resolveScriptContent(script, logEvents = false)
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText(script.name, content)
+                clipboard.setPrimaryClip(clip)
+
+                toast(getString(R.string.copy_success))
+                log("✓ Đã sao chép script: ${script.name}")
+            } catch (e: Exception) {
+                toast("Lỗi sao chép script: ${e.message}")
+                log("Lỗi sao chép script: ${e.message}")
+            } finally {
+                setBusy(false)
+            }
+        }
+    }
+
+    private suspend fun resolveScriptContent(script: ScriptItem, logEvents: Boolean): String {
+        script.localPath?.let { localPath ->
+            return withContext(Dispatchers.IO) {
+                val localFile = File(localPath)
+                if (!localFile.exists()) {
+                    throw IllegalStateException("Không tìm thấy script local")
+                }
+                localFile.readText()
+            }
+        }
+
+        val url = script.url ?: throw IllegalStateException("Script không có URL")
+        val shouldFetchContent = url.contains("/source/hard/")
+
+        return if (shouldFetchContent) {
+            if (logEvents) {
+                log("Tải script đặc biệt (full content): ${script.name}")
+            }
+            fetchRemoteScript(url)
+        } else {
+            if (logEvents) {
+                log("Tạo script loadstring: ${script.name}")
+            }
+            "loadstring(game:HttpGet(\"$url\"))()"
+        }
+    }
+
+    private suspend fun fetchRemoteScript(url: String): String {
+        return withContext(Dispatchers.IO) {
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IllegalStateException("HTTP ${resp.code}")
+                }
+                resp.body?.string() ?: throw IllegalStateException("Empty response")
             }
         }
     }

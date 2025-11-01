@@ -3,16 +3,19 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    app:cardUseCompatPadding="true"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="4dp">
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginTop="8dp"
+    android:layout_marginBottom="8dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="4dp"
+    app:cardBackgroundColor="?attr/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="18dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -20,12 +23,20 @@
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <ImageView
-                android:id="@+id/img_icon"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="icon"
-                />
+            <FrameLayout
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/app_icon_frame"
+                android:padding="6dp">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/img_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="icon"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.App.SmallComponent" />
+            </FrameLayout>
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -42,16 +53,18 @@
                     android:textSize="16sp"
                     android:maxLines="1"
                     android:ellipsize="end"
+                    android:textColor="?attr/colorOnSurface"
                     android:text="App name" />
 
-                <TextView
-                    android:id="@+id/txt_package"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:textSize="12sp"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:text="com.example.app" />
+            <TextView
+                android:id="@+id/txt_package"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="com.example.app" />
             </LinearLayout>
         </LinearLayout>
 
@@ -60,6 +73,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textSize="12sp"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:layout_marginTop="4dp"
             android:text="Phiên bản: ?" />
 
@@ -72,7 +86,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_open"
-                style="@style/Widget.MaterialComponents.Button"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
@@ -81,7 +95,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_info"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
@@ -91,7 +105,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_uninstall"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
                 android:layout_weight="1"
