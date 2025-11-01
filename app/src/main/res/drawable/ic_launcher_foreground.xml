@@ -4,42 +4,36 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
+
     <group
-        android:translateX="27"
-        android:translateY="27">
-        
-        <!-- Minimal Phone Outline -->
+        android:translateX="24"
+        android:translateY="20">
+
         <path
-            android:pathData="M18,6 C16.34,6 15,7.34 15,9 L15,45 C15,46.66 16.34,48 18,48 L36,48 C37.66,48 39,46.66 39,45 L39,9 C39,7.34 37.66,6 36,6 Z"
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="3.5"
-            android:fillColor="#00000000"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round"/>
-        
-        <!-- Screen -->
+            android:fillColor="#101827"
+            android:pathData="M8,4h28c3.3,0 6,2.7 6,6v36c0,3.3 -2.7,6 -6,6H8c-3.3,0 -6,-2.7 -6,-6V10c0,-3.3 2.7,-6 6,-6z"/>
+
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M18,12 L36,12 L36,39 L18,39 Z"/>
-        
-        <!-- Cloud Icon -->
+            android:fillColor="#1D4ED8"
+            android:pathData="M8,4h28c3.3,0 6,2.7 6,6v6H2v-6c0,-3.3 2.7,-6 6,-6z"
+            android:fillAlpha="0.35"/>
+
         <path
-            android:fillColor="#00BCD4"
-            android:pathData="M29,22 C28.5,22 28,22.1 27.6,22.3 C27.4,21.6 26.8,21 26,21 C25.2,21 24.5,21.7 24.5,22.5 C24.5,22.6 24.5,22.7 24.6,22.8 C24.2,23 24,23.4 24,24 C24,24.6 24.4,25 25,25 L29,25 C29.6,25 30,24.6 30,24 C30,22.9 29.6,22 29,22 Z"/>
-        
-        <!-- Download Arrow -->
+            android:fillColor="#F8FAFC"
+            android:pathData="M10,12h24c2.2,0 4,1.8 4,4v18c0,2.2 -1.8,4 -4,4H10c-2.2,0 -4,-1.8 -4,-4V16c0,-2.2 1.8,-4 4,-4z"/>
+
         <path
-            android:pathData="M27,27 L27,32 M27,32 L25,30 M27,32 L29,30"
-            android:strokeColor="#00BCD4"
-            android:strokeWidth="2"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round"/>
-        
-        <!-- Home Button -->
+            android:fillColor="#1D4ED8"
+            android:pathData="M10,12h24v5H10z"
+            android:fillAlpha="0.85"/>
+
         <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M27,42 C27,42.8 27.7,43.5 28.5,43.5 C29.3,43.5 30,42.8 30,42 C30,41.2 29.3,40.5 28.5,40.5 C27.7,40.5 27,41.2 27,42 Z"
-            android:fillAlpha="0.8"/>
+            android:fillColor="#0EA5E9"
+            android:pathData="M22,17h4v8h3l-5,5l-5,-5h3z"/>
+
+        <path
+            android:fillColor="#1D4ED8"
+            android:pathData="M20,40a4,4 0 1,0 8,0a4,4 0 1,0 -8,0z"
+            android:fillAlpha="0.85"/>
     </group>
 </vector>

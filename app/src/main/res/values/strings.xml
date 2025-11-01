@@ -8,6 +8,7 @@
     <string name="uninstall">Gỡ cài đặt</string>
     <string name="refresh">Làm mới</string>
     <string name="search_hint">Tìm kiếm ứng dụng…</string>
+    <string name="search_scripts_hint">Tìm kiếm script…</string>
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
