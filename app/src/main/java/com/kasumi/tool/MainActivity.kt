@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         
         // Khởi tạo log với thông báo chào mừng
         logView.text = "" // Clear placeholder text
-        log("=== Kasumi v${BuildConfig.VERSION_NAME} ===")
+        log("=== Kasumi v${resolveAppVersionName()} ===")
 
         loadItems()
         // Nạp preload từ nguồn mặc định (cố định)
@@ -292,6 +292,19 @@ class MainActivity : AppCompatActivity() {
         btnRefreshSource.visibility = View.GONE
         btnSort.visibility = View.GONE
         statsBar.visibility = View.GONE
+    }
+
+    private fun resolveAppVersionName(): String {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0)).versionName ?: "?"
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+            }
+        } catch (_: Exception) {
+            "?"
+        }
     }
 
     private fun log(msg: String) {

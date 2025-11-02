@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.2.0] - 2025-11-2
-### Sửa Lỗi
-- Đã **loại bỏ viền trắng** bao quanh biểu tượng ứng dụng trong các thông báo (notifications), tin nhắn nhanh (toasts) và bản xem trước trong ứng dụng (in-app previews).
-- Định nghĩa biểu tượng thích ứng (**Adaptive icon**) giờ đây **trỏ trực tiếp đến** `app_icon` để có hình ảnh nhất quán.
+## [1.2.0] - 2025-11-02
+### Sửa lỗi
+- Đã loại bỏ viền trắng quanh biểu tượng ứng dụng trong thông báo, toast và phần xem trước trong ứng dụng.
+- Các định nghĩa adaptive icon nay trỏ trực tiếp tới `app_icon` để bảo đảm hiển thị đồng nhất.
 
 ### Khác
-- Thông báo nhật ký (log message) khi khởi động giờ đây sử dụng `BuildConfig.VERSION_NAME` để đảm bảo nó **luôn chính xác** sau các lần tăng phiên bản (version bumps).
+- Thông điệp nhật ký khi khởi động giờ đọc phiên bản ứng dụng trực tiếp từ gói cài đặt, nên vẫn chính xác sau mỗi lần tăng version.
 
 ## [1.1.1] - 2025-10-10
 ### 🎯 Chức năng mới
