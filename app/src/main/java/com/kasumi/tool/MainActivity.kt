@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         
         // Khởi tạo log với thông báo chào mừng
         logView.text = "" // Clear placeholder text
-        log("=== Kasumi v1.1.1 ===")
+        log("=== Kasumi v${BuildConfig.VERSION_NAME} ===")
 
         loadItems()
         // Nạp preload từ nguồn mặc định (cố định)

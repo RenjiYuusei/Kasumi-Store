@@ -3,6 +3,8 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+import java.io.InputStreamReader
+
 android {
     namespace 'com.kasumi.tool'
     compileSdk 34
@@ -11,8 +13,8 @@ android {
         applicationId 'com.kasumi.tool'
         minSdk 24
         targetSdk 34
-        versionCode 4
-        versionName "1.1.1"
+        versionCode 5
+        versionName "1.2.0"
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         vectorDrawables {
@@ -51,22 +53,42 @@ android {
 def keystorePropsFile = rootProject.file('keystore.properties')
 if (keystorePropsFile.exists()) {
     def keystoreProps = new Properties()
-    keystoreProps.load(new FileInputStream(keystorePropsFile))
+    keystorePropsFile.withInputStream { stream ->
+        keystoreProps.load(new InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8))
+    }
 
-    android {
-        signingConfigs {
-            release {
-                storeFile rootProject.file(keystoreProps['storeFile'])
-                storePassword keystoreProps['storePassword']
-                keyAlias keystoreProps['keyAlias']
-                keyPassword keystoreProps['keyPassword']
+    def storeFilePath = (keystoreProps.getProperty('storeFile') ?: keystoreProps.getProperty('\ufeffstoreFile'))?.trim()
+    def storePasswordValue = keystoreProps.getProperty('storePassword')
+    def keyAliasValue = keystoreProps.getProperty('keyAlias')
+    def keyPasswordValue = keystoreProps.getProperty('keyPassword')
+
+    def storeFileResolved = storeFilePath ? keystorePropsFile.parentFile.toPath().resolve(storeFilePath).toFile() : null
+
+    def missingKeys = []
+    if (!storeFilePath) missingKeys << 'storeFile'
+    if (!storePasswordValue) missingKeys << 'storePassword'
+    if (!keyAliasValue) missingKeys << 'keyAlias'
+    if (!keyPasswordValue) missingKeys << 'keyPassword'
+    if (storeFileResolved && !storeFileResolved.exists()) missingKeys << "keystore file (${storeFileResolved})"
+
+    if (missingKeys.isEmpty()) {
+        android {
+            signingConfigs {
+                release {
+                    storeFile storeFileResolved
+                    storePassword storePasswordValue
+                    keyAlias keyAliasValue
+                    keyPassword keyPasswordValue
+                }
+            }
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.release
+                }
             }
         }
-        buildTypes {
-            release {
-                signingConfig signingConfigs.release
-            }
-        }
+    } else {
+        logger.lifecycle("Skipping release signing config; ${missingKeys.join(', ')} missing or invalid in keystore.properties.")
     }
 }
 
