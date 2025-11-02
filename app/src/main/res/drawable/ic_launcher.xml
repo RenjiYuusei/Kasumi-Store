@@ -1,45 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    
-    <!-- Clean Background -->
-    <path
-        android:fillColor="#00BCD4"
-        android:pathData="M0,0h108v108h-108z"/>
-    
-    <!-- Phone Frame -->
-    <path
-        android:pathData="M45,33 C43.34,33 42,34.34 42,36 L42,72 C42,73.66 43.34,75 45,75 L63,75 C64.66,75 66,73.66 66,72 L66,36 C66,34.34 64.66,33 63,33 Z"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3.5"
-        android:fillColor="#00000000"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
-    
-    <!-- Screen -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M45,39 L63,39 L63,66 L45,66 Z"/>
-    
-    <!-- Cloud -->
-    <path
-        android:fillColor="#00BCD4"
-        android:pathData="M56,49 C55.5,49 55,49.1 54.6,49.3 C54.4,48.6 53.8,48 53,48 C52.2,48 51.5,48.7 51.5,49.5 C51.5,49.6 51.5,49.7 51.6,49.8 C51.2,50 51,50.4 51,51 C51,51.6 51.4,52 52,52 L56,52 C56.6,52 57,51.6 57,51 C57,49.9 56.6,49 56,49 Z"/>
-    
-    <!-- Arrow -->
-    <path
-        android:pathData="M54,54 L54,59 M54,59 L52,57 M54,59 L56,57"
-        android:strokeColor="#00BCD4"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
-    
-    <!-- Home Button -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,69 C54,69.8 54.7,70.5 55.5,70.5 C56.3,70.5 57,69.8 57,69 C57,68.2 56.3,67.5 55.5,67.5 C54.7,67.5 54,68.2 54,69 Z"
-        android:fillAlpha="0.8"/>
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/app_icon"
+    android:gravity="center" />
