@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.0] - 2025-11-03
+### ✨ Cải tiến giao diện
+- Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
+- Giao diện hiện đại, mượt mà hơn.
+- Loại bỏ tab Nhật ký để tối ưu trải nghiệm người dùng.
+
+### 🐛 Sửa lỗi & Khác
+- Đổi tên ứng dụng thành **Kasumi-Store**.
+- Cập nhật biểu tượng ứng dụng mới.
+- Log hệ thống được chuyển về Logcat.
+
 ## [1.2.0] - 2025-11-02
 ### Sửa lỗi
 - Đã loại bỏ viền trắng quanh biểu tượng ứng dụng trong thông báo, toast và phần xem trước trong ứng dụng.
