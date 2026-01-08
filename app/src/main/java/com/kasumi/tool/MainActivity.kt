@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
 
     // Data states
     private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
+    // Store original online scripts separately to preserve metadata
+    private var onlineScriptsList = listOf<ScriptItem>()
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
@@ -121,7 +123,7 @@ class MainActivity : ComponentActivity() {
             val script = scriptToDownload!!
             AlertDialog(
                 onDismissRequest = { scriptToDownload = null },
-                title = { Text("${script.name} - Chọn thư mục") },
+                title = { Text("${script.name} - ${stringResource(R.string.select_folder)}") },
                 text = {
                     Column {
                         TextButton(
@@ -133,7 +135,7 @@ class MainActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Auto-execute (Tự động chạy)", modifier = Modifier.fillMaxWidth())
+                            Text(stringResource(R.string.auto_execute_desc), modifier = Modifier.fillMaxWidth())
                         }
                         TextButton(
                             onClick = {
@@ -144,14 +146,14 @@ class MainActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Manual (Chạy thủ công)", modifier = Modifier.fillMaxWidth())
+                            Text(stringResource(R.string.manual_desc), modifier = Modifier.fillMaxWidth())
                         }
                     }
                 },
                 confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { scriptToDownload = null }) {
-                        Text("Hủy")
+                        Text(stringResource(R.string.cancel))
                     }
                 }
             )
@@ -496,7 +498,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Tải")
+                            Text(stringResource(R.string.download))
                         }
                     }
                     Button(
@@ -730,6 +732,9 @@ class MainActivity : ComponentActivity() {
                     input.copyTo(out)
                 }
             }
+            withContext(Dispatchers.Main) {
+                cacheVersion++
+            }
             outFile
         }
     }
@@ -837,11 +842,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     withContext(Dispatchers.Main) {
-                        // Merge with existing manual scripts
-                        val manual = scriptsList.filter { it.localPath != null }
-                        // Avoid duplicates if reloaded
-                         val combined = manual + newScripts.filter { s -> manual.none { it.id == s.id } }
-                         scriptsList = combined
+                        onlineScriptsList = newScripts
+                        // Initial merge (will be refined by loadScriptsFromLocal)
+                        scriptsList = newScripts
                     }
                 }
             } catch (e: Exception) {
@@ -851,6 +854,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun loadScriptsFromLocal() {
+        val context = this@MainActivity
         withContext(Dispatchers.IO) {
             val newLocals = mutableListOf<ScriptItem>()
             val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
@@ -858,28 +862,22 @@ class MainActivity : ComponentActivity() {
              if (autoExecuteDir.exists()) {
                 autoExecuteDir.listFiles()?.forEach {
                     if (it.isFile) {
-                        newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, "Local (Auto)", null, it.absolutePath))
+                        newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_auto), null, it.absolutePath))
                     }
                 }
             }
              if (scriptsDir.exists()) {
                 scriptsDir.listFiles()?.forEach {
                     if (it.isFile) {
-                        newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, "Local (Manual)", null, it.absolutePath))
+                        newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_manual), null, it.absolutePath))
                     }
                 }
             }
             withContext(Dispatchers.Main) {
-                // Online scripts that haven't been matched with a local file yet
-                val onlineOnly = scriptsList.filter { it.localPath == null }
-
-                // Merge: Check if any online script matches a local file by name
-                val mergedList = onlineOnly.map { onlineScript ->
-                    // Find a local file with the same name (ignoring extension if needed, but here we used nameWithoutExtension for local items)
-                    // Actually, ScriptItem.name for local items is nameWithoutExtension.
+                // Merge: Start with all known online scripts and check if they exist locally
+                val mergedList = onlineScriptsList.map { onlineScript ->
                     val match = newLocals.find { local -> local.name == onlineScript.name }
                     if (match != null) {
-                        // If found, update the online script to point to local path
                         onlineScript.copy(localPath = match.localPath)
                     } else {
                         onlineScript
@@ -911,10 +909,10 @@ class MainActivity : ComponentActivity() {
                 dir.mkdirs()
                 // Save without .txt extension as requested
                 File(dir, script.name).writeText(content)
-                onShowSnackbar("Đã lưu vào $targetFolder")
+                onShowSnackbar(getString(R.string.saved_to, targetFolder))
                 loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {
-                onShowSnackbar("Lỗi: ${e.message}")
+                onShowSnackbar(getString(R.string.error_prefix, e.message))
             } finally {
                 setBusy(false)
             }
@@ -941,9 +939,9 @@ class MainActivity : ComponentActivity() {
 
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
-                onShowSnackbar("Đã sao chép script")
+                onShowSnackbar(getString(R.string.copied_script))
             } catch (e: Exception) {
-                onShowSnackbar("Lỗi: ${e.message}")
+                onShowSnackbar(getString(R.string.error_prefix, e.message))
             }
          }
     }
@@ -951,7 +949,7 @@ class MainActivity : ComponentActivity() {
     private fun deleteScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
         if (script.localPath != null) {
             File(script.localPath).delete()
-            onShowSnackbar("Đã xóa script")
+            onShowSnackbar(getString(R.string.deleted_script))
             lifecycleScope.launch { loadScriptsFromLocal() }
         }
     }

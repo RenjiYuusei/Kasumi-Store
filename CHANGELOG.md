@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.1] - 2025-11-04
+### 🎯 Cập nhật & Sửa lỗi
+- **Tên ứng dụng**: Đã sửa lại tên ứng dụng thành **Kasumi Store** (bỏ dấu gạch ngang).
+- **Quản lý Cache**:
+  - Sửa lỗi nút "Xóa cache" vẫn hiện khi cache trống.
+  - Tự động ẩn thông tin cache khi không có dữ liệu (0 B).
+  - Cập nhật giao diện ngay lập tức sau khi xóa cache mà không cần khởi động lại.
+- **Tải Script**:
+  - Tự động loại bỏ đuôi `.txt` khi tải về (Ví dụ: `Teddy Hub` thay vì `Teddy Hub.txt`).
+  - Sửa lỗi script đã tải về vẫn hiện nút "Tải" thay vì trạng thái đã cài đặt.
+  - Hợp nhất danh sách script online và offline dựa trên tên file.
+  - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.
+
 ## [1.3.0] - 2025-11-03
 ### ✨ Cải tiến giao diện
 - Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
