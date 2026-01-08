@@ -329,8 +329,14 @@ class MainActivity : ComponentActivity() {
                  horizontalArrangement = Arrangement.SpaceBetween,
                  verticalAlignment = Alignment.CenterVertically
              ) {
+                 val statsText = if (cachedCount > 0) {
+                     stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})")
+                 } else {
+                     stringResource(R.string.stats_format_no_cache, filteredApps.size)
+                 }
+
                  Text(
-                     text = stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})"),
+                     text = statsText,
                      style = MaterialTheme.typography.bodySmall,
                      color = MaterialTheme.colorScheme.onSurfaceVariant
                  )

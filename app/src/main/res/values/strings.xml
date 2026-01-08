@@ -17,6 +17,7 @@
     <string name="sort_by_size">Kích thước</string>
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
+    <string name="stats_format_no_cache">%d ứng dụng</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
     <string name="copy_script">Sao chép</string>
 </resources>
