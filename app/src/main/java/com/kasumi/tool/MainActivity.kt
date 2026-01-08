@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
+    private var cacheVersion by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,8 +113,49 @@ class MainActivity : ComponentActivity() {
         var selectedTab by remember { mutableIntStateOf(0) }
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
+        var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
         val snackbarHostState = remember { SnackbarHostState() }
+
+        if (scriptToDownload != null) {
+            val script = scriptToDownload!!
+            AlertDialog(
+                onDismissRequest = { scriptToDownload = null },
+                title = { Text("${script.name} - Chọn thư mục") },
+                text = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                scriptToDownload = null
+                                downloadScript(script, "Autoexecute", { msg ->
+                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                                })
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Auto-execute (Tự động chạy)", modifier = Modifier.fillMaxWidth())
+                        }
+                        TextButton(
+                            onClick = {
+                                scriptToDownload = null
+                                downloadScript(script, "Scripts", { msg ->
+                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                                })
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Manual (Chạy thủ công)", modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { scriptToDownload = null }) {
+                        Text("Hủy")
+                    }
+                }
+            )
+        }
 
         Scaffold(
             topBar = {
@@ -174,6 +216,8 @@ class MainActivity : ComponentActivity() {
                 } else {
                     ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    }, onDownloadRequest = { script ->
+                        scriptToDownload = script
                     })
                 }
             }
@@ -241,7 +285,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val filteredApps = remember(appsList, searchQuery, sortMode) {
+        val filteredApps = remember(appsList, searchQuery, sortMode, cacheVersion) {
             val q = searchQuery.trim().lowercase()
             val filtered = if (q.isEmpty()) {
                 appsList
@@ -267,10 +311,14 @@ class MainActivity : ComponentActivity() {
         }
 
         // Stats
-        val cachedCount = filteredApps.count { cacheFileFor(it).exists() }
-        val totalSize = filteredApps.sumOf {
-             val f = cacheFileFor(it)
-             if (f.exists()) f.length() else 0L
+        val cachedCount = remember(filteredApps, cacheVersion) {
+            filteredApps.count { cacheFileFor(it).exists() }
+        }
+        val totalSize = remember(filteredApps, cacheVersion) {
+            filteredApps.sumOf {
+                val f = cacheFileFor(it)
+                if (f.exists()) f.length() else 0L
+            }
         }
 
         Column {
@@ -297,7 +345,7 @@ class MainActivity : ComponentActivity() {
                  contentPadding = PaddingValues(bottom = 80.dp)
              ) {
                  items(filteredApps, key = { it.id }) { item ->
-                     AppItemRow(item, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                     AppItemRow(item, cacheVersion, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
                          saveItems()
                          onShowSnackbar("Đã xóa ${it.name}")
@@ -308,10 +356,11 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+    fun AppItemRow(item: ApkItem, cacheVersion: Int, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
         val context = LocalContext.current
         val cachedFile = cacheFileFor(item)
-        val isCached = cachedFile.exists()
+        // Re-read file existence when cacheVersion changes
+        val isCached = remember(item, cacheVersion) { cachedFile.exists() }
         
         Card(
             modifier = Modifier
@@ -379,7 +428,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim().lowercase()
              if (q.isEmpty()) {
@@ -398,7 +447,7 @@ class MainActivity : ComponentActivity() {
             items(filteredScripts, key = { it.id }) { script ->
                 ScriptItemRow(
                     script = script,
-                    onDownload = { showDownloadFolderDialog(it, onShowSnackbar) },
+                    onDownload = { onDownloadRequest(script) },
                     onCopy = { copyScript(it, onShowSnackbar) },
                     onDelete = { deleteScript(it, onShowSnackbar) }
                 )
@@ -752,6 +801,7 @@ class MainActivity : ComponentActivity() {
                  onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
                  // Refresh list to update UI state (re-calculate cache existence)
                  appsList = appsList.toList()
+                 cacheVersion++
              }
          }
     }
@@ -800,32 +850,44 @@ class MainActivity : ComponentActivity() {
             val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
             val scriptsDir = File("/storage/emulated/0/Delta/Scripts")
              if (autoExecuteDir.exists()) {
-                autoExecuteDir.listFiles { f -> f.extension == "txt" }?.forEach {
-                    newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, "Local (Auto)", null, it.absolutePath))
+                autoExecuteDir.listFiles()?.forEach {
+                    if (it.isFile) {
+                        newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, "Local (Auto)", null, it.absolutePath))
+                    }
                 }
             }
              if (scriptsDir.exists()) {
-                scriptsDir.listFiles { f -> f.extension == "txt" }?.forEach {
-                     newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, "Local (Manual)", null, it.absolutePath))
+                scriptsDir.listFiles()?.forEach {
+                    if (it.isFile) {
+                        newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, "Local (Manual)", null, it.absolutePath))
+                    }
                 }
             }
             withContext(Dispatchers.Main) {
-                val online = scriptsList.filter { it.localPath == null }
-                scriptsList = online + newLocals
+                // Online scripts that haven't been matched with a local file yet
+                val onlineOnly = scriptsList.filter { it.localPath == null }
+
+                // Merge: Check if any online script matches a local file by name
+                val mergedList = onlineOnly.map { onlineScript ->
+                    // Find a local file with the same name (ignoring extension if needed, but here we used nameWithoutExtension for local items)
+                    // Actually, ScriptItem.name for local items is nameWithoutExtension.
+                    val match = newLocals.find { local -> local.name == onlineScript.name }
+                    if (match != null) {
+                        // If found, update the online script to point to local path
+                        onlineScript.copy(localPath = match.localPath)
+                    } else {
+                        onlineScript
+                    }
+                }
+
+                // Add locals that were NOT matched with any online script
+                val unmatchedLocals = newLocals.filter { local ->
+                    mergedList.none { it.localPath == local.localPath }
+                }
+
+                scriptsList = mergedList + unmatchedLocals
             }
         }
-    }
-
-    private fun showDownloadFolderDialog(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
-        val options = arrayOf("Auto-execute (Tự động chạy)", "Manual (Chạy thủ công)")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("${script.name} - Chọn thư mục")
-            .setItems(options) { _, which ->
-                val targetFolder = if (which == 0) "Autoexecute" else "Scripts"
-                downloadScript(script, targetFolder, onShowSnackbar)
-            }
-            .setNegativeButton("Hủy", null)
-            .show()
     }
 
     private fun downloadScript(script: ScriptItem, targetFolder: String, onShowSnackbar: (String) -> Unit) {
@@ -841,7 +903,8 @@ class MainActivity : ComponentActivity() {
 
                 val dir = File("/storage/emulated/0/Delta/$targetFolder")
                 dir.mkdirs()
-                File(dir, "${script.name}.txt").writeText(content)
+                // Save without .txt extension as requested
+                File(dir, script.name).writeText(content)
                 onShowSnackbar("Đã lưu vào $targetFolder")
                 loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {

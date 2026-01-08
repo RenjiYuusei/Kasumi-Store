@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Kasumi-Store</string>
+    <string name="app_name">Kasumi Store</string>
     <string name="install">Cài đặt</string>
     <string name="delete">Xóa</string>
     <string name="open">Mở</string>
