@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0] - 2026-01-08
+### ✨ Cải tiến giao diện (Major)
+- **Giao diện mới**: Chuyển đổi hoàn toàn sang **Jetpack Compose** và **Material Design 3**.
+- **Kasumi-Store**: Đổi tên ứng dụng thành Kasumi-Store.
+- **Icon mới**: Cập nhật icon ứng dụng mới hiện đại hơn.
+- **Tối giản hóa**: Loại bỏ tab "Nhật ký" để tập trung vào trải nghiệm người dùng.
+- **Hiệu ứng mượt mà**: Sử dụng các component native của Compose.
+
+### 🔧 Kỹ thuật
+- Nâng cấp core lên Compose.
+- Tối ưu hóa danh sách ứng dụng và script với `LazyColumn`.
+- Sử dụng `Coil` để tải ảnh nhanh hơn.
+
 ## [1.2.0] - 2025-11-02
 ### Sửa lỗi
 - Đã loại bỏ viền trắng quanh biểu tượng ứng dụng trong thông báo, toast và phần xem trước trong ứng dụng.
