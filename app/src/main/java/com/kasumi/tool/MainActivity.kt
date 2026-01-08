@@ -1,56 +1,70 @@
 package com.kasumi.tool
 
-import android.content.ActivityNotFoundException
-import android.content.BroadcastReceiver
+import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
-import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import org.json.JSONArray
-import org.json.JSONObject
 import android.provider.Settings
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DividerItemDecoration
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import coil.compose.AsyncImage
 import com.google.gson.Gson
-import com.google.android.material.tabs.TabLayout
-import android.app.PendingIntent
-import com.google.android.material.progressindicator.LinearProgressIndicator
-import androidx.core.content.pm.PackageInfoCompat
-import com.google.android.material.textfield.TextInputLayout
- 
+import com.kasumi.tool.ui.theme.KasumiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.security.MessageDigest
-import java.util.*
+import java.util.Locale
+import java.util.UUID
 import java.util.concurrent.TimeUnit
-import android.text.Editable
-import android.text.TextWatcher
-import java.util.zip.ZipInputStream
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -60,140 +74,395 @@ class MainActivity : AppCompatActivity() {
             .readTimeout(5, TimeUnit.MINUTES)
             .build()
     }
+
     private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
     private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
 
-    private lateinit var listView: RecyclerView
-    private lateinit var scriptListView: RecyclerView
-    private lateinit var adapter: ApkAdapter
-    private lateinit var scriptAdapter: ScriptAdapter
-    private val items = mutableListOf<ApkItem>()            // nguồn dữ liệu đầy đủ
-    private val filteredItems = mutableListOf<ApkItem>()     // danh sách sau khi lọc để hiển thị
-    private val preloadedIds = mutableSetOf<String>()
-    private lateinit var tabLayout: TabLayout
-    private lateinit var sourceBar: View
-    private lateinit var searchLayout: TextInputLayout
-    private lateinit var searchInput: EditText
-    private lateinit var btnRefreshSource: Button
-    private lateinit var logContainer: View
-    private lateinit var logView: TextView
-    private val loadingIds = mutableSetOf<String>()
-    private val scriptItems = mutableListOf<ScriptItem>()
-    private val scriptFilteredItems = mutableListOf<ScriptItem>()
-    private var currentQuery: String = ""
-    private var currentScriptQuery: String = ""
-    private var currentTab: Int = 0 // 0: Ứng dụng, 1: Script, 2: Nhật ký
-    private var suppressSearchWatcher: Boolean = false
-    private lateinit var globalProgress: LinearProgressIndicator
-    private lateinit var statsBar: View
-    private lateinit var txtStats: TextView
-    private lateinit var btnClearCache: Button
-    private lateinit var btnSort: Button
-    private var sortMode: SortMode = SortMode.NAME_ASC
-    
-    enum class SortMode {
-        NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC
-    }
+    // Data states
+    private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
+    private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
+    private var isLoading by mutableStateOf(false)
+    private var sortMode by mutableStateOf(SortMode.NAME_ASC)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Force dark mode
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-        setContentView(R.layout.activity_main)
-
-        listView = findViewById(R.id.recycler)
-        scriptListView = findViewById(R.id.recycler_installed)
-        tabLayout = findViewById(R.id.tab_layout)
-        sourceBar = findViewById(R.id.source_bar)
-        logContainer = findViewById(R.id.log_container)
-        logView = findViewById(R.id.log_view)
-        searchLayout = findViewById(R.id.search_layout)
-        searchInput = findViewById(R.id.search_input)
-        btnRefreshSource = findViewById(R.id.btn_refresh_source)
-        globalProgress = findViewById(R.id.global_progress)
-        statsBar = findViewById(R.id.stats_bar)
-        txtStats = findViewById(R.id.txt_stats)
-        btnClearCache = findViewById(R.id.btn_clear_cache)
-        btnSort = findViewById(R.id.btn_sort)
-        btnRefreshSource.setOnClickListener {
-            lifecycleScope.launch {
-                setBusy(true)
-                refreshPreloadedApps()
-                setBusy(false)
-                toast("Đã làm mới nguồn")
-            }
-        }
-        btnSort.setOnClickListener { showSortMenu() }
-        btnClearCache.setOnClickListener { clearCache() }
-        searchInput.addTextChangedListener(object : TextWatcher {
-            override fun afterTextChanged(s: Editable?) {
-                if (suppressSearchWatcher) return
-                val q = s?.toString() ?: ""
-                if (currentTab == 0) {
-                    applyFilter(q)
-                } else if (currentTab == 1) {
-                    applyScriptFilter(q)
-                }
-            }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-        })
-
-        adapter = ApkAdapter(filteredItems, preloadedIds,
-            isLoading = { id -> loadingIds.contains(id) },
-            getCachedFile = { item -> cacheFileFor(item) },
-            onInstall = { item -> onInstallClicked(item) },
-            onDelete = { item ->
-                items.removeAll { it.id == item.id }
-                saveItems()
-                applyFilter(currentQuery)
-                updateStats()
-                log("Đã xóa mục: ${item.name}")
-            }
-        )
-        listView.layoutManager = LinearLayoutManager(this)
-        listView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
-        listView.adapter = adapter
-
-        scriptAdapter = ScriptAdapter(scriptFilteredItems,
-            onDownload = { script -> showDownloadFolderDialog(script) },
-            onCopy = { script -> copyScript(script) },
-            onDelete = { script -> deleteScript(script) }
-        )
-        scriptListView.layoutManager = LinearLayoutManager(this)
-        scriptListView.addItemDecoration(DividerItemDecoration(this, DividerItemDecoration.VERTICAL))
-        scriptListView.adapter = scriptAdapter
-
-        setupTabs()
-        
-        // Khởi tạo log với thông báo chào mừng
-        logView.text = "" // Clear placeholder text
-        log("=== Kasumi v${resolveAppVersionName()} ===")
+        enableEdgeToEdge()
 
         loadItems()
-        // Nạp preload từ nguồn mặc định (cố định)
         lifecycleScope.launch {
+            setBusy(true)
             refreshPreloadedApps(initial = true)
-            applyFilter("")
-            updateStats()
-        }
-        updateCachedVersions()
-        applyFilter(currentQuery)
-        
-        // Load scripts from online source and local folders
-        lifecycleScope.launch {
             loadScriptsFromOnline()
             loadScriptsFromLocal()
-            applyScriptFilter(currentScriptQuery)
+            setBusy(false)
         }
-        
-        // Log thông tin môi trường
-        logEnvForDebug("STARTUP")
-        
-        // Yêu cầu quyền storage (cần cho OBB)
+
         requestStoragePermission()
+
+        setContent {
+            KasumiTheme {
+                MainScreen()
+            }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun MainScreen() {
+        var selectedTab by remember { mutableIntStateOf(0) }
+        var searchQuery by remember { mutableStateOf("") }
+        var showSortDialog by remember { mutableStateOf(false) }
+
+        val snackbarHostState = remember { SnackbarHostState() }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.app_name)) },
+                    actions = {
+                        if (selectedTab == 0) {
+                            IconButton(onClick = { showSortDialog = true }) {
+                                Icon(Icons.Default.FilterList, contentDescription = "Sort")
+                            }
+                            IconButton(onClick = {
+                                lifecycleScope.launch {
+                                    setBusy(true)
+                                    refreshPreloadedApps()
+                                    setBusy(false)
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                }
+                            }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                            }
+                        }
+                    }
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Apps, contentDescription = "Apps") },
+                        label = { Text("Ứng dụng") },
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0; searchQuery = "" }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Code, contentDescription = "Script") },
+                        label = { Text("Script") },
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1; searchQuery = "" }
+                    )
+                }
+            }
+        ) { innerPadding ->
+            Column(modifier = Modifier.padding(innerPadding)) {
+                if (isLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
+                )
+
+                if (selectedTab == 0) {
+                    AppsListContent(searchQuery, onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    })
+                } else {
+                    ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    })
+                }
+            }
+
+            if (showSortDialog) {
+                SortDialog(
+                    onDismiss = { showSortDialog = false },
+                    onSortSelected = { mode ->
+                        sortMode = mode
+                        showSortDialog = false
+                    }
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun SearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            placeholder = { Text(hint) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    @Composable
+    fun SortDialog(onDismiss: () -> Unit, onSortSelected: (SortMode) -> Unit) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.sort)) },
+            text = {
+                Column {
+                    val options = listOf(
+                        SortMode.NAME_ASC to R.string.sort_by_name,
+                        SortMode.NAME_DESC to R.string.sort_by_name_desc,
+                        SortMode.SIZE_DESC to R.string.sort_by_size,
+                        SortMode.DATE_DESC to R.string.sort_by_date
+                    )
+                    options.forEach { (mode, labelRes) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSortSelected(mode) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = sortMode == mode, onClick = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(labelRes))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) { Text("Đóng") }
+            }
+        )
+    }
+
+    @Composable
+    fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+        val filteredApps = remember(appsList, searchQuery, sortMode) {
+            val q = searchQuery.trim().lowercase()
+            val filtered = if (q.isEmpty()) {
+                appsList
+            } else {
+                appsList.filter {
+                    it.name.lowercase().contains(q) ||
+                            (it.url?.lowercase()?.contains(q) == true)
+                }
+            }
+
+            when (sortMode) {
+                SortMode.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
+                SortMode.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+                SortMode.SIZE_DESC -> filtered.sortedByDescending {
+                     val f = cacheFileFor(it)
+                     if (f.exists()) f.length() else 0L
+                }
+                SortMode.DATE_DESC -> filtered.sortedByDescending {
+                     val f = cacheFileFor(it)
+                     if (f.exists()) f.lastModified() else 0L
+                }
+            }
+        }
+
+        // Stats
+        val cachedCount = filteredApps.count { cacheFileFor(it).exists() }
+        val totalSize = filteredApps.sumOf {
+             val f = cacheFileFor(it)
+             if (f.exists()) f.length() else 0L
+        }
+
+        Column {
+             Row(
+                 modifier = Modifier
+                     .fillMaxWidth()
+                     .padding(horizontal = 16.dp, vertical = 4.dp),
+                 horizontalArrangement = Arrangement.SpaceBetween,
+                 verticalAlignment = Alignment.CenterVertically
+             ) {
+                 Text(
+                     text = stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})"),
+                     style = MaterialTheme.typography.bodySmall,
+                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                 )
+                 if (cachedCount > 0) {
+                     TextButton(onClick = { clearCache(onShowSnackbar) }) {
+                         Text(stringResource(R.string.clear_cache))
+                     }
+                 }
+             }
+
+             LazyColumn(
+                 contentPadding = PaddingValues(bottom = 80.dp)
+             ) {
+                 items(filteredApps, key = { it.id }) { item ->
+                     AppItemRow(item, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                         appsList = appsList.filter { x -> x.id != it.id }
+                         saveItems()
+                         onShowSnackbar("Đã xóa ${it.name}")
+                     })
+                 }
+             }
+        }
+    }
+
+    @Composable
+    fun AppItemRow(item: ApkItem, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+        val context = LocalContext.current
+        val cachedFile = cacheFileFor(item)
+        val isCached = cachedFile.exists()
+        
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (item.iconUrl != null) {
+                    AsyncImage(
+                        model = item.iconUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (isCached) {
+                        Text(
+                            text = "${formatFileSize(cachedFile.length())} • ${stringResource(R.string.cached)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (item.versionName != null) {
+                        Text(
+                            text = "v${item.versionName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(onClick = { onInstall(item) }) {
+                    Icon(Icons.Default.Download, contentDescription = "Download/Install")
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+        val filteredScripts = remember(scriptsList, searchQuery) {
+            val q = searchQuery.trim().lowercase()
+             if (q.isEmpty()) {
+                scriptsList
+            } else {
+                scriptsList.filter {
+                    it.name.lowercase().contains(q) ||
+                            it.gameName.lowercase().contains(q)
+                }
+            }
+        }
+
+        LazyColumn(
+             contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            items(filteredScripts, key = { it.id }) { script ->
+                ScriptItemRow(
+                    script = script,
+                    onDownload = { showDownloadFolderDialog(it, onShowSnackbar) },
+                    onCopy = { copyScript(it, onShowSnackbar) },
+                    onDelete = { deleteScript(it, onShowSnackbar) }
+                )
+            }
+        }
     }
     
+    @Composable
+    fun ScriptItemRow(script: ScriptItem, onDownload: (ScriptItem) -> Unit, onCopy: (ScriptItem) -> Unit, onDelete: (ScriptItem) -> Unit) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = script.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = script.gameName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (script.localPath == null) {
+                        OutlinedButton(
+                            onClick = { onDownload(script) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Tải")
+                        }
+                    }
+                    Button(
+                        onClick = { onCopy(script) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.copy_script))
+                    }
+                    if (script.localPath != null) {
+                        IconButton(onClick = { onDelete(script) }) {
+                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    // --- Logic functions migrated from old MainActivity ---
+
     private fun requestStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -215,611 +484,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupTabs() {
-        tabLayout.addTab(tabLayout.newTab().setText("Ứng dụng").setIcon(R.drawable.ic_apps))
-        tabLayout.addTab(tabLayout.newTab().setText("Script").setIcon(R.drawable.ic_installed))
-        tabLayout.addTab(tabLayout.newTab().setText("Nhật ký").setIcon(R.drawable.ic_log))
-        showAppsTab()
-        syncSearchInputWithTab()
-        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) {
-                when (tab.position) {
-                    0 -> { currentTab = 0; showAppsTab(); syncSearchInputWithTab() }
-                    1 -> { currentTab = 1; showScriptTab(); syncSearchInputWithTab() }
-                    else -> { currentTab = 2; showLogTab(); syncSearchInputWithTab() }
-                }
-            }
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab) {
-                if (tab.position == 2) scrollLogToBottom()
-            }
-        })
-    }
-
-    private fun syncSearchInputWithTab() {
-        suppressSearchWatcher = true
-        try {
-            when (currentTab) {
-                0 -> { // Apps tab
-                    searchLayout.isHintEnabled = true
-                    searchLayout.hint = getString(R.string.search_hint)
-                    val want = currentQuery
-                    if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
-                }
-                1 -> { // Script tab
-                    searchLayout.isHintEnabled = true
-                    searchLayout.hint = getString(R.string.search_scripts_hint)
-                    val want = currentScriptQuery
-                    if ((searchInput.text?.toString() ?: "") != want) searchInput.setText(want)
-                }
-                else -> {
-                    searchLayout.isHintEnabled = false
-                    if (!searchInput.text.isNullOrEmpty()) searchInput.setText("")
-                }
-            }
-        } finally {
-            suppressSearchWatcher = false
-        }
-    }
-
-    private fun showAppsTab() {
-        listView.visibility = View.VISIBLE
-        scriptListView.visibility = View.GONE
-        logContainer.visibility = View.GONE
-        sourceBar.visibility = View.VISIBLE
-        btnRefreshSource.visibility = View.VISIBLE
-        btnSort.visibility = View.VISIBLE
-        updateStats()
-    }
-
-    private fun showLogTab() {
-        listView.visibility = View.GONE
-        scriptListView.visibility = View.GONE
-        logContainer.visibility = View.VISIBLE
-        sourceBar.visibility = View.GONE
-        statsBar.visibility = View.GONE
-        // Ensure log is properly initialized and visible
-        if (::logView.isInitialized) {
-            scrollLogToBottom()
-        }
-    }
-
-    private fun showScriptTab() {
-        listView.visibility = View.GONE
-        logContainer.visibility = View.GONE
-        scriptListView.visibility = View.VISIBLE
-        sourceBar.visibility = View.VISIBLE
-        btnRefreshSource.visibility = View.GONE
-        btnSort.visibility = View.GONE
-        statsBar.visibility = View.GONE
-    }
-
-    private fun resolveAppVersionName(): String {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0)).versionName ?: "?"
-            } else {
-                @Suppress("DEPRECATION")
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
-            }
-        } catch (_: Exception) {
-            "?"
-        }
+    private fun setBusy(busy: Boolean) {
+        isLoading = busy
     }
 
     private fun log(msg: String) {
-        val ts = java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        logView.append("[$ts] $msg\n")
-        // Giữ log gọn: giới hạn ~4000 ký tự cuối
-        val txt = logView.text?.toString() ?: ""
-        if (txt.length > 6000) {
-            logView.text = txt.takeLast(4000)
-        }
-        scrollLogToBottom()
+        Log.d("Kasumi", msg)
     }
 
-    private fun logBg(msg: String) = runOnUiThread { log(msg) }
+    private fun logBg(msg: String) = log(msg)
 
-    private fun scrollLogToBottom() {
-        val parent = logView.parent
-        if (parent is ScrollView) {
-            parent.post { parent.fullScroll(View.FOCUS_DOWN) }
-        }
+    private fun loadItems() {
+        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+        val json = prefs.getString("list", null)
+        val loaded = ApkItem.fromJsonList(json)
+        appsList = loaded.ifEmpty { emptyList() }.toMutableList()
     }
 
-    private fun setBusy(busy: Boolean) {
-        globalProgress.visibility = if (busy) View.VISIBLE else View.GONE
-    }
-
-    // Ghi log thông tin hệ thống và môi trường root để hỗ trợ chẩn đoán
-    private fun logEnvForDebug(stage: String) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val env = RootInstaller.probeRootEnv()
-            val androidRelease = try { Build.VERSION.RELEASE } catch (_: Exception) { "?" }
-            val rom = try { Build.DISPLAY } catch (_: Exception) { Build.ID }
-            val device = "${Build.MANUFACTURER} ${Build.MODEL}".trim()
-            val lines = listOf(
-                "ENV/$stage: Android $androidRelease (SDK ${Build.VERSION.SDK_INT}), ROM=$rom, Device=$device",
-                "ENV/$stage: Root provider=${env.provider}, suPath=${env.suPath ?: "-"}, suVer=${env.suVersion ?: "-"}, uid0=${env.uid0}",
-                "ENV/$stage: Magisk=${env.magiskVersionName ?: "-"} (code=${env.magiskVersionCode ?: "-"}), KernelSU=${env.kernelSuVersion ?: "-"}"
-            )
-            withContext(Dispatchers.Main) { lines.forEach { log(it) } }
-        }
-    }
-
-    private fun mergePreloaded(preloaded: List<PreloadApp>) {
-        preloadedIds.clear()
-        var updated = 0
-        for (p in preloaded) {
-            val id = stableIdFromUrl(p.url)
-            preloadedIds.add(id)
-            val idx = items.indexOfFirst { it.id == id }
-            val normalized = normalizeUrl(p.url)
-            if (idx >= 0) {
-                val exist = items[idx]
-                items[idx] = exist.copy(
-                    name = p.name,
-                    sourceType = SourceType.URL,
-                    url = normalized,
-                    uri = null,
-                    versionName = exist.versionName ?: p.versionName,
-                    versionCode = exist.versionCode ?: p.versionCode,
-                    iconUrl = p.iconUrl
-                )
-            } else {
-                items.add(
-                    ApkItem(
-                        id = id,
-                        name = p.name,
-                        sourceType = SourceType.URL,
-                        url = normalized,
-                        uri = null,
-                        versionName = p.versionName,
-                        versionCode = p.versionCode,
-                        iconUrl = p.iconUrl
-                    )
-                )
-            }
-            updated++
-        }
-    }
-
-    private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
-        try {
-            val req = Request.Builder().url(url).header("User-Agent", "CloudPhoneTool/1.0").build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    logBg("Nguồn online thất bại: HTTP ${resp.code}")
-                    return@withContext null
-                }
-                val body = resp.body?.string() ?: return@withContext null
-                // Tránh dùng TypeToken để không phụ thuộc generic signature khi minify
-                val arr: Array<PreloadApp> = Gson().fromJson(body, Array<PreloadApp>::class.java)
-                log("Đã tải ${arr.size} ứng dụng từ nguồn")
-                arr.toList()
-            }
-        } catch (e: Exception) {
-            logBg("Lỗi tải nguồn: ${e.message}")
-            null
-        }
-    }
-
-    private suspend fun refreshPreloadedApps(initial: Boolean = false) {
-        val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
-        if (preloaded != null) {
-            mergePreloaded(preloaded)
-            withContext(Dispatchers.Main) { applyFilter(currentQuery) }
-        } else {
-            if (!initial) logBg("Không thể nạp danh sách preload từ nguồn mặc định")
-        }
-    }
-
-    private fun applyFilter(q: String) {
-        currentQuery = q
-        val needle = q.trim().lowercase(Locale.getDefault())
-        filteredItems.clear()
-        val filtered = if (needle.isEmpty()) {
-            items.toList()
-        } else {
-            items.filter {
-                it.name.lowercase(Locale.getDefault()).contains(needle)
-                        || (it.url?.lowercase(Locale.getDefault())?.contains(needle) == true)
-                        || (it.uri?.lowercase(Locale.getDefault())?.contains(needle) == true)
-            }
-        }
-        
-        // Áp dụng sắp xếp
-        val sorted = when (sortMode) {
-            SortMode.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
-            SortMode.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
-            SortMode.SIZE_DESC -> filtered.sortedByDescending { 
-                val f = cacheFileFor(it)
-                if (f.exists()) f.length() else 0L
-            }
-            SortMode.DATE_DESC -> filtered.sortedByDescending { 
-                val f = cacheFileFor(it)
-                if (f.exists()) f.lastModified() else 0L
-            }
-        }
-        
-        filteredItems.addAll(sorted)
-        adapter.notifyDataSetChanged()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun extractApkVersion(file: File): Pair<String?, Long?> {
-        return try {
-            val pm = packageManager
-            val pi = pm.getPackageArchiveInfo(file.absolutePath, 0)
-            if (pi != null) {
-                val name = pi.versionName
-                val code = if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()
-                log("Đọc phiên bản từ APK: v=$name (code $code)")
-                name to code
-            } else null to null
-        } catch (_: Exception) {
-            log("Không đọc được phiên bản từ APK")
-            null to null
-        }
-    }
-
-    // Đã loại bỏ nạp từ raw/preload_apps.json để cố định nguồn online mặc định
-
-    private fun stableIdFromUrl(url: String): String {
-        return try {
-            val md = MessageDigest.getInstance("SHA-1")
-            val bytes = md.digest(url.toByteArray())
-            bytes.joinToString("") { b -> "%02x".format(b) }
-        } catch (_: Exception) {
-            url.hashCode().toString()
-        }
-    }
-
-    private fun onInstallClicked(item: ApkItem) {
-        lifecycleScope.launch {
-            val idxLoading = items.indexOfFirst { it.id == item.id }
-            if (idxLoading >= 0) {
-                loadingIds.add(item.id)
-                applyFilter(currentQuery)
-                setBusy(true)
-            }
-            try {
-                val apkFile = when (item.sourceType) {
-                    SourceType.LOCAL -> copyFromUriIfNeeded(Uri.parse(item.uri!!))
-                    SourceType.URL -> downloadApk(item)
-                }
-                if (apkFile == null) {
-                    toast("Không thể chuẩn bị tệp APK")
-                    log("Lỗi: Không thể chuẩn bị tệp APK cho ${item.name}")
-                    return@launch
-                }
-
-                val urlLower = item.url?.lowercase(Locale.ROOT)
-                val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
-                val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
-                        || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
-                if (isSplitPackage) {
-                    // Xử lý cài đặt gói chia nhỏ (.apks hoặc .xapk)
-                    val (splits, obbInfo) = withContext(Dispatchers.IO) { extractSplitsAndObb(apkFile) }
-                    if (splits.isEmpty()) {
-                        toast("Không tìm thấy APK bên trong file")
-                        log("File split không chứa APK hợp lệ: ${apkFile.absolutePath}")
-                        return@launch
-                    }
-                    
-                    // Copy OBB nếu có
-                    if (obbInfo != null) {
-                        withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
-                    }
-                    
-                    val rooted = RootInstaller.isDeviceRooted()
-                    log("Cài đặt ${splits.size} APK qua ${if (rooted) "root" else "session"}")
-                    if (rooted) {
-                        val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
-                        val (ok, msg) = resSplit
-                        if (ok) {
-                            toast("Cài đặt thành công")
-                            log("✓ Cài thành công")
-                        } else {
-                            log("Root thất bại: $msg. Thử session...")
-                            installSplitsNormally(splits)
-                        }
-                    } else {
-                        installSplitsNormally(splits)
-                    }
-                    return@launch
-                }
-
-                if (!isLikelyApk(apkFile)) {
-                    log("Tệp tải về không phải APK (size=${apkFile.length()}B). Có thể là trang HTML hoặc sai link.")
-                    toast("Tệp tải về không phải APK. Kiểm tra lại link tải.")
-                    return@launch
-                }
-
-                val rooted = RootInstaller.isDeviceRooted()
-                log("Cài đặt qua ${if (rooted) "root" else "system installer"}")
-                if (rooted) {
-                    val resApk: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
-                    val (ok, msg) = resApk
-                    if (ok) {
-                        toast("Cài đặt thành công")
-                        log("✓ Cài thành công")
-                    } else {
-                        log("Root thất bại: $msg")
-                        installNormally(apkFile)
-                    }
-                } else {
-                    installNormally(apkFile)
-                }
-            } catch (e: Exception) {
-                toast("Lỗi: ${e.message}")
-                log("Lỗi: ${e.message}")
-            } finally {
-                if (idxLoading >= 0) {
-                    loadingIds.remove(item.id)
-                    applyFilter(currentQuery)
-                    if (loadingIds.isEmpty()) setBusy(false)
-                }
-            }
-        }
-    }
-
-    private fun installNormally(file: File) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!packageManager.canRequestPackageInstalls()) {
-                // Yêu cầu người dùng cho phép cài đặt từ nguồn không xác định
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:$packageName")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                try {
-                    startActivity(intent)
-                    toast("Hãy cấp quyền, sau đó bấm lại để cài đặt")
-                } catch (e: ActivityNotFoundException) {
-                    // ignore
-                }
-            }
-        }
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            startActivity(intent)
-        } catch (e: Exception) {
-            toast("Không mở được installer: ${e.message}")
-        }
-    }
-
-    private suspend fun downloadApk(item: ApkItem): File? = withContext(Dispatchers.IO) {
-        val url = item.url ?: return@withContext null
-        val normalized = url
-        logBg("Tải: ${item.name}")
-        val outFile = cacheFileFor(item)
-        val req = Request.Builder()
-            .url(normalized)
-            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                logBg("Tải thất bại: HTTP ${resp.code}")
-                throw IllegalStateException("HTTP ${resp.code}")
-            }
-            resp.body?.byteStream()?.use { input ->
-                FileOutputStream(outFile).use { out ->
-                    copyStreamWithProgress(input, out)
-                }
-            }
-            logBg("Đã tải xong: ${outFile.length() / 1024 / 1024}MB")
-            outFile
-        }
-    }
-
-    // Đã loại bỏ toàn bộ xử lý Google Drive, chỉ sử dụng tải trực tiếp (ưu tiên Dropbox direct)
-
-    private fun ensureApkExtension(name: String): String {
-        val lower = name.lowercase(Locale.ROOT)
-        return if (lower.endsWith(".apk") || lower.endsWith(".apks") || lower.endsWith(".xapk")) name else "$name.apk"
-    }
-
-    data class ObbInfo(val packageName: String, val obbFiles: List<File>)
-    
-    // Giải nén file .apks hoặc .xapk để lấy danh sách các APK và OBB
-    private fun extractSplitsAndObb(packageFile: File): Pair<List<File>, ObbInfo?> {
-        val outDir = File(cacheDir, "splits/${packageFile.nameWithoutExtension}")
-        if (outDir.exists()) outDir.deleteRecursively()
-        outDir.mkdirs()
-        val results = mutableListOf<File>()
-        val obbFiles = mutableListOf<File>()
-        var packageName: String? = null
-        
-        try {
-            java.util.zip.ZipFile(packageFile).use { zipFile ->
-                val entries = zipFile.entries()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    
-                    if (entry.isDirectory) continue
-                    
-                    val entryName = entry.name.lowercase()
-                    val fileName = entry.name.substringAfterLast('/')
-                    
-                    // Đọc manifest.json để lấy package name
-                    if (entryName.endsWith("manifest.json")) {
-                        try {
-                            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
-                            packageName = JSONObject(manifest).optString("package_name")
-                        } catch (e: Exception) {}
-                        continue
-                    }
-                    
-                    // Giải nén APK
-                    if (entryName.endsWith(".apk")) {
-                        val outFile = File(outDir, fileName)
-                        outFile.parentFile?.mkdirs()
-                        
-                        zipFile.getInputStream(entry).use { input ->
-                            FileOutputStream(outFile).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        
-                        if (outFile.exists() && outFile.length() > 0) {
-                            results.add(outFile)
-                        }
-                        continue
-                    }
-                    
-                    // Giải nén OBB
-                    if (entryName.endsWith(".obb")) {
-                        val obbDir = File(cacheDir, "obb")
-                        obbDir.mkdirs()
-                        val outFile = File(obbDir, fileName)
-                        
-                        zipFile.getInputStream(entry).use { input ->
-                            FileOutputStream(outFile).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        
-                        if (outFile.exists() && outFile.length() > 0) {
-                            obbFiles.add(outFile)
-                        }
-                        continue
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logBg("Lỗi giải nén: ${e.message}")
-        }
-        
-        val apkSizeMB = results.sumOf { it.length() / 1024 / 1024 }
-        val obbSizeMB = obbFiles.sumOf { it.length() / 1024 / 1024 }
-        logBg("Giải nén ${results.size} APK (${apkSizeMB}MB)" + 
-            if (obbFiles.isNotEmpty()) ", ${obbFiles.size} OBB (${obbSizeMB}MB)" else "")
-        
-        // Sắp xếp APK: base.apk hoặc file APK chính trước
-        val sortedApks = results.sortedWith(compareBy(
-            { !it.name.startsWith("base.") && !it.name.contains("com.") },
-            { it.name.startsWith("config.") || it.name.startsWith("split_") },
-            { it.name }
-        ))
-        
-        val obbInfo = if (obbFiles.isNotEmpty() && packageName != null) {
-            ObbInfo(packageName, obbFiles)
-        } else null
-        
-        return sortedApks to obbInfo
-    }
-    
-    private fun installObbFiles(obbInfo: ObbInfo) {
-        try {
-            // Kiểm tra quyền storage
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (!Environment.isExternalStorageManager()) {
-                    logBg("Cần quyền quản lý storage để copy OBB")
-                    return
-                }
-            }
-            
-            val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
-            if (!obbDir.exists()) {
-                obbDir.mkdirs()
-            }
-            
-            for (obbFile in obbInfo.obbFiles) {
-                val destFile = File(obbDir, obbFile.name)
-                obbFile.inputStream().use { input ->
-                    FileOutputStream(destFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                logBg("Copy OBB: ${obbFile.name} (${obbFile.length() / 1024 / 1024}MB)")
-            }
-            
-            logBg("✓ Đã copy ${obbInfo.obbFiles.size} file OBB vào /Android/obb/${obbInfo.packageName}")
-        } catch (e: Exception) {
-            logBg("Lỗi copy OBB: ${e.message}")
-        }
-    }
-
-    // Cài đặt nhiều APK (split) theo cách thường bằng PackageInstaller
-    private fun installSplitsNormally(files: List<File>) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:$packageName")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                    toast("Hãy cấp quyền cài đặt ứng dụng không xác định, sau đó thử lại")
-                    return
-                }
-            }
-            val installer = packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            val sessionId = installer.createSession(params)
-            val session = installer.openSession(sessionId)
-            try {
-                for (f in files) {
-                    FileInputStream(f).use { input ->
-                        session.openWrite(f.name, 0, f.length()).use { out ->
-                            val buf = ByteArray(8 * 1024)
-                            while (true) {
-                                val r = input.read(buf)
-                                if (r == -1) break
-                                out.write(buf, 0, r)
-                            }
-                            session.fsync(out)
-                        }
-                    }
-                }
-                val action = "${packageName}.INSTALL_COMMIT"
-                val receiver = object : BroadcastReceiver() {
-                    override fun onReceive(context: Context?, intent: Intent?) {
-                        try { unregisterReceiver(this) } catch (_: Exception) {}
-                        val status = intent?.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE) ?: PackageInstaller.STATUS_FAILURE
-                        val msg = intent?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""
-                        if (status == PackageInstaller.STATUS_SUCCESS) {
-                            toast("Cài đặt thành công")
-                            log("Cài đặt splits (thường) thành công")
-                        } else if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
-                            val confirm: Intent? = if (Build.VERSION.SDK_INT >= 33) {
-                                intent?.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                            } else {
-                                @Suppress("DEPRECATION") intent?.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
-                            }
-                            try { startActivity(confirm?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
-                        } else {
-                            toast("Cài đặt thất bại: $msg")
-                            log("Cài đặt splits (thường) thất bại: $msg")
-                        }
-                    }
-                }
-                registerReceiver(receiver, IntentFilter(action))
-                val pi = PendingIntent.getBroadcast(this, sessionId, Intent(action), PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0))
-                session.commit(pi.intentSender)
-                toast("Đang tiến hành cài đặt…")
-            } finally {
-                session.close()
-            }
-        } catch (e: Exception) {
-            toast("Lỗi cài đặt splits: ${e.message}")
-            log("Lỗi cài đặt splits (thường): ${e.message}")
-        }
-    }
-
-    private fun copyStreamWithProgress(input: InputStream, out: FileOutputStream) {
-        val buf = ByteArray(8 * 1024)
-        while (true) {
-            val r = input.read(buf)
-            if (r == -1) break
-            out.write(buf, 0, r)
-        }
-        out.flush()
+    private fun saveItems() {
+        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+        val json = ApkItem.toJsonList(appsList)
+        prefs.edit().putString("list", json).apply()
     }
 
     private fun cacheFileFor(item: ApkItem): File {
@@ -835,48 +520,16 @@ class MainActivity : AppCompatActivity() {
         return File(dir, "${item.id}.$ext")
     }
 
-    // Kiểm tra nhanh file có phải APK (ZIP) bằng signature 'PK'
-    private fun isLikelyApk(file: File): Boolean {
+    private fun stableIdFromUrl(url: String): String {
         return try {
-            if (!file.exists() || file.length() < 4) return false
-            file.inputStream().use { ins ->
-                val sig = ByteArray(2)
-                val r = ins.read(sig)
-                r == 2 && sig[0] == 0x50.toByte() && sig[1] == 0x4B.toByte()
-            }
+            val md = MessageDigest.getInstance("SHA-1")
+            val bytes = md.digest(url.toByteArray())
+            bytes.joinToString("") { b -> "%02x".format(b) }
         } catch (_: Exception) {
-            false
+            url.hashCode().toString()
         }
     }
 
-    private suspend fun copyFromUriIfNeeded(uri: Uri): File? = withContext(Dispatchers.IO) {
-        try {
-            val name = queryDisplayName(uri) ?: "picked.apk"
-            val dir = File(cacheDir, "apks").apply { mkdirs() }
-            val outFile = File(dir, ensureApkExtension(name))
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(outFile).use { out ->
-                    copyStreamWithProgress(input, out)
-                }
-            }
-            outFile
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        return try {
-            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { c ->
-                    if (c.moveToFirst()) c.getString(0) else null
-                }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    // Chuẩn hoá Dropbox -> direct download; bỏ toàn bộ xử lý Google Drive
     private fun normalizeUrl(raw: String): String {
         var url = raw
         if (url.contains("dropbox.com")) {
@@ -889,130 +542,184 @@ class MainActivity : AppCompatActivity() {
         return url
     }
 
-    private fun guessNameFromUrl(url: String): String {
-        return try {
-            val path = Uri.parse(url).lastPathSegment ?: "download.apk"
-            if (path.contains('.')) path else "$path.apk"
-        } catch (_: Exception) {
-            "download.apk"
+    private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder().url(url).header("User-Agent", "CloudPhoneTool/1.0").build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val body = resp.body?.string() ?: return@withContext null
+                val arr: Array<PreloadApp> = Gson().fromJson(body, Array<PreloadApp>::class.java)
+                arr.toList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
-    private fun guessNameFromHeaders(disposition: String?): String? {
-        if (disposition == null) return null
-        val regex = Regex("filename=\\\"?(.*?)\\\"?(;|$)")
-        val m = regex.find(disposition)
-        return m?.groupValues?.getOrNull(1)
+    private suspend fun refreshPreloadedApps(initial: Boolean = false) {
+        val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
+        if (preloaded != null) {
+            val current = appsList.toMutableList()
+            for (p in preloaded) {
+                val id = stableIdFromUrl(p.url)
+                val idx = current.indexOfFirst { it.id == id }
+                val normalized = normalizeUrl(p.url)
+                if (idx >= 0) {
+                    val exist = current[idx]
+                    current[idx] = exist.copy(
+                        name = p.name,
+                        sourceType = SourceType.URL,
+                        url = normalized,
+                        versionName = exist.versionName ?: p.versionName,
+                        versionCode = exist.versionCode ?: p.versionCode,
+                        iconUrl = p.iconUrl
+                    )
+                } else {
+                    current.add(
+                        ApkItem(
+                            id = id,
+                            name = p.name,
+                            sourceType = SourceType.URL,
+                            url = normalized,
+                            uri = null,
+                            versionName = p.versionName,
+                            versionCode = p.versionCode,
+                            iconUrl = p.iconUrl
+                        )
+                    )
+                }
+            }
+            appsList = current
+            saveItems()
+        }
     }
 
-    private fun saveItems() {
-        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-        val json = ApkItem.toJsonList(items)
-        prefs.edit().putString("list", json).apply()
-    }
+    private fun onInstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
+        lifecycleScope.launch {
+            setBusy(true)
+            try {
+                val apkFile = when (item.sourceType) {
+                    SourceType.LOCAL -> if (item.uri != null) copyFromUriIfNeeded(Uri.parse(item.uri)) else null
+                    SourceType.URL -> downloadApk(item)
+                }
 
-    private fun loadItems() {
-        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-        val json = prefs.getString("list", null)
-        val loaded = ApkItem.fromJsonList(json)
-        items.clear()
-        items.addAll(loaded)
-    }
+                if (apkFile == null) {
+                    onShowSnackbar("Lỗi chuẩn bị tệp APK")
+                    return@launch
+                }
 
-    private fun updateCachedVersions() {
-        var changed = false
-        for ((index, it) in items.withIndex()) {
-            if (it.sourceType == SourceType.URL) {
-                val f = cacheFileFor(it)
-                if (f.exists() && (it.versionName == null || it.versionCode == null)) {
-                    val (vn, vc) = extractApkVersion(f)
-                    if (vn != null || vc != null) {
-                        items[index] = it.copy(versionName = vn, versionCode = vc)
-                        changed = true
+                val urlLower = item.url?.lowercase(Locale.ROOT)
+                val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
+                val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
+                        || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
+
+                if (isSplitPackage) {
+                    // Logic for split APKs/XAPKs
+                     val (splits, obbInfo) = withContext(Dispatchers.IO) { extractSplitsAndObb(apkFile) }
+                     if (splits.isEmpty()) {
+                        onShowSnackbar("Không tìm thấy APK bên trong file")
+                        return@launch
                     }
+                    if (obbInfo != null) {
+                        withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
+                    }
+                    
+                    val rooted = RootInstaller.isDeviceRooted()
+                     if (rooted) {
+                        val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
+                        val (ok, msg) = resSplit
+                        if (ok) {
+                            onShowSnackbar("Cài đặt thành công")
+                        } else {
+                            installSplitsNormally(splits, onShowSnackbar)
+                        }
+                    } else {
+                        installSplitsNormally(splits, onShowSnackbar)
+                    }
+                    return@launch
                 }
+
+                 val rooted = RootInstaller.isDeviceRooted()
+                if (rooted) {
+                    val resApk: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
+                    val (ok, msg) = resApk
+                    if (ok) {
+                        onShowSnackbar("Cài đặt thành công")
+                    } else {
+                        installNormally(apkFile, onShowSnackbar)
+                    }
+                } else {
+                    installNormally(apkFile, onShowSnackbar)
+                }
+            } catch (e: Exception) {
+                onShowSnackbar("Lỗi: ${e.message}")
+                e.printStackTrace()
+            } finally {
+                setBusy(false)
             }
         }
-        if (changed) saveItems()
     }
 
-    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    private suspend fun downloadApk(item: ApkItem): File? = withContext(Dispatchers.IO) {
+        val url = item.url ?: return@withContext null
+        val outFile = cacheFileFor(item)
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
+            resp.body?.byteStream()?.use { input ->
+                FileOutputStream(outFile).use { out ->
+                    input.copyTo(out)
+                }
+            }
+            outFile
+        }
+    }
 
-    // Chức năng sắp xếp và thống kê
-    private fun showSortMenu() {
-        val options = arrayOf(
-            getString(R.string.sort_by_name),
-            getString(R.string.sort_by_name_desc),
-            getString(R.string.sort_by_size),
-            getString(R.string.sort_by_date)
-        )
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle(getString(R.string.sort))
-            .setItems(options) { _, which ->
-                sortMode = when (which) {
-                    0 -> SortMode.NAME_ASC
-                    1 -> SortMode.NAME_DESC
-                    2 -> SortMode.SIZE_DESC
-                    else -> SortMode.DATE_DESC
-                }
-                applyFilter(currentQuery)
-            }
-            .show()
-    }
-    
-    private fun updateStats() {
-        val cachedCount = items.count { 
-            val f = cacheFileFor(it)
-            f.exists()
-        }
-        val totalSize = items.mapNotNull { 
-            val f = cacheFileFor(it)
-            if (f.exists()) f.length() else null
-        }.sum()
-        
-        val sizeStr = formatFileSize(totalSize)
-        txtStats.text = getString(R.string.stats_format, items.size, "$cachedCount ($sizeStr)")
-        statsBar.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
-        btnClearCache.visibility = if (cachedCount > 0) View.VISIBLE else View.GONE
-    }
-    
-    private fun clearCache() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val apkCacheDir = File(cacheDir, "apks")
-            val splitsDir = File(cacheDir, "splits")
-            val obbCacheDir = File(cacheDir, "obb")
-            var count = 0
-            var size = 0L
-            
-            // Xóa cache APK/APKS/XAPK
-            if (apkCacheDir.exists()) {
-                apkCacheDir.listFiles()?.forEach { file ->
-                    size += file.length()
-                    file.delete()
-                    count++
+    private suspend fun copyFromUriIfNeeded(uri: Uri): File? = withContext(Dispatchers.IO) {
+        try {
+            val dir = File(cacheDir, "apks").apply { mkdirs() }
+            val outFile = File(dir, "picked_${System.currentTimeMillis()}.apk")
+            contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(outFile).use { out ->
+                    input.copyTo(out)
                 }
             }
-            
-            // Xóa thư mục splits đã giải nén
-            if (splitsDir.exists()) {
-                splitsDir.deleteRecursively()
-            }
-            
-            // Xóa cache OBB
-            if (obbCacheDir.exists()) {
-                obbCacheDir.deleteRecursively()
-            }
-            
-            withContext(Dispatchers.Main) {
-                val sizeStr = formatFileSize(size)
-                toast(getString(R.string.cache_cleared, count, sizeStr))
-                log("Đã xóa cache: $count tệp ($sizeStr)")
-                updateStats()
-                applyFilter(currentQuery)
-            }
+            outFile
+        } catch (e: Exception) {
+            null
         }
     }
-    
+
+    private fun installNormally(file: File, onShowSnackbar: (String) -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    startActivity(intent)
+                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
+                } catch (e: Exception) { }
+            }
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            onShowSnackbar("Không mở được installer: ${e.message}")
+        }
+    }
+
     private fun formatFileSize(bytes: Long): String {
         return when {
             bytes < 1024 -> "$bytes B"
@@ -1022,296 +729,277 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Khu vực quản lý Scripts
+    private fun clearCache(onShowSnackbar: (String) -> Unit) {
+         lifecycleScope.launch(Dispatchers.IO) {
+            val apkCacheDir = File(cacheDir, "apks")
+            val splitsDir = File(cacheDir, "splits")
+            val obbCacheDir = File(cacheDir, "obb")
+            var count = 0
+            var size = 0L
+
+            if (apkCacheDir.exists()) {
+                apkCacheDir.listFiles()?.forEach { file ->
+                    size += file.length()
+                    file.delete()
+                    count++
+                }
+            }
+             if (splitsDir.exists()) splitsDir.deleteRecursively()
+             if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
+
+             withContext(Dispatchers.Main) {
+                 val sizeStr = formatFileSize(size)
+                 onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
+                 // Refresh list to update UI state (re-calculate cache existence)
+                 appsList = appsList.toList()
+             }
+         }
+    }
+
+    // --- Scripts Logic ---
+
     private suspend fun loadScriptsFromOnline() {
         withContext(Dispatchers.IO) {
             try {
                 val req = Request.Builder().url(DEFAULT_SCRIPTS_URL).header("User-Agent", "CloudPhoneTool/1.0").build()
                 client.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        logBg("Không thể tải danh sách script online: HTTP ${resp.code}")
-                        return@withContext
-                    }
+                    if (!resp.isSuccessful) return@withContext
                     val body = resp.body?.string() ?: return@withContext
-                    
-                    // Parse JSON thủ công để tránh lỗi ProGuard
-                    val scripts = parseScriptsJson(body)
-                    
+                    val jsonArray = org.json.JSONArray(body)
+                    val newScripts = mutableListOf<ScriptItem>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        val url = obj.getString("url")
+                        newScripts.add(
+                            ScriptItem(
+                                id = stableIdFromUrl(url),
+                                name = obj.getString("name"),
+                                gameName = obj.getString("gameName"),
+                                url = url
+                            )
+                        )
+                    }
+
                     withContext(Dispatchers.Main) {
-                        for (script in scripts) {
-                            val id = stableIdFromUrl(script.url)
-                            
-                            val existingIndex = scriptItems.indexOfFirst { it.id == id }
-                            if (existingIndex == -1) {
-                                scriptItems.add(
-                                    ScriptItem(
-                                        id = id,
-                                        name = script.name,
-                                        gameName = script.gameName,
-                                        url = script.url
-                                    )
-                                )
-                            }
-                        }
-                        log("Đã tải ${scripts.size} script từ nguồn online")
+                        // Merge with existing manual scripts
+                        val manual = scriptsList.filter { it.localPath != null }
+                        // Avoid duplicates if reloaded
+                         val combined = manual + newScripts.filter { s -> manual.none { it.id == s.id } }
+                         scriptsList = combined
                     }
                 }
             } catch (e: Exception) {
-                logBg("Lỗi tải script online: ${e.message}")
+                e.printStackTrace()
             }
         }
     }
-    
-    private fun parseScriptsJson(json: String): List<PreloadScript> {
-        val result = mutableListOf<PreloadScript>()
-        try {
-            val jsonArray = org.json.JSONArray(json)
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                result.add(
-                    PreloadScript(
-                        name = obj.getString("name"),
-                        gameName = obj.getString("gameName"),
-                        url = obj.getString("url")
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            logBg("Lỗi parse scripts.json: ${e.message}")
-        }
-        return result
-    }
-    
+
     private suspend fun loadScriptsFromLocal() {
         withContext(Dispatchers.IO) {
-            try {
-                val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
-                val scriptsDir = File("/storage/emulated/0/Delta/Scripts")
-                
-                // Load auto-execute scripts
-                if (autoExecuteDir.exists() && autoExecuteDir.isDirectory) {
-                    autoExecuteDir.listFiles { file -> file.extension == "txt" }?.forEach { file ->
-                        val id = "local_auto_${file.name}"
-                        if (scriptItems.none { it.id == id }) {
-                            scriptItems.add(
-                                ScriptItem(
-                                    id = id,
-                                    name = file.nameWithoutExtension,
-                                    gameName = "Local (Auto)",
-                                    url = null,
-                                    localPath = file.absolutePath
-                                )
-                            )
-                        }
-                    }
+            val newLocals = mutableListOf<ScriptItem>()
+            val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
+            val scriptsDir = File("/storage/emulated/0/Delta/Scripts")
+             if (autoExecuteDir.exists()) {
+                autoExecuteDir.listFiles { f -> f.extension == "txt" }?.forEach {
+                    newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, "Local (Auto)", null, it.absolutePath))
                 }
-                
-                // Load manual scripts
-                if (scriptsDir.exists() && scriptsDir.isDirectory) {
-                    scriptsDir.listFiles { file -> file.extension == "txt" }?.forEach { file ->
-                        val id = "local_manual_${file.name}"
-                        if (scriptItems.none { it.id == id }) {
-                            scriptItems.add(
-                                ScriptItem(
-                                    id = id,
-                                    name = file.nameWithoutExtension,
-                                    gameName = "Local (Manual)",
-                                    url = null,
-                                    localPath = file.absolutePath
-                                )
-                            )
-                        }
-                    }
+            }
+             if (scriptsDir.exists()) {
+                scriptsDir.listFiles { f -> f.extension == "txt" }?.forEach {
+                     newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, "Local (Manual)", null, it.absolutePath))
                 }
-                
-                withContext(Dispatchers.Main) {
-                    log("Đã nạp script từ thư mục local")
-                }
-            } catch (e: Exception) {
-                logBg("Lỗi tải script local: ${e.message}")
+            }
+            withContext(Dispatchers.Main) {
+                val online = scriptsList.filter { it.localPath == null }
+                scriptsList = online + newLocals
             }
         }
     }
-    
-    private fun applyScriptFilter(q: String) {
-        currentScriptQuery = q
-        val needle = q.trim().lowercase(Locale.getDefault())
-        scriptFilteredItems.clear()
-        if (needle.isEmpty()) {
-            scriptFilteredItems.addAll(scriptItems)
-        } else {
-            scriptFilteredItems.addAll(
-                scriptItems.filter {
-                    it.name.lowercase(Locale.getDefault()).contains(needle)
-                            || it.gameName.lowercase(Locale.getDefault()).contains(needle)
-                }
-            )
-        }
-        scriptAdapter.notifyDataSetChanged()
-    }
-    
-    private fun getScriptFile(script: ScriptItem, folderName: String): File {
-        return if (script.localPath != null) {
-            File(script.localPath)
-        } else {
-            val dir = File("/storage/emulated/0/Delta/$folderName")
-            dir.mkdirs()
-            File(dir, "${script.name}.txt")
-        }
-    }
 
-    private fun isSpecialScriptUrl(url: String): Boolean = url.contains("/source/hard/")
-
-    private suspend fun fetchScriptBody(url: String): String = withContext(Dispatchers.IO) {
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) {
-                throw IllegalStateException("HTTP ${resp.code}")
-            }
-            resp.body?.string() ?: throw IllegalStateException("Empty response")
-        }
-    }
-
-    private suspend fun resolveOnlineScriptContent(script: ScriptItem): String {
-        val url = script.url ?: throw IllegalStateException("Script không có URL")
-        return if (isSpecialScriptUrl(url)) {
-            log("Tải script đặc biệt (full content): ${script.name}")
-            fetchScriptBody(url)
-        } else {
-            log("Tạo script loadstring: ${script.name}")
-            "loadstring(game:HttpGet(\"$url\"))()"
-        }
-    }
-
-    private suspend fun readLocalScript(script: ScriptItem): String {
-        val path = script.localPath ?: throw IllegalStateException("Script không tồn tại")
-        return withContext(Dispatchers.IO) {
-            val file = File(path)
-            if (!file.exists()) {
-                throw IllegalStateException("Script không tồn tại")
-            }
-            file.readText()
-        }
-    }
-
-    private fun showDownloadFolderDialog(script: ScriptItem) {
-        val options = arrayOf(
-            "Auto-execute (Tự động chạy)",
-            "Manual (Chạy thủ công)"
-        )
-        
+    private fun showDownloadFolderDialog(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
+        val options = arrayOf("Auto-execute (Tự động chạy)", "Manual (Chạy thủ công)")
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("${script.name} - Chọn thư mục")
             .setItems(options) { _, which ->
-                val targetFolder = when (which) {
-                    0 -> "Autoexecute"
-                    else -> "Scripts"
-                }
-                downloadScript(script, targetFolder)
+                val targetFolder = if (which == 0) "Autoexecute" else "Scripts"
+                downloadScript(script, targetFolder, onShowSnackbar)
             }
             .setNegativeButton("Hủy", null)
             .show()
     }
 
-    private fun downloadScript(script: ScriptItem, targetFolder: String) {
+    private fun downloadScript(script: ScriptItem, targetFolder: String, onShowSnackbar: (String) -> Unit) {
         lifecycleScope.launch {
+            setBusy(true)
             try {
-                if (script.url == null) {
-                    toast("Script không có URL")
-                    return@launch
+                val url = script.url ?: return@launch
+                val content = if (url.contains("/source/hard/")) {
+                    fetchScriptBody(url)
+                } else {
+                    "loadstring(game:HttpGet(\"$url\"))()"
                 }
 
-                setBusy(true)
-                log("Đang tải script: ${script.name}")
-
-                val scriptContent = resolveOnlineScriptContent(script)
-
-                val scriptFile = getScriptFile(script, targetFolder)
-                scriptFile.parentFile?.mkdirs()
-
-                withContext(Dispatchers.IO) {
-                    scriptFile.writeText(scriptContent)
-                }
-                
-                log("✓ Đã lưu script vào: /Delta/$targetFolder/${script.name}.txt")
-                toast("Đã lưu script vào $targetFolder")
-                applyScriptFilter(currentScriptQuery)
-                
+                val dir = File("/storage/emulated/0/Delta/$targetFolder")
+                dir.mkdirs()
+                File(dir, "${script.name}.txt").writeText(content)
+                onShowSnackbar("Đã lưu vào $targetFolder")
+                loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {
-                toast("Lỗi tải script: ${e.message}")
-                log("Lỗi tải script: ${e.message}")
+                onShowSnackbar("Lỗi: ${e.message}")
             } finally {
                 setBusy(false)
             }
         }
     }
 
-    private fun copyScript(script: ScriptItem) {
-        lifecycleScope.launch {
-            var showingProgress = false
-            try {
-                val content = when {
-                    script.localPath != null -> readLocalScript(script)
-                    script.url != null -> {
-                        showingProgress = true
-                        setBusy(true)
-                        resolveOnlineScriptContent(script)
-                    }
-                    else -> throw IllegalStateException("Script không có dữ liệu")
-                }
-
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText(script.name, content)
-                clipboard.setPrimaryClip(clip)
-
-                toast("Đã sao chép script")
-                log("Đã sao chép script: ${script.name}")
-            } catch (e: Exception) {
-                toast("Lỗi copy script: ${e.message}")
-                log("Lỗi copy script: ${e.message}")
-            } finally {
-                if (showingProgress) {
-                    setBusy(false)
-                }
-            }
+    private suspend fun fetchScriptBody(url: String): String = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0").build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
+            resp.body?.string() ?: ""
         }
     }
-    
-    private fun deleteScript(script: ScriptItem) {
+
+    private fun copyScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
+         lifecycleScope.launch {
+            try {
+                val content = if (script.localPath != null) {
+                    File(script.localPath).readText()
+                } else if (script.url != null) {
+                    if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
+                    else "loadstring(game:HttpGet(\"${script.url}\"))()"
+                } else ""
+
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
+                onShowSnackbar("Đã sao chép script")
+            } catch (e: Exception) {
+                onShowSnackbar("Lỗi: ${e.message}")
+            }
+         }
+    }
+
+    private fun deleteScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
+        if (script.localPath != null) {
+            File(script.localPath).delete()
+            onShowSnackbar("Đã xóa script")
+            lifecycleScope.launch { loadScriptsFromLocal() }
+        }
+    }
+
+    // Copied from old Main for splitting/OBB
+    data class ObbInfo(val packageName: String, val obbFiles: List<File>)
+    private fun extractSplitsAndObb(packageFile: File): Pair<List<File>, ObbInfo?> {
+        val outDir = File(cacheDir, "splits/${packageFile.nameWithoutExtension}")
+        if (outDir.exists()) outDir.deleteRecursively()
+        outDir.mkdirs()
+        val results = mutableListOf<File>()
+        val obbFiles = mutableListOf<File>()
+        var packageName: String? = null
+        
         try {
-            // Check and delete from both folders
-            val autoFile = getScriptFile(script, "Autoexecute")
-            val manualFile = getScriptFile(script, "Scripts")
-            
-            var deleted = false
-            if (autoFile.exists()) {
-                autoFile.delete()
-                log("Đã xóa script từ Autoexecute: ${script.name}")
-                deleted = true
+            java.util.zip.ZipFile(packageFile).use { zipFile ->
+                val entries = zipFile.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (entry.isDirectory) continue
+                    val entryName = entry.name.lowercase()
+                    val fileName = entry.name.substringAfterLast('/')
+                    
+                    if (entryName.endsWith("manifest.json")) {
+                        try {
+                            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
+                            packageName = JSONObject(manifest).optString("package_name")
+                        } catch (e: Exception) {}
+                        continue
+                    }
+                    if (entryName.endsWith(".apk")) {
+                        val outFile = File(outDir, fileName)
+                        outFile.parentFile?.mkdirs()
+                        zipFile.getInputStream(entry).use { input -> FileOutputStream(outFile).use { output -> input.copyTo(output) } }
+                        if (outFile.exists() && outFile.length() > 0) results.add(outFile)
+                        continue
+                    }
+                    if (entryName.endsWith(".obb")) {
+                        val obbDir = File(cacheDir, "obb")
+                        obbDir.mkdirs()
+                        val outFile = File(obbDir, fileName)
+                        zipFile.getInputStream(entry).use { input -> FileOutputStream(outFile).use { output -> input.copyTo(output) } }
+                        if (outFile.exists() && outFile.length() > 0) obbFiles.add(outFile)
+                        continue
+                    }
+                }
             }
-            if (manualFile.exists()) {
-                manualFile.delete()
-                log("Đã xóa script từ Scripts: ${script.name}")
-                deleted = true
+        } catch (e: Exception) { e.printStackTrace() }
+        
+        val sortedApks = results.sortedWith(compareBy(
+            { !it.name.startsWith("base.") && !it.name.contains("com.") },
+            { it.name.startsWith("config.") || it.name.startsWith("split_") },
+            { it.name }
+        ))
+        val obbInfo = if (obbFiles.isNotEmpty() && packageName != null) ObbInfo(packageName, obbFiles) else null
+        return sortedApks to obbInfo
+    }
+    
+    private fun installObbFiles(obbInfo: ObbInfo) {
+         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (!Environment.isExternalStorageManager()) return
             }
-            
-            if (deleted) {
-                toast("Đã xóa script")
-                applyScriptFilter(currentScriptQuery)
-            } else {
-                toast("Script không tồn tại")
+            val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
+            if (!obbDir.exists()) obbDir.mkdirs()
+            for (obbFile in obbInfo.obbFiles) {
+                val destFile = File(obbDir, obbFile.name)
+                obbFile.inputStream().use { input -> FileOutputStream(destFile).use { output -> input.copyTo(output) } }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
+         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!packageManager.canRequestPackageInstalls()) {
+                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
+                    return
+                }
+            }
+            val installer = packageManager.packageInstaller
+            val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            val sessionId = installer.createSession(params)
+            val session = installer.openSession(sessionId)
+            try {
+                for (f in files) {
+                    FileInputStream(f).use { input ->
+                        session.openWrite(f.name, 0, f.length()).use { out ->
+                            input.copyTo(out)
+                            session.fsync(out)
+                        }
+                    }
+                }
+                val pi = android.app.PendingIntent.getBroadcast(
+                    this, sessionId,
+                    Intent("$packageName.INSTALL_COMMIT"),
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+                )
+                session.commit(pi.intentSender)
+                onShowSnackbar("Đang tiến hành cài đặt…")
+            } finally {
+                session.close()
             }
         } catch (e: Exception) {
-            toast("Lỗi xóa script: ${e.message}")
-            log("Lỗi xóa script: ${e.message}")
+            onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
         }
     }
 }
 
-// Data & Adapter
+// Data models
+enum class SortMode { NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC }
+data class ScriptItem(val id: String, val name: String, val gameName: String, val url: String? = null, val localPath: String? = null)
 
 data class ApkItem(
     val id: String,
@@ -1325,7 +1013,6 @@ data class ApkItem(
 ) {
     companion object {
         fun toJsonList(list: List<ApkItem>): String {
-            // Simple manual JSON to avoid adding extra dependency
             val sb = StringBuilder()
             sb.append('[')
             list.forEachIndexed { i, it ->
@@ -1347,7 +1034,6 @@ data class ApkItem(
 
         fun fromJsonList(json: String?): List<ApkItem> {
             if (json.isNullOrBlank()) return emptyList()
-            // Very small and naive JSON parser for our fixed schema
             val list = mutableListOf<ApkItem>()
             val items = json.trim().removePrefix("[").removeSuffix("]")
             if (items.isBlank()) return emptyList()
@@ -1384,9 +1070,7 @@ data class ApkItem(
 
         private fun parseObject(s: String): Map<String, String?> {
             val map = mutableMapOf<String, String?>()
-            // remove { }
             var body = s.trim().removePrefix("{").removeSuffix("}")
-            // split by commas not inside quotes
             val parts = mutableListOf<String>()
             val sb = StringBuilder()
             var inStr = false
@@ -1419,5 +1103,3 @@ data class PreloadApp(
     val versionCode: Long? = null,
     val iconUrl: String? = null
 )
-
-// RootInstaller đã được tách sang file riêng: RootInstaller.kt
