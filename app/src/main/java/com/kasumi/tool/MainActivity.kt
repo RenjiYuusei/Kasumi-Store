@@ -60,8 +60,8 @@ class MainActivity : AppCompatActivity() {
             .readTimeout(5, TimeUnit.MINUTES)
             .build()
     }
-    private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi/main/source/apps.json"
-    private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi/main/source/scripts.json"
+    private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
+    private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
 
     private lateinit var listView: RecyclerView
     private lateinit var scriptListView: RecyclerView
