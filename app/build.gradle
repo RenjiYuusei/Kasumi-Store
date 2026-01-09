@@ -27,6 +27,11 @@ android {
         compose true
     }
 
+    sourceSets {
+        main {
+            assets.srcDirs += ['../source']
+        }
+    }
 
     buildTypes {
         release {
