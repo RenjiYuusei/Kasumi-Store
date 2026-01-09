@@ -164,13 +164,13 @@ jobs:
     - name: Rename APK file
       if: ${{ steps.build_apk.outcome == 'success' }}
       run: |
-        mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/Kasumi-release-${{ steps.commit.outputs.short_sha }}.apk
+        mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk
         
     - name: Upload release APK
       if: ${{ steps.build_apk.outcome == 'success' }}
       uses: actions/upload-artifact@v4
       with:
-        name: Kasumi-release-${{ steps.commit.outputs.build_date }}
+        name: Kasumi Store-release-${{ steps.commit.outputs.build_date }}
         path: app/build/outputs/apk/release/Kasumi-release-${{ steps.commit.outputs.short_sha }}.apk
         retention-days: 90
         
@@ -186,7 +186,7 @@ jobs:
           Build time: ${{ steps.commit.outputs.build_date }}
         draft: false
         prerelease: false
-        files: app/build/outputs/apk/release/Kasumi-release-${{ steps.commit.outputs.short_sha }}.apk
+        files: app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk
         target_commitish: ${{ github.sha }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
