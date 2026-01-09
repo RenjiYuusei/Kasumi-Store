@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.0] - 2025-11-03
+## [1.3.0] - 2026-1-09
 ### ✨ Cải tiến giao diện
 - Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
 - Giao diện hiện đại, mượt mà hơn.
