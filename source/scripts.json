@@ -18,5 +18,15 @@
     "name": "QuantumOnyx",
     "gameName": "Blox Fruits",
     "url": "https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua"
+  },
+  {
+    "name": "3TN Kaitun",
+    "gameName": "Blox Fruits",
+    "url": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/refs/heads/main/source/hard/3TN.lua"
+  },
+  {
+    "name": "Gravity Hub",
+    "gameName": "Blox Fruits",
+    "url": "loadstring(game:HttpGet("https://raw.githubusercontent.com/Dev-GravityHub/BloxFruit/refs/heads/main/Main.lua"))()"
   }
 ]
