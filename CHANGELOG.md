@@ -1,7 +1,12 @@
 # Changelog
 
-## [1.3.1] - 2025-11-04
-### 🎯 Cập nhật & Sửa lỗi
+## [1.3.0] - 2025-11-03
+### ✨ Cải tiến giao diện
+- Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
+- Giao diện hiện đại, mượt mà hơn.
+- Loại bỏ tab Nhật ký để tối ưu trải nghiệm người dùng.
+
+### 🎯 Cập nhật & Sửa lỗi (Mới)
 - **Tên ứng dụng**: Đã sửa lại tên ứng dụng thành **Kasumi Store** (bỏ dấu gạch ngang).
 - **Quản lý Cache**:
   - Sửa lỗi nút "Xóa cache" vẫn hiện khi cache trống.
@@ -13,14 +18,7 @@
   - Hợp nhất danh sách script online và offline dựa trên tên file.
   - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.
 
-## [1.3.0] - 2025-11-03
-### ✨ Cải tiến giao diện
-- Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
-- Giao diện hiện đại, mượt mà hơn.
-- Loại bỏ tab Nhật ký để tối ưu trải nghiệm người dùng.
-
-### 🐛 Sửa lỗi & Khác
-- Đổi tên ứng dụng thành **Kasumi-Store**.
+### 🐛 Các thay đổi khác
 - Cập nhật biểu tượng ứng dụng mới.
 - Log hệ thống được chuyển về Logcat.
 
