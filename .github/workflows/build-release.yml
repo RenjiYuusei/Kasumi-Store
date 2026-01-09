@@ -19,17 +19,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Ho_Chi_Minh
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
-        
+
     - name: Cache Gradle packages
       uses: actions/cache@v4
       with:
@@ -42,7 +42,7 @@ jobs:
           
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
     - name: Create local.properties
       run: |
         echo "sdk.dir=$ANDROID_HOME" > local.properties
@@ -64,7 +64,6 @@ jobs:
             exit 1
           fi
 
-          # Generate keystore.properties at repo root from secrets
           {
             echo "storeFile=ci/keystore/Yuusei.jks"
             echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
@@ -78,10 +77,8 @@ jobs:
           exit 1
         fi
 
-        # Normalize file (strip UTF-8 BOM if present) to ensure grep works
         sed -i '1s/^\xEF\xBB\xBF//' keystore.properties || true
 
-        # Validate keystore.properties has required keys
         required=(storeFile storePassword keyAlias keyPassword)
         for k in "${required[@]}"; do
           if ! grep -q "^${k}=" keystore.properties; then
@@ -90,47 +87,20 @@ jobs:
           fi
         done
 
-        # Read properties
         store_file=$(grep '^storeFile=' keystore.properties | sed 's/^storeFile=//')
         store_pass=$(grep '^storePassword=' keystore.properties | sed 's/^storePassword=//')
         alias_name=$(grep '^keyAlias=' keystore.properties | sed 's/^keyAlias=//')
         key_pass=$(grep '^keyPassword=' keystore.properties | sed 's/^keyPassword=//')
 
-        # Ensure keystore file exists (resolve relative to repo root)
         if [ ! -f "$store_file" ]; then
-          echo "❌ Keystore file not found at '$store_file' (from keystore.properties)"
+          echo "❌ Keystore file not found at '$store_file'"
           exit 1
         fi
 
-        # Validate keystore, alias, and passwords using keytool (no secrets printed)
-        echo "Validating keystore and alias from keystore.properties..."
         if ! keytool -list -keystore "$store_file" -storepass "$store_pass" >/dev/null 2>&1; then
-          echo "❌ Keystore validation failed: store password may be incorrect or file is corrupted"
+          echo "❌ Keystore validation failed"
           exit 1
         fi
-        if ! keytool -list -keystore "$store_file" -storepass "$store_pass" -alias "$alias_name" >/dev/null 2>&1; then
-          echo "❌ Alias validation failed: alias '$alias_name' not found in keystore"
-          echo "ℹ️ Available aliases:"
-          keytool -list -keystore "$store_file" -storepass "$store_pass" | sed -n 's/^\s\+Alias name: \(.*\)$/- \1/p' || true
-          exit 1
-        fi
-        # Try to access private key using key password (no change performed)
-        if ! keytool -keypasswd -keystore "$store_file" -storepass "$store_pass" -alias "$alias_name" -keypass "$key_pass" -new "$key_pass" >/dev/null 2>&1; then
-          echo "⚠️ Key password validation failed for alias '$alias_name' with provided keyPassword. Trying storePassword as key password..."
-          if keytool -keypasswd -keystore "$store_file" -storepass "$store_pass" -alias "$alias_name" -keypass "$store_pass" -new "$store_pass" >/dev/null 2>&1; then
-            echo "✅ Detected key password equals store password. Using store password for signing."
-            # Update keystore.properties in workspace for this run so Gradle reads the correct key password
-            sed -i "s/^keyPassword=.*/keyPassword=$store_pass/" keystore.properties
-            key_pass="$store_pass"
-          else
-            echo "❌ Key password validation failed for alias '$alias_name'"
-            exit 1
-          fi
-        else
-          echo "✅ Keystore and key credentials look valid"
-        fi
-
-        # Keystore details validated above; proceeding without writing step summary
 
     - name: Build release APK
       id: build_apk
@@ -164,29 +134,30 @@ jobs:
     - name: Rename APK file
       if: ${{ steps.build_apk.outcome == 'success' }}
       run: |
-        mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk
+        # Đã thêm dấu ngoặc kép để xử lý khoảng trắng trong tên tệp
+        mv "app/build/outputs/apk/release/app-release.apk" "app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk"
         
     - name: Upload release APK
       if: ${{ steps.build_apk.outcome == 'success' }}
       uses: actions/upload-artifact@v4
       with:
-        name: Kasumi Store-release-${{ steps.commit.outputs.build_date }}
-        path: app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk
+        name: "Kasumi Store-release-${{ steps.commit.outputs.build_date }}"
+        path: "app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk"
         retention-days: 90
-        
+
     - name: Create GitHub Release (manual runs)
       if: ${{ github.event_name == 'workflow_dispatch' && steps.build_apk.outcome == 'success' }}
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ steps.ver.outputs.version_name }}-${{ steps.commit.outputs.build_date }}
-        name: Kasumi v${{ steps.ver.outputs.version_name }}
+        name: "Kasumi v${{ steps.ver.outputs.version_name }}"
         body: |
           Commit: ${{ steps.commit.outputs.short_sha }}
           Message: ${{ steps.commit.outputs.commit_msg }}
           Build time: ${{ steps.commit.outputs.build_date }}
         draft: false
         prerelease: false
-        files: app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk
+        files: "app/build/outputs/apk/release/Kasumi Store-release-${{ steps.commit.outputs.short_sha }}.apk"
         target_commitish: ${{ github.sha }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
