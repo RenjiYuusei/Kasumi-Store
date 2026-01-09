@@ -27,6 +27,6 @@
   {
     "name": "Gravity Hub",
     "gameName": "Blox Fruits",
-    "url": "loadstring(game:HttpGet("https://raw.githubusercontent.com/Dev-GravityHub/BloxFruit/refs/heads/main/Main.lua"))()"
+    "url": "https://raw.githubusercontent.com/Dev-GravityHub/BloxFruit/refs/heads/main/Main.lua"
   }
 ]
