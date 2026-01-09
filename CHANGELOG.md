@@ -6,8 +6,19 @@
 - Giao diện hiện đại, mượt mà hơn.
 - Loại bỏ tab Nhật ký để tối ưu trải nghiệm người dùng.
 
-### 🐛 Sửa lỗi & Khác
-- Đổi tên ứng dụng thành **Kasumi-Store**.
+### 🎯 Cập nhật & Sửa lỗi (Mới)
+- **Tên ứng dụng**: Đã sửa lại tên ứng dụng thành **Kasumi Store** (bỏ dấu gạch ngang).
+- **Quản lý Cache**:
+  - Sửa lỗi nút "Xóa cache" vẫn hiện khi cache trống.
+  - Tự động ẩn thông tin cache khi không có dữ liệu (0 B).
+  - Cập nhật giao diện ngay lập tức sau khi xóa cache mà không cần khởi động lại.
+- **Tải Script**:
+  - Tự động loại bỏ đuôi `.txt` khi tải về (Ví dụ: `Teddy Hub` thay vì `Teddy Hub.txt`).
+  - Sửa lỗi script đã tải về vẫn hiện nút "Tải" thay vì trạng thái đã cài đặt.
+  - Hợp nhất danh sách script online và offline dựa trên tên file.
+  - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.
+
+### 🐛 Các thay đổi khác
 - Cập nhật biểu tượng ứng dụng mới.
 - Log hệ thống được chuyển về Logcat.
 

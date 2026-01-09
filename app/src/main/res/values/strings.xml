@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Kasumi-Store</string>
+    <string name="app_name">Kasumi Store</string>
     <string name="install">Cài đặt</string>
     <string name="delete">Xóa</string>
     <string name="open">Mở</string>
@@ -17,6 +17,18 @@
     <string name="sort_by_size">Kích thước</string>
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
+    <string name="stats_format_no_cache">%d ứng dụng</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
     <string name="copy_script">Sao chép</string>
+    <string name="local_manual">Cục bộ (Thủ công)</string>
+    <string name="local_auto">Cục bộ (Tự động)</string>
+    <string name="auto_execute_desc">Auto-execute (Tự động chạy)</string>
+    <string name="manual_desc">Manual (Chạy thủ công)</string>
+    <string name="download">Tải</string>
+    <string name="cancel">Hủy</string>
+    <string name="select_folder">Chọn thư mục</string>
+    <string name="saved_to">Đã lưu vào %s</string>
+    <string name="copied_script">Đã sao chép script</string>
+    <string name="deleted_script">Đã xóa script</string>
+    <string name="error_prefix">Lỗi: %s</string>
 </resources>

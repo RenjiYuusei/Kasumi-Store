@@ -80,9 +80,12 @@ class MainActivity : ComponentActivity() {
 
     // Data states
     private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
+    // Store original online scripts separately to preserve metadata
+    private var onlineScriptsList = listOf<ScriptItem>()
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
+    private var cacheVersion by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,8 +115,49 @@ class MainActivity : ComponentActivity() {
         var selectedTab by remember { mutableIntStateOf(0) }
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
+        var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
         val snackbarHostState = remember { SnackbarHostState() }
+
+        if (scriptToDownload != null) {
+            val script = scriptToDownload!!
+            AlertDialog(
+                onDismissRequest = { scriptToDownload = null },
+                title = { Text("${script.name} - ${stringResource(R.string.select_folder)}") },
+                text = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                scriptToDownload = null
+                                downloadScript(script, "Autoexecute", { msg ->
+                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                                })
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.auto_execute_desc), modifier = Modifier.fillMaxWidth())
+                        }
+                        TextButton(
+                            onClick = {
+                                scriptToDownload = null
+                                downloadScript(script, "Scripts", { msg ->
+                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                                })
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.manual_desc), modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { scriptToDownload = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
 
         Scaffold(
             topBar = {
@@ -174,6 +218,8 @@ class MainActivity : ComponentActivity() {
                 } else {
                     ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    }, onDownloadRequest = { script ->
+                        scriptToDownload = script
                     })
                 }
             }
@@ -241,7 +287,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val filteredApps = remember(appsList, searchQuery, sortMode) {
+        val filteredApps = remember(appsList, searchQuery, sortMode, cacheVersion) {
             val q = searchQuery.trim().lowercase()
             val filtered = if (q.isEmpty()) {
                 appsList
@@ -267,10 +313,14 @@ class MainActivity : ComponentActivity() {
         }
 
         // Stats
-        val cachedCount = filteredApps.count { cacheFileFor(it).exists() }
-        val totalSize = filteredApps.sumOf {
-             val f = cacheFileFor(it)
-             if (f.exists()) f.length() else 0L
+        val cachedCount = remember(filteredApps, cacheVersion) {
+            filteredApps.count { cacheFileFor(it).exists() }
+        }
+        val totalSize = remember(filteredApps, cacheVersion) {
+            filteredApps.sumOf {
+                val f = cacheFileFor(it)
+                if (f.exists()) f.length() else 0L
+            }
         }
 
         Column {
@@ -281,8 +331,14 @@ class MainActivity : ComponentActivity() {
                  horizontalArrangement = Arrangement.SpaceBetween,
                  verticalAlignment = Alignment.CenterVertically
              ) {
+                 val statsText = if (cachedCount > 0) {
+                     stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})")
+                 } else {
+                     stringResource(R.string.stats_format_no_cache, filteredApps.size)
+                 }
+
                  Text(
-                     text = stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})"),
+                     text = statsText,
                      style = MaterialTheme.typography.bodySmall,
                      color = MaterialTheme.colorScheme.onSurfaceVariant
                  )
@@ -297,7 +353,7 @@ class MainActivity : ComponentActivity() {
                  contentPadding = PaddingValues(bottom = 80.dp)
              ) {
                  items(filteredApps, key = { it.id }) { item ->
-                     AppItemRow(item, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                     AppItemRow(item, cacheVersion, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
                          saveItems()
                          onShowSnackbar("Đã xóa ${it.name}")
@@ -308,10 +364,11 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+    fun AppItemRow(item: ApkItem, cacheVersion: Int, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
         val context = LocalContext.current
         val cachedFile = cacheFileFor(item)
-        val isCached = cachedFile.exists()
+        // Re-read file existence when cacheVersion changes
+        val isCached = remember(item, cacheVersion) { cachedFile.exists() }
         
         Card(
             modifier = Modifier
@@ -379,7 +436,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim().lowercase()
              if (q.isEmpty()) {
@@ -398,7 +455,7 @@ class MainActivity : ComponentActivity() {
             items(filteredScripts, key = { it.id }) { script ->
                 ScriptItemRow(
                     script = script,
-                    onDownload = { showDownloadFolderDialog(it, onShowSnackbar) },
+                    onDownload = { onDownloadRequest(script) },
                     onCopy = { copyScript(it, onShowSnackbar) },
                     onDelete = { deleteScript(it, onShowSnackbar) }
                 )
@@ -441,7 +498,7 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Tải")
+                            Text(stringResource(R.string.download))
                         }
                     }
                     Button(
@@ -675,6 +732,9 @@ class MainActivity : ComponentActivity() {
                     input.copyTo(out)
                 }
             }
+            withContext(Dispatchers.Main) {
+                cacheVersion++
+            }
             outFile
         }
     }
@@ -752,6 +812,7 @@ class MainActivity : ComponentActivity() {
                  onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
                  // Refresh list to update UI state (re-calculate cache existence)
                  appsList = appsList.toList()
+                 cacheVersion++
              }
          }
     }
@@ -781,11 +842,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     withContext(Dispatchers.Main) {
-                        // Merge with existing manual scripts
-                        val manual = scriptsList.filter { it.localPath != null }
-                        // Avoid duplicates if reloaded
-                         val combined = manual + newScripts.filter { s -> manual.none { it.id == s.id } }
-                         scriptsList = combined
+                        onlineScriptsList = newScripts
+                        // Initial merge (will be refined by loadScriptsFromLocal)
+                        scriptsList = newScripts
                     }
                 }
             } catch (e: Exception) {
@@ -795,37 +854,44 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun loadScriptsFromLocal() {
+        val context = this@MainActivity
         withContext(Dispatchers.IO) {
             val newLocals = mutableListOf<ScriptItem>()
             val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
             val scriptsDir = File("/storage/emulated/0/Delta/Scripts")
              if (autoExecuteDir.exists()) {
-                autoExecuteDir.listFiles { f -> f.extension == "txt" }?.forEach {
-                    newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, "Local (Auto)", null, it.absolutePath))
+                autoExecuteDir.listFiles()?.forEach {
+                    if (it.isFile) {
+                        newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_auto), null, it.absolutePath))
+                    }
                 }
             }
              if (scriptsDir.exists()) {
-                scriptsDir.listFiles { f -> f.extension == "txt" }?.forEach {
-                     newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, "Local (Manual)", null, it.absolutePath))
+                scriptsDir.listFiles()?.forEach {
+                    if (it.isFile) {
+                        newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_manual), null, it.absolutePath))
+                    }
                 }
             }
             withContext(Dispatchers.Main) {
-                val online = scriptsList.filter { it.localPath == null }
-                scriptsList = online + newLocals
+                // Merge: Start with all known online scripts and check if they exist locally
+                val mergedList = onlineScriptsList.map { onlineScript ->
+                    val match = newLocals.find { local -> local.name == onlineScript.name }
+                    if (match != null) {
+                        onlineScript.copy(localPath = match.localPath)
+                    } else {
+                        onlineScript
+                    }
+                }
+
+                // Add locals that were NOT matched with any online script
+                val unmatchedLocals = newLocals.filter { local ->
+                    mergedList.none { it.localPath == local.localPath }
+                }
+
+                scriptsList = mergedList + unmatchedLocals
             }
         }
-    }
-
-    private fun showDownloadFolderDialog(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
-        val options = arrayOf("Auto-execute (Tự động chạy)", "Manual (Chạy thủ công)")
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("${script.name} - Chọn thư mục")
-            .setItems(options) { _, which ->
-                val targetFolder = if (which == 0) "Autoexecute" else "Scripts"
-                downloadScript(script, targetFolder, onShowSnackbar)
-            }
-            .setNegativeButton("Hủy", null)
-            .show()
     }
 
     private fun downloadScript(script: ScriptItem, targetFolder: String, onShowSnackbar: (String) -> Unit) {
@@ -841,11 +907,12 @@ class MainActivity : ComponentActivity() {
 
                 val dir = File("/storage/emulated/0/Delta/$targetFolder")
                 dir.mkdirs()
-                File(dir, "${script.name}.txt").writeText(content)
-                onShowSnackbar("Đã lưu vào $targetFolder")
+                // Save without .txt extension as requested
+                File(dir, script.name).writeText(content)
+                onShowSnackbar(getString(R.string.saved_to, targetFolder))
                 loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {
-                onShowSnackbar("Lỗi: ${e.message}")
+                onShowSnackbar(getString(R.string.error_prefix, e.message))
             } finally {
                 setBusy(false)
             }
@@ -872,9 +939,9 @@ class MainActivity : ComponentActivity() {
 
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
-                onShowSnackbar("Đã sao chép script")
+                onShowSnackbar(getString(R.string.copied_script))
             } catch (e: Exception) {
-                onShowSnackbar("Lỗi: ${e.message}")
+                onShowSnackbar(getString(R.string.error_prefix, e.message))
             }
          }
     }
@@ -882,7 +949,7 @@ class MainActivity : ComponentActivity() {
     private fun deleteScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
         if (script.localPath != null) {
             File(script.localPath).delete()
-            onShowSnackbar("Đã xóa script")
+            onShowSnackbar(getString(R.string.deleted_script))
             lifecycleScope.launch { loadScriptsFromLocal() }
         }
     }
