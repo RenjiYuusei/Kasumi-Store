@@ -617,37 +617,21 @@ class MainActivity : ComponentActivity() {
     private suspend fun refreshPreloadedApps(initial: Boolean = false) {
         val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
         if (preloaded != null) {
-            val current = appsList.toMutableList()
-            for (p in preloaded) {
-                val id = stableIdFromUrl(p.url)
-                val idx = current.indexOfFirst { it.id == id }
+            val newItems = preloaded.map { p ->
                 val normalized = normalizeUrl(p.url)
-                if (idx >= 0) {
-                    val exist = current[idx]
-                    current[idx] = exist.copy(
-                        name = p.name,
-                        sourceType = SourceType.URL,
-                        url = normalized,
-                        versionName = exist.versionName ?: p.versionName,
-                        versionCode = exist.versionCode ?: p.versionCode,
-                        iconUrl = p.iconUrl
-                    )
-                } else {
-                    current.add(
-                        ApkItem(
-                            id = id,
-                            name = p.name,
-                            sourceType = SourceType.URL,
-                            url = normalized,
-                            uri = null,
-                            versionName = p.versionName,
-                            versionCode = p.versionCode,
-                            iconUrl = p.iconUrl
-                        )
-                    )
-                }
+                val id = stableIdFromUrl(p.url)
+                ApkItem(
+                    id = id,
+                    name = p.name,
+                    sourceType = SourceType.URL,
+                    url = normalized,
+                    uri = null,
+                    versionName = p.versionName,
+                    versionCode = p.versionCode,
+                    iconUrl = p.iconUrl
+                )
             }
-            appsList = current
+            appsList = newItems
             saveItems()
         }
     }
