@@ -38,3 +38,7 @@ google-services.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Web Editor
+tools/web-editor/node_modules/
+tools/web-editor/dist/
