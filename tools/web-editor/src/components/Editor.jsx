@@ -43,7 +43,21 @@ const Editor = ({ data, onSave, schema, title }) => {
   };
 
   const handleChange = (key, value) => {
-    setEditForm(prev => ({ ...prev, [key]: value }));
+    let newValue = value;
+
+    // Auto-resize Google Play icons
+    const fieldDef = schema.find(f => f.key === key);
+    if (fieldDef?.type === 'image' && typeof newValue === 'string') {
+      if (newValue.includes('play-lh.googleusercontent.com')) {
+        // Replace w<width>-h<height>[-rw] with w240-h480
+        const regex = /=w\d+-h\d+(-rw)?$/;
+        if (regex.test(newValue)) {
+          newValue = newValue.replace(regex, '=w240-h480');
+        }
+      }
+    }
+
+    setEditForm(prev => ({ ...prev, [key]: newValue }));
   };
 
   // Helper to find the main label (usually name) and secondary (version/game)
