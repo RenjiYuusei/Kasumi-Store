@@ -87,9 +87,50 @@ class MainActivity : ComponentActivity() {
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private var cacheVersion by mutableIntStateOf(0)
 
+    private val installReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if ("${context.packageName}.INSTALL_COMMIT" == intent.action) {
+                val status = intent.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, android.content.pm.PackageInstaller.STATUS_FAILURE)
+                val message = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)
+                when (status) {
+                    android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                        val confirmIntent = if (Build.VERSION.SDK_INT >= 33) {
+                             intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                        } else {
+                             @Suppress("DEPRECATION")
+                             intent.getParcelableExtra(Intent.EXTRA_INTENT)
+                        }
+                        confirmIntent?.let {
+                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try {
+                                context.startActivity(it)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Không thể mở hộp thoại xác nhận: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
+                        Toast.makeText(context, "Cài đặt thành công", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        // Attempt to show more detailed error
+                        val errorMessage = message ?: "Lỗi không xác định ($status)"
+                        Toast.makeText(context, "Cài đặt thất bại: $errorMessage", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"), Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"))
+        }
 
         loadItems()
         lifecycleScope.launch {
@@ -107,6 +148,11 @@ class MainActivity : ComponentActivity() {
                 MainScreen()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(installReceiver)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -571,6 +617,7 @@ class MainActivity : ComponentActivity() {
             when {
                 u != null && u.contains(".xapk") -> "xapk"
                 u != null && u.contains(".apks") -> "apks"
+                u != null && u.contains(".apkm") -> "apkm"
                 else -> "apk"
             }
         } catch (_: Exception) { "apk" }
@@ -654,6 +701,7 @@ class MainActivity : ComponentActivity() {
                 val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
                 val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
                         || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
+                        || (urlLower?.contains(".apkm") == true || fileNameLower.endsWith(".apkm"))
 
                 if (isSplitPackage) {
                     // Logic for split APKs/XAPKs
@@ -965,10 +1013,28 @@ class MainActivity : ComponentActivity() {
                         continue
                     }
                     if (entryName.endsWith(".apk")) {
-                        val outFile = File(outDir, fileName)
-                        outFile.parentFile?.mkdirs()
-                        zipFile.getInputStream(entry).use { input -> FileOutputStream(outFile).use { output -> input.copyTo(output) } }
-                        if (outFile.exists() && outFile.length() > 0) results.add(outFile)
+                        // Check for encryption/invalidity by peeking 2 magic bytes: 'PK' (0x50 0x4B)
+                        // APK is a ZIP, so it must start with PK signature.
+                        val input = zipFile.getInputStream(entry)
+                        val buf = ByteArray(2)
+                        val read = input.read(buf)
+                        if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
+                             val outFile = File(outDir, fileName)
+                             outFile.parentFile?.mkdirs()
+                             // Re-open stream or just continue reading?
+                             // ZipFile.getInputStream returns a new stream usually, but let's be safe:
+                             // We already read 2 bytes, need to prepend them or re-open.
+                             // Simpler: re-open.
+                             zipFile.getInputStream(entry).use { inp ->
+                                 FileOutputStream(outFile).use { output ->
+                                     inp.copyTo(output)
+                                 }
+                             }
+                             if (outFile.exists() && outFile.length() > 0) results.add(outFile)
+                        } else {
+                            // Encrypted or invalid APK entry
+                             Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
+                        }
                         continue
                     }
                     if (entryName.endsWith(".obb")) {
@@ -1032,9 +1098,12 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                val intent = Intent("$packageName.INSTALL_COMMIT").apply {
+                     setPackage(packageName)
+                }
                 val pi = android.app.PendingIntent.getBroadcast(
                     this, sessionId,
-                    Intent("$packageName.INSTALL_COMMIT"),
+                    intent,
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
                 )
                 session.commit(pi.intentSender)

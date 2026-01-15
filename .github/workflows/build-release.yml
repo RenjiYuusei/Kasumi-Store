@@ -3,12 +3,14 @@ name: Build Release APK
 on:
   push:
     branches: [ main, master, develop ]
-    paths-ignore:
-      - 'source/**'
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-release.yml'
   pull_request:
     branches: [ main, master ]
-    paths-ignore:
-      - 'source/**'
+    paths:
+      - 'app/**'
+      - '.github/workflows/build-release.yml'
   workflow_dispatch:
 
 permissions:
