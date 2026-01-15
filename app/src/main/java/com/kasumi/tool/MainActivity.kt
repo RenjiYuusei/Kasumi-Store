@@ -571,6 +571,7 @@ class MainActivity : ComponentActivity() {
             when {
                 u != null && u.contains(".xapk") -> "xapk"
                 u != null && u.contains(".apks") -> "apks"
+                u != null && u.contains(".apkm") -> "apkm"
                 else -> "apk"
             }
         } catch (_: Exception) { "apk" }
@@ -654,6 +655,7 @@ class MainActivity : ComponentActivity() {
                 val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
                 val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
                         || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
+                        || (urlLower?.contains(".apkm") == true || fileNameLower.endsWith(".apkm"))
 
                 if (isSplitPackage) {
                     // Logic for split APKs/XAPKs
