@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private var cacheVersion by mutableIntStateOf(0)
+    private var fileStats by mutableStateOf<Map<String, FileStats>>(emptyMap())
 
     private val installReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -164,6 +165,21 @@ class MainActivity : ComponentActivity() {
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
         val snackbarHostState = remember { SnackbarHostState() }
+
+        // OPTIMIZATION: Compute file stats in background to avoid I/O in UI
+        LaunchedEffect(appsList, cacheVersion) {
+            withContext(Dispatchers.IO) {
+                val newStats = appsList.associate { item ->
+                    val f = cacheFileFor(item)
+                    if (f.exists()) {
+                        item.id to FileStats(true, f.length(), f.lastModified())
+                    } else {
+                        item.id to FileStats(false, 0L, 0L)
+                    }
+                }
+                fileStats = newStats
+            }
+        }
 
         if (scriptToDownload != null) {
             val script = scriptToDownload!!
@@ -333,7 +349,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val filteredApps = remember(appsList, searchQuery, sortMode, cacheVersion) {
+        val filteredApps = remember(appsList, searchQuery, sortMode, fileStats) {
             val q = searchQuery.trim().lowercase()
             val filtered = if (q.isEmpty()) {
                 appsList
@@ -348,24 +364,21 @@ class MainActivity : ComponentActivity() {
                 SortMode.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
                 SortMode.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
                 SortMode.SIZE_DESC -> filtered.sortedByDescending {
-                     val f = cacheFileFor(it)
-                     if (f.exists()) f.length() else 0L
+                     fileStats[it.id]?.size ?: 0L
                 }
                 SortMode.DATE_DESC -> filtered.sortedByDescending {
-                     val f = cacheFileFor(it)
-                     if (f.exists()) f.lastModified() else 0L
+                     fileStats[it.id]?.lastModified ?: 0L
                 }
             }
         }
 
         // Stats
-        val cachedCount = remember(filteredApps, cacheVersion) {
-            filteredApps.count { cacheFileFor(it).exists() }
+        val cachedCount = remember(filteredApps, fileStats) {
+            filteredApps.count { fileStats[it.id]?.exists == true }
         }
-        val totalSize = remember(filteredApps, cacheVersion) {
+        val totalSize = remember(filteredApps, fileStats) {
             filteredApps.sumOf {
-                val f = cacheFileFor(it)
-                if (f.exists()) f.length() else 0L
+                fileStats[it.id]?.size ?: 0L
             }
         }
 
@@ -412,9 +425,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun AppItemRow(item: ApkItem, cacheVersion: Int, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
         val context = LocalContext.current
-        val cachedFile = cacheFileFor(item)
-        // Re-read file existence when cacheVersion changes
-        val isCached = remember(item, cacheVersion) { cachedFile.exists() }
+        val stats = fileStats[item.id]
+        val isCached = stats?.exists == true
+        val fileSize = stats?.size ?: 0L
         
         Card(
             modifier = Modifier
@@ -460,7 +473,7 @@ class MainActivity : ComponentActivity() {
                     )
                     if (isCached) {
                         Text(
-                            text = "${formatFileSize(cachedFile.length())} • ${stringResource(R.string.cached)}",
+                            text = "${formatFileSize(fileSize)} • ${stringResource(R.string.cached)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -1119,6 +1132,7 @@ class MainActivity : ComponentActivity() {
 
 // Data models
 enum class SortMode { NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC }
+data class FileStats(val exists: Boolean, val size: Long, val lastModified: Long)
 data class ScriptItem(val id: String, val name: String, val gameName: String, val url: String? = null, val localPath: String? = null)
 
 data class ApkItem(
