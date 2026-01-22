@@ -624,7 +624,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun cacheFileFor(item: ApkItem): File {
-        val dir = File(cacheDir, "apks").apply { mkdirs() }
+        val dir = File(cacheDir, "apks")
         val ext = try {
             val u = item.url?.lowercase(Locale.ROOT)
             when {
@@ -766,6 +766,7 @@ class MainActivity : ComponentActivity() {
     private suspend fun downloadApk(item: ApkItem): File? = withContext(Dispatchers.IO) {
         val url = item.url ?: return@withContext null
         val outFile = cacheFileFor(item)
+        outFile.parentFile?.mkdirs()
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
