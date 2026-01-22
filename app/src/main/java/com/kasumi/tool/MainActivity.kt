@@ -1132,84 +1132,23 @@ data class ApkItem(
     val iconUrl: String? = null
 ) {
     companion object {
+        private val gson = Gson()
+        private val listType = object : com.google.gson.reflect.TypeToken<List<ApkItem>>() {}.type
+
         fun toJsonList(list: List<ApkItem>): String {
-            val sb = StringBuilder()
-            sb.append('[')
-            list.forEachIndexed { i, it ->
-                if (i > 0) sb.append(',')
-                sb.append('{')
-                sb.append("\"id\":\"${it.id}\",")
-                sb.append("\"name\":\"${escape(it.name)}\",")
-                sb.append("\"sourceType\":\"${it.sourceType}\",")
-                sb.append("\"url\":${if (it.url != null) "\"${escape(it.url)}\"" else "null"},")
-                sb.append("\"uri\":${if (it.uri != null) "\"${escape(it.uri)}\"" else "null"},")
-                sb.append("\"versionName\":${if (it.versionName != null) "\"${escape(it.versionName)}\"" else "null"},")
-                sb.append("\"versionCode\":${it.versionCode?.toString() ?: "null"},")
-                sb.append("\"iconUrl\":${if (it.iconUrl != null) "\"${escape(it.iconUrl)}\"" else "null"}")
-                sb.append('}')
-            }
-            sb.append(']')
-            return sb.toString()
+            return gson.toJson(list)
         }
 
         fun fromJsonList(json: String?): List<ApkItem> {
-            if (json.isNullOrBlank()) return emptyList()
-            val list = mutableListOf<ApkItem>()
-            val items = json.trim().removePrefix("[").removeSuffix("]")
-            if (items.isBlank()) return emptyList()
-            val parts = splitTopLevel(items)
-            for (p in parts) {
-                val map = parseObject(p)
-                val id = map["id"] ?: UUID.randomUUID().toString()
-                val name = map["name"] ?: "APK"
-                val sourceType = try { SourceType.valueOf(map["sourceType"] ?: "URL") } catch (_: Exception) { SourceType.URL }
-                val url = map["url"]
-                val uri = map["uri"]
-                val versionName = map["versionName"]
-                val versionCode = map["versionCode"]?.toLongOrNull()
-                val iconUrl = map["iconUrl"]
-                list.add(ApkItem(id, name, sourceType, url, uri, versionName, versionCode, iconUrl))
+            if (json.isNullOrBlank()) {
+                return emptyList()
             }
-            return list
-        }
-
-        private fun escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
-
-        private fun splitTopLevel(s: String): List<String> {
-            val res = mutableListOf<String>()
-            var level = 0
-            var start = 0
-            for (i in s.indices) {
-                when (s[i]) {
-                    '{' -> if (level++ == 0) start = i
-                    '}' -> if (--level == 0) res.add(s.substring(start, i + 1))
-                }
+            return try {
+                gson.fromJson(json, listType) ?: emptyList()
+            } catch (e: Exception) {
+                // Handle possible malformed JSON from old versions
+                emptyList()
             }
-            return res
-        }
-
-        private fun parseObject(s: String): Map<String, String?> {
-            val map = mutableMapOf<String, String?>()
-            var body = s.trim().removePrefix("{").removeSuffix("}")
-            val parts = mutableListOf<String>()
-            val sb = StringBuilder()
-            var inStr = false
-            for (ch in body) {
-                if (ch == '"') inStr = !inStr
-                if (ch == ',' && !inStr) { parts.add(sb.toString()); sb.clear() } else sb.append(ch)
-            }
-            if (sb.isNotEmpty()) parts.add(sb.toString())
-            for (p in parts) {
-                val idx = p.indexOf(":")
-                if (idx > 0) {
-                    val key = p.substring(0, idx).trim().removeSurrounding("\"", "\"")
-                    var valueStr = p.substring(idx + 1).trim()
-                    var value: String? = if (valueStr == "null") null else valueStr.removeSurrounding("\"", "\"")
-                    if (value != null) value = value.replace("\\\"", "\"").replace("\\\\", "\\")
-                    map[key] = value
-                }
-            }
-            return map
         }
     }
 }
