@@ -13,7 +13,7 @@
   - Tự động ẩn thông tin cache khi không có dữ liệu (0 B).
   - Cập nhật giao diện ngay lập tức sau khi xóa cache mà không cần khởi động lại.
 - **Tải Script**:
-  - Tự động loại bỏ đuôi `.txt` khi tải về (Ví dụ: `Teddy Hub` thay vì `Teddy Hub.txt`).
+  - Bắt buộc lưu script với đuôi `.txt` (Ví dụ: `Teddy Hub.txt`).
   - Sửa lỗi script đã tải về vẫn hiện nút "Tải" thay vì trạng thái đã cài đặt.
   - Hợp nhất danh sách script online và offline dựa trên tên file.
   - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.

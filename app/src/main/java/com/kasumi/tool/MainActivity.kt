@@ -953,8 +953,9 @@ class MainActivity : ComponentActivity() {
 
                 val dir = File("/storage/emulated/0/Delta/$targetFolder")
                 dir.mkdirs()
-                // Save without .txt extension as requested
-                File(dir, script.name).writeText(content)
+                // Save with .txt extension as requested
+                val fileName = if (script.name.lowercase().endsWith(".txt")) script.name else "${script.name}.txt"
+                File(dir, fileName).writeText(content)
                 onShowSnackbar(getString(R.string.saved_to, targetFolder))
                 loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {
