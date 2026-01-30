@@ -1,6 +1,8 @@
 package com.kasumi.tool
 
 import java.io.File
+import java.io.BufferedWriter
+import java.io.BufferedReader
 
 object RootInstaller {
     private val SAFE_FILENAME_REGEX = Regex("[^A-Za-z0-9._-]")
@@ -25,13 +27,13 @@ object RootInstaller {
     private fun installApkByPathSession(file: File): Pair<Boolean, String> {
         val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
         val tmpPath = "/data/local/tmp/$safeName"
+        val shell = ShellSession()
         return try {
             // Chuẩn bị thư mục tạm và copy file
-            ProcessBuilder("su", "-c", "mkdir -p /data/local/tmp && chmod 777 /data/local/tmp")
-                .redirectErrorStream(true)
-                .start()
-                .waitFor()
-            var p = ProcessBuilder("su", "-c", "cat > $tmpPath")
+            shell.exec("mkdir -p /data/local/tmp && chmod 777 /data/local/tmp")
+
+            // Cat binary data separately
+            val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
             file.inputStream().use { input ->
@@ -41,46 +43,90 @@ object RootInstaller {
                 }
             }
             p.waitFor()
-            ProcessBuilder("su", "-c", "chmod 644 $tmpPath").start().waitFor()
+
+            shell.exec("chmod 644 $tmpPath")
 
             // Tạo session và ghi theo đường dẫn
-            p = ProcessBuilder("su", "-c", "pm install-create -r")
-                .redirectErrorStream(true)
-                .start()
-            val outCreate = p.inputStream.bufferedReader().readText()
-            val exitCreate = p.waitFor()
+            val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {
-                ProcessBuilder("su", "-c", "rm -f $tmpPath").start()
+                shell.exec("rm -f $tmpPath")
                 return false to outCreate
             }
             val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
                 ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
                 ?: run {
-                    ProcessBuilder("su", "-c", "rm -f $tmpPath").start();
+                    shell.exec("rm -f $tmpPath")
                     return false to outCreate
                 }
 
             val baseName = file.name.replace(SAFE_FILENAME_REGEX, "_")
-            p = ProcessBuilder("su", "-c", "pm install-write $sessionId $baseName $tmpPath")
-                .redirectErrorStream(true)
-                .start()
-            val outWrite = p.inputStream.bufferedReader().readText()
-            val exitWrite = p.waitFor()
+            val (exitWrite, outWrite) = shell.exec("pm install-write $sessionId $baseName $tmpPath")
             if (exitWrite != 0) {
-                ProcessBuilder("su", "-c", "rm -f $tmpPath").start()
+                shell.exec("rm -f $tmpPath")
                 return false to outWrite
             }
 
-            p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
-                .redirectErrorStream(true)
-                .start()
-            val outCommit = p.inputStream.bufferedReader().readText()
-            val exitCommit = p.waitFor()
-            ProcessBuilder("su", "-c", "rm -f $tmpPath").start()
+            val (exitCommit, outCommit) = shell.exec("pm install-commit $sessionId")
+            shell.exec("rm -f $tmpPath")
             (exitCommit == 0) to outCommit
         } catch (e: Exception) {
-            try { ProcessBuilder("su", "-c", "rm -f $tmpPath").start() } catch (_: Exception) {}
+            try { shell.exec("rm -f $tmpPath") } catch (_: Exception) {}
             false to (e.message ?: "unknown error")
+        } finally {
+            shell.close()
+        }
+    }
+
+    private class ShellSession(command: String = "su") : AutoCloseable {
+        private val process: Process = ProcessBuilder(command).redirectErrorStream(true).start()
+        private val writer: BufferedWriter = process.outputStream.bufferedWriter()
+        private val reader: BufferedReader = process.inputStream.bufferedReader()
+        private val markerBase = java.util.UUID.randomUUID().toString().replace("-", "")
+        private var cmdCount = 0
+
+        fun exec(cmd: String): Pair<Int, String> {
+            val marker = "${markerBase}_${cmdCount++}"
+            try {
+                writer.write("$cmd\n")
+                writer.write("echo $marker:$?\n")
+                writer.flush()
+            } catch (e: Exception) {
+                return -1 to (e.message ?: "write error")
+            }
+
+            val output = StringBuilder()
+            var exitCode = -1
+            while (true) {
+                val line = try {
+                    reader.readLine()
+                } catch (e: Exception) {
+                    null
+                }
+                if (line == null) break
+
+                if (line.contains(marker)) {
+                    val parts = line.split("$marker:")
+                    if (parts.size >= 2) {
+                        exitCode = parts[1].trim().toIntOrNull() ?: -1
+                        if (parts[0].isNotBlank()) {
+                             output.append(parts[0]).append("\n")
+                        }
+                        break
+                    }
+                }
+                output.append(line).append("\n")
+            }
+            return exitCode to output.toString().trim()
+        }
+
+        override fun close() {
+            try {
+                writer.write("exit\n")
+                writer.flush()
+                process.waitFor()
+            } catch (e: Exception) {
+                process.destroy()
+            }
         }
     }
 
@@ -215,17 +261,16 @@ object RootInstaller {
     }
 
     private fun installApksByPath(files: List<File>): Pair<Boolean, String> {
+        val shell = ShellSession()
         return try {
             val tmpDir = "/data/local/tmp/splits"
-            ProcessBuilder("su", "-c", "rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
-                .redirectErrorStream(true)
-                .start()
-                .waitFor()
+            shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
+
             val paths = mutableListOf<Pair<File, String>>()
             for (f in files) {
                 val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
                 val remote = "$tmpDir/$safe"
-                var p = ProcessBuilder("su", "-c", "cat > $remote")
+                val p = ProcessBuilder("su", "-c", "cat > $remote")
                     .redirectErrorStream(true)
                     .start()
                 f.inputStream().use { input ->
@@ -235,45 +280,37 @@ object RootInstaller {
                     }
                 }
                 p.waitFor()
-                ProcessBuilder("su", "-c", "chmod 644 $remote").start().waitFor()
+                shell.exec("chmod 644 $remote")
                 paths.add(f to remote)
             }
-            var p = ProcessBuilder("su", "-c", "pm install-create -r")
-                .redirectErrorStream(true)
-                .start()
-            val outCreate = p.inputStream.bufferedReader().readText()
-            val exitCreate = p.waitFor()
+
+            val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {
-                ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+                shell.exec("rm -rf $tmpDir")
                 return false to outCreate
             }
             val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
                 ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
             if (sessionId.isNullOrBlank()) {
-                ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+                shell.exec("rm -rf $tmpDir")
                 return false to outCreate
             }
             for ((f, remote) in paths) {
                 val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                p = ProcessBuilder("su", "-c", "pm install-write $sessionId $safeName $remote")
-                    .redirectErrorStream(true)
-                    .start()
-                val outW = p.inputStream.bufferedReader().readText()
-                val exitW = p.waitFor()
+                val (exitW, outW) = shell.exec("pm install-write $sessionId $safeName $remote")
                 if (exitW != 0) {
-                    ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+                    shell.exec("rm -rf $tmpDir")
                     return false to outW
                 }
             }
-            p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
-                .redirectErrorStream(true)
-                .start()
-            val outCommit = p.inputStream.bufferedReader().readText()
-            val exitCommit = p.waitFor()
-            ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+
+            val (exitCommit, outCommit) = shell.exec("pm install-commit $sessionId")
+            shell.exec("rm -rf $tmpDir")
             (exitCommit == 0) to outCommit
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
+        } finally {
+            shell.close()
         }
     }
 
@@ -358,14 +395,13 @@ object RootInstaller {
     private fun copyToTmpAndInstall(file: File): Pair<Boolean, String> {
         val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
         val tmpPath = "/data/local/tmp/$safeName"
+        val shell = ShellSession()
         return try {
             // Đảm bảo thư mục tạm tồn tại để tránh EPIPE do 'cat' thoát sớm
-            ProcessBuilder("su", "-c", "mkdir -p /data/local/tmp && chmod 777 /data/local/tmp")
-                .redirectErrorStream(true)
-                .start()
-                .waitFor()
+            shell.exec("mkdir -p /data/local/tmp && chmod 777 /data/local/tmp")
+
             // Copy via su using cat > tmp
-            var p = ProcessBuilder("su", "-c", "cat > $tmpPath")
+            val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
             file.inputStream().use { input ->
@@ -375,31 +411,27 @@ object RootInstaller {
                 }
             }
             p.waitFor()
+
             // chmod 644
-            p = ProcessBuilder("su", "-c", "chmod 644 $tmpPath")
-                .redirectErrorStream(true)
-                .start()
-            p.waitFor()
+            shell.exec("chmod 644 $tmpPath")
+
             // Try pm install -r from path
-            p = ProcessBuilder("su", "-c", "pm install -r $tmpPath")
-                .redirectErrorStream(true)
-                .start()
-            var output = p.inputStream.bufferedReader().readText()
-            var exit = p.waitFor()
+            var (exit, output) = shell.exec("pm install -r $tmpPath")
+
             if (exit != 0) {
                 // fallback --user 0
-                p = ProcessBuilder("su", "-c", "pm install -r --user 0 $tmpPath")
-                    .redirectErrorStream(true)
-                    .start()
-                output = p.inputStream.bufferedReader().readText()
-                exit = p.waitFor()
+                val res = shell.exec("pm install -r --user 0 $tmpPath")
+                exit = res.first
+                output = res.second
             }
             // cleanup
-            ProcessBuilder("su", "-c", "rm -f $tmpPath").start()
+            shell.exec("rm -f $tmpPath")
             (exit == 0) to output
         } catch (e: Exception) {
-            try { ProcessBuilder("su", "-c", "rm -f $tmpPath").start() } catch (_: Exception) {}
+            try { shell.exec("rm -f $tmpPath") } catch (_: Exception) {}
             false to (e.message ?: "unknown error")
+        } finally {
+            shell.close()
         }
     }
 
