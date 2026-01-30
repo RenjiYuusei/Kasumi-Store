@@ -36,12 +36,7 @@ object RootInstaller {
                 .start()
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    val buf = ByteArray(8 * 1024)
-                    while (true) {
-                        val r = input.read(buf)
-                        if (r == -1) break
-                        out.write(buf, 0, r)
-                    }
+                    input.copyTo(out)
                     out.flush()
                 }
             }
@@ -235,12 +230,7 @@ object RootInstaller {
                     .start()
                 f.inputStream().use { input ->
                     p.outputStream.use { out ->
-                        val buf = ByteArray(8 * 1024)
-                        while (true) {
-                            val r = input.read(buf)
-                            if (r == -1) break
-                            out.write(buf, 0, r)
-                        }
+                        input.copyTo(out)
                         out.flush()
                     }
                 }
@@ -306,12 +296,7 @@ object RootInstaller {
                     .start()
                 f.inputStream().use { input ->
                     p.outputStream.use { out ->
-                        val buf = ByteArray(8 * 1024)
-                        while (true) {
-                            val r = input.read(buf)
-                            if (r == -1) break
-                            out.write(buf, 0, r)
-                        }
+                        input.copyTo(out)
                         out.flush()
                     }
                 }
@@ -358,12 +343,7 @@ object RootInstaller {
                 .start()
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    val buf = ByteArray(8 * 1024)
-                    while (true) {
-                        val r = input.read(buf)
-                        if (r == -1) break
-                        out.write(buf, 0, r)
-                    }
+                    input.copyTo(out)
                     out.flush()
                 }
             }
@@ -390,12 +370,7 @@ object RootInstaller {
                 .start()
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    val buf = ByteArray(8 * 1024)
-                    while (true) {
-                        val r = input.read(buf)
-                        if (r == -1) break
-                        out.write(buf, 0, r)
-                    }
+                    input.copyTo(out)
                     out.flush()
                 }
             }
@@ -444,12 +419,7 @@ object RootInstaller {
                     .start()
                 f.inputStream().use { input ->
                     p.outputStream.use { out ->
-                        val buf = ByteArray(8 * 1024)
-                        while (true) {
-                            val r = input.read(buf)
-                            if (r == -1) break
-                            out.write(buf, 0, r)
-                        }
+                        input.copyTo(out)
                         out.flush()
                     }
                 }
