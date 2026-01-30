@@ -48,6 +48,11 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import coil.compose.AsyncImage
 import com.google.gson.Gson
+import com.google.gson.GsonBuilder
+import com.google.gson.TypeAdapter
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
+import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1148,84 +1153,93 @@ data class ApkItem(
     val iconUrl: String? = null
 ) {
     companion object {
+        private val gson = GsonBuilder()
+            .registerTypeAdapter(ApkItem::class.java, object : TypeAdapter<ApkItem>() {
+                override fun write(out: JsonWriter, value: ApkItem?) {
+                    if (value == null) {
+                        out.nullValue()
+                        return
+                    }
+                    out.beginObject()
+                    out.name("id").value(value.id)
+                    out.name("name").value(value.name)
+                    out.name("sourceType").value(value.sourceType.name)
+                    out.name("url").value(value.url)
+                    out.name("uri").value(value.uri)
+                    out.name("versionName").value(value.versionName)
+                    out.name("versionCode")
+                    if (value.versionCode == null) out.nullValue() else out.value(value.versionCode)
+                    out.name("iconUrl").value(value.iconUrl)
+                    out.endObject()
+                }
+
+                override fun read(input: JsonReader): ApkItem {
+                    if (input.peek() == JsonToken.NULL) {
+                        input.nextNull()
+                        throw IllegalStateException("ApkItem cannot be null")
+                    }
+
+                    var id: String? = null
+                    var name: String? = null
+                    var sourceType: SourceType = SourceType.URL
+                    var url: String? = null
+                    var uri: String? = null
+                    var versionName: String? = null
+                    var versionCode: Long? = null
+                    var iconUrl: String? = null
+
+                    input.beginObject()
+                    while (input.hasNext()) {
+                        val propertyName = input.nextName()
+                        if (input.peek() == JsonToken.NULL) {
+                            input.nextNull()
+                            continue
+                        }
+                        when (propertyName) {
+                            "id" -> id = input.nextString()
+                            "name" -> name = input.nextString()
+                            "sourceType" -> {
+                                sourceType = try {
+                                    SourceType.valueOf(input.nextString())
+                                } catch (_: Exception) {
+                                    SourceType.URL
+                                }
+                            }
+                            "url" -> url = input.nextString()
+                            "uri" -> uri = input.nextString()
+                            "versionName" -> versionName = input.nextString()
+                            "versionCode" -> versionCode = input.nextLong()
+                            "iconUrl" -> iconUrl = input.nextString()
+                            else -> input.skipValue()
+                        }
+                    }
+                    input.endObject()
+
+                    return ApkItem(
+                        id = id ?: UUID.randomUUID().toString(),
+                        name = name ?: "APK",
+                        sourceType = sourceType,
+                        url = url,
+                        uri = uri,
+                        versionName = versionName,
+                        versionCode = versionCode,
+                        iconUrl = iconUrl
+                    )
+                }
+            })
+            .create()
+
         fun toJsonList(list: List<ApkItem>): String {
-            val sb = StringBuilder()
-            sb.append('[')
-            list.forEachIndexed { i, it ->
-                if (i > 0) sb.append(',')
-                sb.append('{')
-                sb.append("\"id\":\"${it.id}\",")
-                sb.append("\"name\":\"${escape(it.name)}\",")
-                sb.append("\"sourceType\":\"${it.sourceType}\",")
-                sb.append("\"url\":${if (it.url != null) "\"${escape(it.url)}\"" else "null"},")
-                sb.append("\"uri\":${if (it.uri != null) "\"${escape(it.uri)}\"" else "null"},")
-                sb.append("\"versionName\":${if (it.versionName != null) "\"${escape(it.versionName)}\"" else "null"},")
-                sb.append("\"versionCode\":${it.versionCode?.toString() ?: "null"},")
-                sb.append("\"iconUrl\":${if (it.iconUrl != null) "\"${escape(it.iconUrl)}\"" else "null"}")
-                sb.append('}')
-            }
-            sb.append(']')
-            return sb.toString()
+            return gson.toJson(list)
         }
 
         fun fromJsonList(json: String?): List<ApkItem> {
             if (json.isNullOrBlank()) return emptyList()
-            val list = mutableListOf<ApkItem>()
-            val items = json.trim().removePrefix("[").removeSuffix("]")
-            if (items.isBlank()) return emptyList()
-            val parts = splitTopLevel(items)
-            for (p in parts) {
-                val map = parseObject(p)
-                val id = map["id"] ?: UUID.randomUUID().toString()
-                val name = map["name"] ?: "APK"
-                val sourceType = try { SourceType.valueOf(map["sourceType"] ?: "URL") } catch (_: Exception) { SourceType.URL }
-                val url = map["url"]
-                val uri = map["uri"]
-                val versionName = map["versionName"]
-                val versionCode = map["versionCode"]?.toLongOrNull()
-                val iconUrl = map["iconUrl"]
-                list.add(ApkItem(id, name, sourceType, url, uri, versionName, versionCode, iconUrl))
+            return try {
+                gson.fromJson(json, Array<ApkItem>::class.java)?.toList() ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
             }
-            return list
-        }
-
-        private fun escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
-
-        private fun splitTopLevel(s: String): List<String> {
-            val res = mutableListOf<String>()
-            var level = 0
-            var start = 0
-            for (i in s.indices) {
-                when (s[i]) {
-                    '{' -> if (level++ == 0) start = i
-                    '}' -> if (--level == 0) res.add(s.substring(start, i + 1))
-                }
-            }
-            return res
-        }
-
-        private fun parseObject(s: String): Map<String, String?> {
-            val map = mutableMapOf<String, String?>()
-            var body = s.trim().removePrefix("{").removeSuffix("}")
-            val parts = mutableListOf<String>()
-            val sb = StringBuilder()
-            var inStr = false
-            for (ch in body) {
-                if (ch == '"') inStr = !inStr
-                if (ch == ',' && !inStr) { parts.add(sb.toString()); sb.clear() } else sb.append(ch)
-            }
-            if (sb.isNotEmpty()) parts.add(sb.toString())
-            for (p in parts) {
-                val idx = p.indexOf(":")
-                if (idx > 0) {
-                    val key = p.substring(0, idx).trim().removeSurrounding("\"", "\"")
-                    var valueStr = p.substring(idx + 1).trim()
-                    var value: String? = if (valueStr == "null") null else valueStr.removeSurrounding("\"", "\"")
-                    if (value != null) value = value.replace("\\\"", "\"").replace("\\\\", "\\")
-                    map[key] = value
-                }
-            }
-            return map
         }
     }
 }
