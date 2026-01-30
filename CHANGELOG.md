@@ -17,6 +17,7 @@
   - Sửa lỗi script đã tải về vẫn hiện nút "Tải" thay vì trạng thái đã cài đặt.
   - Hợp nhất danh sách script online và offline dựa trên tên file.
   - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.
+  - Tối ưu hiệu năng: Tăng tốc độ khớp script lên hơn 50 lần (sử dụng thuật toán O(N+M) thay vì O(N*M)).
 
 ### 🐛 Các thay đổi khác
 - Cập nhật biểu tượng ứng dụng mới.
