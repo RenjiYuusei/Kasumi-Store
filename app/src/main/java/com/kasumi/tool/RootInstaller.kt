@@ -3,6 +3,10 @@ package com.kasumi.tool
 import java.io.File
 
 object RootInstaller {
+    private val SAFE_FILENAME_REGEX = Regex("[^A-Za-z0-9._-]")
+    private val SESSION_ID_REGEX_1 = Regex("\\[(\\d+)\\]")
+    private val SESSION_ID_REGEX_2 = Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE)
+
     fun isDeviceRooted(): Boolean {
         return try {
             // Kiểm tra su thực sự hoạt động thay vì chỉ kiểm tra sự tồn tại của binary
@@ -19,7 +23,7 @@ object RootInstaller {
 
     // Fallback: cài đơn APK bằng session theo đường dẫn thay vì direct pm install PATH
     private fun installApkByPathSession(file: File): Pair<Boolean, String> {
-        val safeName = file.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
         val tmpPath = "/data/local/tmp/$safeName"
         return try {
             // Chuẩn bị thư mục tạm và copy file
@@ -54,14 +58,14 @@ object RootInstaller {
                 ProcessBuilder("su", "-c", "rm -f $tmpPath").start()
                 return false to outCreate
             }
-            val sessionId = Regex("\\[(\\d+)\\]").find(outCreate)?.groupValues?.get(1)
-                ?: Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE).find(outCreate)?.groupValues?.get(1)
+            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
+                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
                 ?: run {
                     ProcessBuilder("su", "-c", "rm -f $tmpPath").start();
                     return false to outCreate
                 }
 
-            val baseName = file.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val baseName = file.name.replace(SAFE_FILENAME_REGEX, "_")
             p = ProcessBuilder("su", "-c", "pm install-write $sessionId $baseName $tmpPath")
                 .redirectErrorStream(true)
                 .start()
@@ -224,7 +228,7 @@ object RootInstaller {
                 .waitFor()
             val paths = mutableListOf<Pair<File, String>>()
             for (f in files) {
-                val safe = f.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
                 val remote = "$tmpDir/$safe"
                 var p = ProcessBuilder("su", "-c", "cat > $remote")
                     .redirectErrorStream(true)
@@ -253,14 +257,14 @@ object RootInstaller {
                 ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
                 return false to outCreate
             }
-            val sessionId = Regex("\\[(\\d+)\\]").find(outCreate)?.groupValues?.get(1)
-                ?: Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE).find(outCreate)?.groupValues?.get(1)
+            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
+                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
             if (sessionId.isNullOrBlank()) {
                 ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
                 return false to outCreate
             }
             for ((f, remote) in paths) {
-                val safeName = f.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
                 p = ProcessBuilder("su", "-c", "pm install-write $sessionId $safeName $remote")
                     .redirectErrorStream(true)
                     .start()
@@ -291,12 +295,12 @@ object RootInstaller {
             val outCreate = p.inputStream.bufferedReader().readText()
             val exitCreate = p.waitFor()
             if (exitCreate != 0) return false to outCreate
-            val sessionId = Regex("\\[(\\d+)\\]").find(outCreate)?.groupValues?.get(1)
-                ?: Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE).find(outCreate)?.groupValues?.get(1)
+            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
+                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
             if (sessionId.isNullOrBlank()) return false to outCreate
             for (f in files) {
                 val size = f.length()
-                val safeName = f.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
                 p = ProcessBuilder("su", "-c", "pm install-write -S $size $sessionId $safeName -")
                     .redirectErrorStream(true)
                     .start()
@@ -372,7 +376,7 @@ object RootInstaller {
     }
 
     private fun copyToTmpAndInstall(file: File): Pair<Boolean, String> {
-        val safeName = file.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
         val tmpPath = "/data/local/tmp/$safeName"
         return try {
             // Đảm bảo thư mục tạm tồn tại để tránh EPIPE do 'cat' thoát sớm
@@ -433,7 +437,7 @@ object RootInstaller {
                 .waitFor()
             val paths = mutableListOf<String>()
             for (f in files) {
-                val safe = f.name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
                 val remote = "$tmpDir/$safe"
                 var p = ProcessBuilder("su", "-c", "cat > $remote")
                     .redirectErrorStream(true)
@@ -467,4 +471,3 @@ object RootInstaller {
         }
     }
 }
-
