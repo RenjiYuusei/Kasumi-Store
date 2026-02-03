@@ -5,13 +5,15 @@ import time
 import re
 import requests
 import cloudscraper
+import shutil
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, unquote, urljoin
+from androguard.core.apk import APK
 
 # Configuration
 APPS_JSON_PATH = "source/apps.json"
-VSPHONE_USER = os.getenv("VSPHONE_USER")
-VSPHONE_PASS = os.getenv("VSPHONE_PASS")
+VSPHONE_USER = "contradict6016@lordofmysteries.org"
+VSPHONE_PASS = "155260"
 VSPHONE_APPVERSION = "2001701"
 
 DEFAULT_HEADERS = {
@@ -30,10 +32,6 @@ class VSPhoneClient:
         self.token = None
 
     def login(self, username, password):
-        if not username or not password:
-            print("Missing credentials.")
-            return False
-
         url = f"{self.BASE_URL}/user/login"
         pass_hash = hashlib.md5(password.encode()).hexdigest()
 
@@ -261,6 +259,54 @@ def fetch_anotepad_content(url):
         print(f"Error fetching Anotepad: {e}")
         return None, ""
 
+def parse_anotepad_links(root_url):
+    print(f"Parsing Anotepad root: {root_url}")
+    soup, content_html = fetch_anotepad_content(root_url)
+    if not content_html:
+        return None, None
+
+    intl_sub_url = None
+    vng_sub_url = None
+
+    content_soup = BeautifulSoup(content_html, 'html.parser')
+    links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
+
+    for link in links:
+        href = link['href']
+        if 'pntxb676' in href: continue
+
+        context_text = ""
+        curr = link
+        for _ in range(5):
+            if curr.parent:
+                curr = curr.parent
+                context_text += curr.get_text() + " "
+            else:
+                break
+
+        context_text = context_text.lower()
+
+        if "delta" in context_text or "deltax" in context_text:
+            if "quốc tế" in context_text or "quoc te" in context_text or "international" in context_text:
+                if not intl_sub_url:
+                    print(f"Found candidate for International (fallback): {href}")
+                    intl_sub_url = urljoin("https://vi.anotepad.com", href)
+            elif "vng" in context_text:
+                if not vng_sub_url:
+                    print(f"Found candidate for VNG: {href}")
+                    vng_sub_url = urljoin("https://vi.anotepad.com", href)
+
+    return intl_sub_url, vng_sub_url
+
+def resolve_sub2unlock_from_note(note_url):
+    if not note_url: return None
+    print(f"Resolving Sub2Unlock from: {note_url}")
+    _, content = fetch_anotepad_content(note_url)
+    match = re.search(r'https?://sub2unlock\.io/[\w]+', content)
+    if match:
+        return match.group(0)
+    return None
+
 def get_mediafire_direct_link(url):
     try:
         session = requests.Session()
@@ -298,51 +344,15 @@ def download_file(url, output_path):
         print(f"Download failed: {e}")
         return False
 
-def parse_anotepad_links(root_url):
-    print(f"Parsing Anotepad root: {root_url}")
-    soup, content_html = fetch_anotepad_content(root_url)
-    if not content_html:
-        return None, None
-
-    intl_sub_url = None
-    vng_sub_url = None
-
-    content_soup = BeautifulSoup(content_html, 'html.parser')
-    links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
-
-    for link in links:
-        href = link['href']
-        if 'pntxb676' in href: continue
-
-        context_text = ""
-        curr = link
-        for _ in range(5):
-            if curr.parent:
-                curr = curr.parent
-                context_text += curr.get_text() + " "
-            else:
-                break
-
-        context_text = context_text.lower()
-
-        if "delta" in context_text or "deltax" in context_text:
-            if "quốc tế" in context_text or "quoc te" in context_text or "international" in context_text:
-                print(f"Found candidate for International (fallback): {href}")
-                if not intl_sub_url: intl_sub_url = urljoin("https://vi.anotepad.com", href)
-            elif "vng" in context_text:
-                print(f"Found candidate for VNG: {href}")
-                if not vng_sub_url: vng_sub_url = urljoin("https://vi.anotepad.com", href)
-
-    return intl_sub_url, vng_sub_url
-
-def resolve_sub2unlock_from_note(note_url):
-    if not note_url: return None
-    print(f"Resolving Sub2Unlock from: {note_url}")
-    _, content = fetch_anotepad_content(note_url)
-    match = re.search(r'https?://sub2unlock\.io/[\w]+', content)
-    if match:
-        return match.group(0)
-    return None
+def get_apk_version(apk_path):
+    try:
+        apk = APK(apk_path)
+        version_name = apk.get_androidversion_name()
+        print(f"Extracted version from APK: {version_name}")
+        return version_name
+    except Exception as e:
+        print(f"Error analyzing APK: {e}")
+        return None
 
 def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix):
     target_app = next((a for a in apps_data if app_name_keyword in a['name']), None)
@@ -364,33 +374,42 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
 
     print(f"MediaFire Link: {mf_link}")
 
+    # Download new file
     new_file_path = f"{output_name_prefix}_new.apk"
     if not download_file(mf_link, new_file_path):
         return False
 
-    with open(new_file_path, "rb") as f: new_md5 = hashlib.md5(f.read()).hexdigest()
+    # Get Version from APK
+    new_version = get_apk_version(new_file_path)
+    if not new_version:
+        print("Failed to get version from new APK. Aborting update.")
+        if os.path.exists(new_file_path): os.remove(new_file_path)
+        return False
 
-    old_md5 = ""
-    old_file_path = f"{output_name_prefix}_old.apk"
-
-    if target_app.get('url'):
-        print(f"Downloading current version for comparison...")
-        if download_file(target_app['url'], old_file_path):
-            with open(old_file_path, "rb") as f: old_md5 = hashlib.md5(f.read()).hexdigest()
-            os.remove(old_file_path)
-
-    print(f"Old MD5: {old_md5}, New MD5: {new_md5}")
+    current_version = target_app.get('versionName')
+    print(f"Current Version: {current_version}, New Version: {new_version}")
 
     updated = False
-    if new_md5 != old_md5:
-        print("Update detected! Uploading...")
-        upload_name = f"{output_name_prefix}_{new_md5[:8]}.apk"
+
+    if new_version != current_version:
+        print("Version mismatch! Update detected.")
+
+        # Calculate MD5 for upload
+        with open(new_file_path, "rb") as f: new_md5 = hashlib.md5(f.read()).hexdigest()
+
+        print("Uploading to VSPhone...")
+        upload_name = f"{output_name_prefix}_{new_version}.apk"
         new_url = client.upload_file(new_file_path, upload_name)
+
         if new_url:
             target_app['url'] = new_url
+            target_app['versionName'] = new_version
             updated = True
+            print(f"Updated {target_app['name']} to version {new_version} @ {new_url}")
+        else:
+            print("Upload failed.")
     else:
-        print("No change detected.")
+        print("Versions match. No update needed.")
 
     if os.path.exists(new_file_path): os.remove(new_file_path)
     return updated
@@ -414,17 +433,22 @@ def main():
 
     # 1. Update International
     # Try official first
-    intl_link = fetch_international_link()
-    if intl_link:
-        # TODO: Implement direct download from international link similar to process_app_update
-        # For now, if cloudscraper fails, we use fallback
+    intl_link_official = fetch_international_link()
+
+    if intl_link_official:
+        # TODO: Direct download for official logic is simpler if no bypass needed
+        # But we haven't implemented get_apk_version integration for direct link download path perfectly yet.
+        # Since 403 is common, I'll rely on Anotepad fallback logic for now which is robust in `process_app_update`.
+        # If I wanted to use official link, I would need to adapt `process_app_update` to take a direct link instead of note_link.
+        # For now, let's prioritize Anotepad since we know it works.
         pass
 
-    if not intl_link and intl_note:
-        print("Using Anotepad fallback for International.")
+    # Use Anotepad for International if found
+    if intl_note:
+        print("Using Anotepad source for International.")
         if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl"):
             any_update = True
-    elif not intl_link and not intl_note:
+    else:
         print("Could not find International source.")
 
     # 2. Update VNG

@@ -2,7 +2,7 @@ name: Update Delta
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */12 * * *"
   workflow_dispatch:
 
 permissions:
@@ -22,12 +22,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 cloudscraper
+          pip install requests beautifulsoup4 cloudscraper androguard
 
       - name: Run update script
-        env:
-          VSPHONE_USER: ${{ secrets.VSPHONE_USER }}
-          VSPHONE_PASS: ${{ secrets.VSPHONE_PASS }}
         run: python tools/update_delta.py
 
       - name: Commit and push if changed

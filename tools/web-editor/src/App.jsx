@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getFileContent, updateFileContent } from './github';
 import Editor from './components/Editor';
+import VSPhoneManager from './components/VSPhoneManager';
 
 const APPS_SCHEMA = [
   { key: 'name', label: 'Name' },
@@ -58,8 +59,6 @@ function App() {
 
   const fetchData = async () => {
     if (!token || !repoDetails.owner || !repoDetails.repo) {
-      // Don't error immediately on load if auto-detect hasn't happened or config isn't set
-      // just wait for user input
       return;
     }
     setLoading(true);
@@ -78,16 +77,16 @@ function App() {
   };
 
   useEffect(() => {
-    // Check if we have enough info to fetch
+    if (activeTab === 'vsphone') return; // Skip fetching github data for vsphone tab
+
     if (token && repoDetails.owner && repoDetails.repo) {
         fetchData();
     } else {
-        // If missing info, ensure config is open so user sees they need to enter it
         if (!repoDetails.owner && !repoDetails.repo) {
             setShowConfig(true);
         }
     }
-  }, [activeTab, token, repoDetails]); // Added repoDetails to fix the bug where it wouldn't load on initial detection
+  }, [activeTab, token, repoDetails]);
 
   const handleSaveToken = (val) => {
     setToken(val);
@@ -109,7 +108,6 @@ function App() {
         `Update ${activeTab === 'apps' ? 'apps.json' : 'scripts.json'} via Web Editor`
       );
       setSuccessMsg('Saved successfully!');
-      // Refetch to get new SHA
       await fetchData();
     } catch (err) {
       setError("Failed to save: " + err.message);
@@ -138,7 +136,7 @@ function App() {
                         title="Configuration"
                       >
                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                           <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.174.918c.2.056.397.126.588.209l.865-.395a.965.965 0 0 1 1.095.145l.773.773a.966.966 0 0 1 .145 1.095l-.395.865c.083.19.153.388.209.588l.918.174c.541.09.94.56.94 1.11v1.093c0 .55-.398 1.02-.94 1.11l-.918.174c-.056.2-.126.397-.209.588l.395.865a.966.966 0 0 1-.145 1.095l-.773.773a.965.965 0 0 1-1.095.145l-.865-.395a7.35 7.35 0 0 1-.588.209l-.174.918c-.09.542-.56.94-1.11.94h-1.093c-.55 0-1.02-.398-1.11-.94l-.174-.918a7.39 7.39 0 0 1-.588-.209l-.865.395a.965.965 0 0 1-1.095-.145l-.773-.773a.965.965 0 0 1-.145-1.095l.395-.865a7.352 7.352 0 0 1-.209-.588l-.918-.174a.962.962 0 0 1-.94-1.11V10.5c0-.55.398-1.02.94-1.11l.918-.174a7.354 7.354 0 0 1 .209-.588l-.395-.865a.965.965 0 0 1 .145-1.095l.773-.773a.965.965 0 0 1 1.095-.145l.865.395c.19-.083.388-.153.588-.209l.174-.918ZM12 6.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5Z" />
+                           <path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.174.918c.2.056.397.126.588.209l.865-.395a.965.965 0 0 1 1.095.145l.773.773a.966.966 0 0 1 .145 1.095l-.395.865c.083.19.153.388.209.588l.918.174c.541.09.94.56.94 1.11v1.093c0 .55-.398 1.02-.94 1.11l-.918.174c-.056.2-.126.397-.209.588l.395.865a.966.966 0 0 1-.145 1.095l-.773.773a.965.965 0 0 1-1.095-.145l-.865-.395a7.35 7.35 0 0 1-.588.209l-.174.918c-.09.542-.56.94-1.11.94h-1.093c-.55 0-1.02-.398-1.11-.94l-.174-.918a7.39 7.39 0 0 1-.588-.209l-.865.395a.965.965 0 0 1-1.095-.145l-.773-.773a.965.965 0 0 1-.145-1.095l.395-.865a7.352 7.352 0 0 1-.209-.588l-.918-.174a.962.962 0 0 1-.94-1.11V10.5c0-.55.398-1.02.94-1.11l.918-.174a7.354 7.354 0 0 1 .209-.588l-.395-.865a.965.965 0 0 1 .145-1.095l.773-.773a.965.965 0 0 1 1.095-.145l.865.395c.19-.083.388-.153.588-.209l.174-.918ZM12 6.75a5.25 5.25 0 1 0 0 10.5 5.25 5.25 0 0 0 0-10.5Z" />
                          </svg>
                       </button>
                       <button
@@ -241,6 +239,16 @@ function App() {
                 >
                     Scripts
                 </button>
+                <button
+                    onClick={() => setActiveTab('vsphone')}
+                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        activeTab === 'vsphone'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800'
+                    }`}
+                >
+                    VSPhone
+                </button>
             </div>
         </div>
 
@@ -271,7 +279,9 @@ function App() {
 
         {/* Main Content Area */}
         <div className="transition-all duration-300 ease-in-out">
-            {loading ? (
+            {activeTab === 'vsphone' ? (
+                <VSPhoneManager />
+            ) : loading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-pulse">
                     {[...Array(8)].map((_, i) => (
                         <div key={i} className="bg-white dark:bg-slate-900 h-40 rounded-xl border border-gray-200 dark:border-slate-800 p-4 flex flex-col gap-4">
