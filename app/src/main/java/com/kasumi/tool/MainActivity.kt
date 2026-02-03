@@ -904,12 +904,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun loadScriptsFromLocal() {
+
+    private val PATH_DELTA_LEGACY = "/storage/emulated/0/Delta"
+    private val PATH_DELTA_VNG = "/storage/emulated/0/Android/data/com.roblox.client.vnggames/files/gloop/external/Delta"
+
+    private fun getDeltaDir(): File {
+        val vng = File(PATH_DELTA_VNG)
+        if (vng.exists()) return vng
+        return File(PATH_DELTA_LEGACY)
+    }
+
+private suspend fun loadScriptsFromLocal() {
         val context = this@MainActivity
         withContext(Dispatchers.IO) {
             val newLocals = mutableListOf<ScriptItem>()
-            val autoExecuteDir = File("/storage/emulated/0/Delta/Autoexecute")
-            val scriptsDir = File("/storage/emulated/0/Delta/Scripts")
+            val autoExecuteDir = File(getDeltaDir(), "Autoexecute")
+            val scriptsDir = File(getDeltaDir(), "Scripts")
              if (autoExecuteDir.exists()) {
                 autoExecuteDir.listFiles()?.forEach {
                     if (it.isFile) {
@@ -972,7 +982,7 @@ class MainActivity : ComponentActivity() {
                     "loadstring(game:HttpGet(\"$url\"))()"
                 }
 
-                val dir = File("/storage/emulated/0/Delta/$targetFolder")
+                val dir = File(getDeltaDir(), targetFolder)
                 dir.mkdirs()
                 // Save with .txt extension as requested
                 val fileName = if (script.name.lowercase().endsWith(".txt")) script.name else "${script.name}.txt"
