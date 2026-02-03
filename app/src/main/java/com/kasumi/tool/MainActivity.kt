@@ -138,8 +138,8 @@ class MainActivity : ComponentActivity() {
             registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"))
         }
 
-        loadItems()
         lifecycleScope.launch {
+            loadItems()
             setBusy(true)
             refreshPreloadedApps(initial = true)
             loadScriptsFromOnline()
@@ -615,10 +615,12 @@ class MainActivity : ComponentActivity() {
 
     private fun logBg(msg: String) = log(msg)
 
-    private fun loadItems() {
-        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-        val json = prefs.getString("list", null)
-        val loaded = ApkItem.fromJsonList(json)
+    private suspend fun loadItems() {
+        val loaded = withContext(Dispatchers.IO) {
+            val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+            val json = prefs.getString("list", null)
+            ApkItem.fromJsonList(json)
+        }
         appsList = loaded.ifEmpty { emptyList() }.toMutableList()
     }
 
