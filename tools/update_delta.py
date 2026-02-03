@@ -1,183 +1,131 @@
 import os
-import json
-import hashlib
-import time
 import re
+import json
+import time
 import requests
-import cloudscraper
-import shutil
+import hashlib
+from urllib.parse import urlparse, parse_qs, urljoin
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, parse_qs, unquote, urljoin
+import cloudscraper
 from androguard.core.apk import APK
 
 # Configuration
-APPS_JSON_PATH = "source/apps.json"
+# Resolve paths relative to this script file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APPS_JSON_PATH = os.path.join(BASE_DIR, "../source/apps.json")
 VSPHONE_USER = "contradict6016@lordofmysteries.org"
 VSPHONE_PASS = "155260"
-VSPHONE_APPVERSION = "2001701"
 
 DEFAULT_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
 class VSPhoneClient:
-    BASE_URL = "https://api.vsphone.com/vsphone/api"
-    ORIGIN = "https://cloud.vsphone.com"
-
     def __init__(self):
-        self.session = requests.Session()
-        self.user_id = None
+        self.base_url = "https://api.vsphone.com/vsphone/api"
+        self.origin = "https://cloud.vsphone.com"
+        self.app_version = "2001701"
         self.token = None
-
-    def login(self, username, password):
-        url = f"{self.BASE_URL}/user/login"
-        pass_hash = hashlib.md5(password.encode()).hexdigest()
-
-        headers = {
-            'content-type': 'application/json',
-            'appversion': VSPHONE_APPVERSION,
-            'requestsource': 'wechat-miniapp'
-        }
-        data = {
-            "mobilePhone": username,
-            "loginType": 1,
-            "channel": "web",
-            "password": pass_hash
-        }
-
-        try:
-            resp = self.session.post(url, json=data, headers=headers)
-            resp.raise_for_status()
-            res_json = resp.json()
-            if res_json.get('code') == 200 and res_json.get('data'):
-                self.user_id = str(res_json['data']['userId'])
-                self.token = res_json['data']['token']
-                print(f"Login successful. UserID: {self.user_id}")
-                return True
-            else:
-                print(f"Login failed: {res_json}")
-                return False
-        except Exception as e:
-            print(f"Login exception: {e}")
-            return False
+        self.user_id = None
 
     def get_headers(self):
         return {
             'accept': 'application/json, text/plain, */*',
-            'appversion': VSPHONE_APPVERSION,
+            'appversion': self.app_version,
             'clienttype': 'web',
             'content-type': 'application/json',
-            'origin': self.ORIGIN,
-            'referer': self.ORIGIN + '/',
+            'origin': self.origin,
+            'referer': self.origin + '/',
             'requestsource': 'wechat-miniapp',
             'suppliertype': '0',
-            'token': self.token,
-            'userid': self.user_id
+            'token': self.token or '',
+            'userid': str(self.user_id) if self.user_id else ''
         }
 
-    def upload_file(self, file_path, file_name=None):
-        if not self.token:
-            print("Not logged in.")
-            return None
+    def login(self, username, password):
+        print(f"Logging in to VSPhone as {username}...")
+        url = f"{self.base_url}/user/login"
+        payload = {
+            "mobilePhone": username,
+            "loginType": 1,
+            "channel": "web",
+            "password": hashlib.md5(password.encode()).hexdigest()
+        }
 
-        if not file_name:
-            file_name = os.path.basename(file_path)
+        try:
+            resp = requests.post(url, json=payload, headers=self.get_headers())
+            data = resp.json()
+            if data.get('code') == 200 and data.get('data'):
+                self.token = data['data']['token']
+                self.user_id = data['data']['userId']
+                print("Login successful. UserID:", self.user_id)
+                return True
+            print("Login failed:", data.get('msg'))
+            return False
+        except Exception as e:
+            print("Login error:", e)
+            return False
+
+    def upload_file(self, file_path, file_name):
+        if not self.token: return None
 
         file_size = os.path.getsize(file_path)
+        with open(file_path, 'rb') as f:
+            file_md5 = hashlib.md5(f.read()).hexdigest()
 
-        md5_hash = hashlib.md5()
-        with open(file_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
-                md5_hash.update(byte_block)
-        file_md5 = md5_hash.hexdigest()
-
-        print(f"Processing upload for {file_name} (Size: {file_size}, MD5: {file_md5})")
-
-        check_url = f"{self.BASE_URL}/cloudFile/uploadCheck"
-        check_data = {
+        # Check upload
+        check_url = f"{self.base_url}/cloudFile/uploadCheck"
+        check_payload = {
             "fileItems": [{
                 "fileLength": file_size,
                 "fileMd5": file_md5,
-                "fileType": 2,
+                "fileType": 2, # APK/Backup type
                 "fileName": file_name
             }],
             "operType": 2
         }
 
         try:
-            headers = self.get_headers()
-            resp = self.session.post(check_url, json=check_data, headers=headers)
-            resp.raise_for_status()
-            check_res = resp.json()
+            check_resp = requests.post(check_url, json=check_payload, headers=self.get_headers())
+            check_data = check_resp.json()
 
-            final_file = None
-
-            if check_res.get('code') == 200:
-                if check_res.get('data') and len(check_res['data']) > 0:
-                    print("File already exists on server (Instant Upload).")
-                    final_file = check_res['data'][0]
+            if check_data.get('code') == 200:
+                if check_data.get('data'):
+                    # Instant upload (already exists)
+                    print("File already exists on server.")
+                    return check_data['data'][0]['downloadUrl']
                 else:
-                    print("File not found on server. Attempting registration...")
-                    ext = file_name.split('.')[-1] if '.' in file_name else ""
-                    fake_path = f"userFile/{file_md5}.{ext}"
-
-                    finish_url = f"{self.BASE_URL}/padTask/updateCloudFileFinish"
-                    finish_data = {
+                    # Finish upload (simulate actual upload flow)
+                    print("Registering file upload...")
+                    finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
+                    ext = file_name.split('.')[-1]
+                    finish_payload = {
                         "fileId": 0,
-                        "filePath": fake_path,
+                        "filePath": f"userFile/{file_md5}.{ext}",
                         "fileOriginName": file_name
                     }
-
-                    resp_fin = self.session.post(finish_url, json=finish_data, headers=headers)
-                    resp_fin.raise_for_status()
-                    fin_res = resp_fin.json()
-
-                    if fin_res.get('code') == 200 and fin_res.get('data'):
-                        final_file = fin_res['data']
-                        print("File registered successfully.")
-                    else:
-                        print(f"Registration failed: {fin_res}")
-                        return None
-
-            else:
-                print(f"Upload check failed: {check_res}")
-                return None
-
-            if final_file and 'downloadUrl' in final_file:
-                return final_file['downloadUrl']
-            return None
-
+                    finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers())
+                    finish_data = finish_resp.json()
+                    if finish_data.get('code') == 200 and finish_data.get('data'):
+                        return finish_data['data']['downloadUrl']
+            print("Upload check failed:", check_data.get('msg'))
         except Exception as e:
-            print(f"Upload exception: {e}")
-            return None
+            print("Upload error:", e)
+        return None
 
 def fetch_international_link():
-    print("Fetching Delta International from official site...")
     url = "https://delta.filenetwork.vip/android.html"
+    print(f"Fetching Delta International from official site...")
     try:
-        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
+        scraper = cloudscraper.create_scraper()
         resp = scraper.get(url)
-
         if resp.status_code == 403:
             print("International: Cloudflare blocked the request (403).")
             return None
 
         soup = BeautifulSoup(resp.text, 'html.parser')
 
-        download_btn = soup.find('a', string=re.compile(r'Download', re.I))
-        if not download_btn:
-             download_btn = soup.find('a', class_=re.compile(r'btn|download', re.I))
-
-        if download_btn:
-            link = download_btn.get('href')
-            if link:
-                if not link.startswith('http'):
-                    link = "https://delta.filenetwork.vip/" + link.lstrip('/')
-                print(f"Found International link candidate: {link}")
-                return link
-
+        # Heuristic: Find first direct .apk link
         for a in soup.find_all('a', href=True):
             if '.apk' in a['href']:
                 print(f"Found .apk link: {a['href']}")
@@ -246,10 +194,7 @@ def fetch_anotepad_content(url):
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, 'html.parser')
 
-        content_div = soup.find('div', class_='plaintext') or \
-                      soup.find('div', class_='richtext') or \
-                      soup.find('div', id='note_content') or \
-                      soup.find('div', class_='note-content')
+        content_div = soup.find('div', class_='plaintext') or                       soup.find('div', class_='richtext') or                       soup.find('div', id='note_content') or                       soup.find('div', class_='note-content')
 
         if content_div:
             return soup, str(content_div)
@@ -258,6 +203,24 @@ def fetch_anotepad_content(url):
     except Exception as e:
         print(f"Error fetching Anotepad: {e}")
         return None, ""
+
+def find_link_in_siblings(element):
+    # Check current element first
+    link = element.find('a', href=re.compile(r'/notes/[\w]+'))
+    if link and 'pntxb676' not in link['href']:
+        return link['href']
+
+    # Check next siblings
+    curr = element
+    for _ in range(5): # Look ahead 5 siblings
+        curr = curr.find_next_sibling()
+        if not curr: break
+
+        link = curr.find('a', href=re.compile(r'/notes/[\w]+'))
+        if link and 'pntxb676' not in link['href']:
+            return link['href']
+
+    return None
 
 def parse_anotepad_links(root_url):
     print(f"Parsing Anotepad root: {root_url}")
@@ -269,32 +232,32 @@ def parse_anotepad_links(root_url):
     vng_sub_url = None
 
     content_soup = BeautifulSoup(content_html, 'html.parser')
-    links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
 
-    for link in links:
-        href = link['href']
-        if 'pntxb676' in href: continue
+    # Iterate all DIVs to find title blocks
+    for div in content_soup.find_all('div'):
+        text = div.get_text().strip().lower()
+        if not text: continue
 
-        context_text = ""
-        curr = link
-        for _ in range(5):
-            if curr.parent:
-                curr = curr.parent
-                context_text += curr.get_text() + " "
-            else:
-                break
-
-        context_text = context_text.lower()
-
-        if "delta" in context_text or "deltax" in context_text:
-            if "quốc tế" in context_text or "quoc te" in context_text or "international" in context_text:
+        if "delta" in text or "deltax" in text:
+            # Check for International
+            if "quốc tế" in text or "quoc te" in text or "international" in text:
                 if not intl_sub_url:
-                    print(f"Found candidate for International (fallback): {href}")
-                    intl_sub_url = urljoin("https://vi.anotepad.com", href)
-            elif "vng" in context_text:
+                    link = find_link_in_siblings(div)
+                    if link:
+                        print(f"Found candidate for International: {link}")
+                        intl_sub_url = urljoin("https://vi.anotepad.com", link)
+
+            # Check for VNG
+            elif "vng" in text:
+                if "fix lag" in text:
+                    print(f"Skipping VNG Fix Lag block: {text[:30]}...")
+                    continue
+
                 if not vng_sub_url:
-                    print(f"Found candidate for VNG: {href}")
-                    vng_sub_url = urljoin("https://vi.anotepad.com", href)
+                    link = find_link_in_siblings(div)
+                    if link:
+                        print(f"Found candidate for VNG (Official): {link}")
+                        vng_sub_url = urljoin("https://vi.anotepad.com", link)
 
     return intl_sub_url, vng_sub_url
 
@@ -375,7 +338,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
     print(f"MediaFire Link: {mf_link}")
 
     # Download new file
-    new_file_path = f"{output_name_prefix}_new.apk"
+    new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new.apk")
     if not download_file(mf_link, new_file_path):
         return False
 
@@ -432,16 +395,7 @@ def main():
     intl_note, vng_note = parse_anotepad_links(anotepad_root)
 
     # 1. Update International
-    # Try official first
     intl_link_official = fetch_international_link()
-
-    if intl_link_official:
-        # TODO: Direct download for official logic is simpler if no bypass needed
-        # But we haven't implemented get_apk_version integration for direct link download path perfectly yet.
-        # Since 403 is common, I'll rely on Anotepad fallback logic for now which is robust in `process_app_update`.
-        # If I wanted to use official link, I would need to adapt `process_app_update` to take a direct link instead of note_link.
-        # For now, let's prioritize Anotepad since we know it works.
-        pass
 
     # Use Anotepad for International if found
     if intl_note:
