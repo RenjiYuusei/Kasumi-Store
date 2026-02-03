@@ -128,6 +128,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Initializes the activity: configures edge-to-edge UI, registers the install broadcast receiver,
+     * starts background loading of app/script data, requests storage permission, and sets the Compose UI.
+     *
+     * Performs setup required before the UI is shown, including registering the install commit receiver
+     * (with exported flag on Android 33+), launching a lifecycle-scoped coroutine to load persisted items,
+     * preloaded apps, and scripts, and applying the app theme and main composable.
+     *
+     * @param savedInstanceState If non-null, contains the activity's previously saved state.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -613,8 +622,20 @@ class MainActivity : ComponentActivity() {
         Log.d("Kasumi", msg)
     }
 
-    private fun logBg(msg: String) = log(msg)
+    /**
+ * Logs a message intended for background or non-UI contexts.
+ *
+ * @param msg The message to log.
+ */
+private fun logBg(msg: String) = log(msg)
 
+    /**
+     * Loads persisted APK items from shared preferences and updates `appsList`.
+     *
+     * Reads JSON stored under the SharedPreferences file "apk_items" with key "list", parses it into `ApkItem`
+     * objects, and replaces `appsList` with a mutable list of the parsed items. If no stored list exists or
+     * parsing yields no items, `appsList` is set to an empty list.
+     */
     private suspend fun loadItems() {
         val loaded = withContext(Dispatchers.IO) {
             val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
