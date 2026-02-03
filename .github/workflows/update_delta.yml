@@ -1,0 +1,43 @@
+name: Update Delta
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-delta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 cloudscraper
+
+      - name: Run update script
+        env:
+          VSPHONE_USER: ${{ secrets.VSPHONE_USER }}
+          VSPHONE_PASS: ${{ secrets.VSPHONE_PASS }}
+        run: python tools/update_delta.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add source/apps.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: Update Delta versions [skip ci]"
+            git push
+          fi
