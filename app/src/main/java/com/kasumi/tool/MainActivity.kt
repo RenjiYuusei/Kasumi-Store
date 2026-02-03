@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
      * preloaded apps, and scripts, and applying the app theme and main composable.
      *
      * @param savedInstanceState If non-null, contains the activity's previously saved state.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
