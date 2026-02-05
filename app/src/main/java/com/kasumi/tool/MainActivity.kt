@@ -670,7 +670,14 @@ private fun logBg(msg: String) = log(msg)
         return try {
             val md = MessageDigest.getInstance("SHA-1")
             val bytes = md.digest(url.toByteArray())
-            bytes.joinToString("") { b -> "%02x".format(b) }
+            val hexChars = "0123456789abcdef"
+            val result = StringBuilder(bytes.size * 2)
+            for (b in bytes) {
+                val i = b.toInt()
+                result.append(hexChars[i shr 4 and 0x0f])
+                result.append(hexChars[i and 0x0f])
+            }
+            result.toString()
         } catch (_: Exception) {
             url.hashCode().toString()
         }
