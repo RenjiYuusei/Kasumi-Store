@@ -56,6 +56,8 @@ import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -71,6 +73,7 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
+    private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .followRedirects(true)
@@ -647,11 +650,12 @@ private fun logBg(msg: String) = log(msg)
     }
 
     private suspend fun saveItems() {
-        val itemsToSave = appsList
-        withContext(Dispatchers.IO) {
-            val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-            val json = ApkItem.toJsonList(itemsToSave)
-            prefs.edit().putString("list", json).apply()
+        saveMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+                val json = ApkItem.toJsonList(appsList)
+                prefs.edit().putString("list", json).apply()
+            }
         }
     }
 
