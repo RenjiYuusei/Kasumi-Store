@@ -429,7 +429,7 @@ class MainActivity : ComponentActivity() {
                  items(filteredApps, key = { it.id }) { item ->
                      AppItemRow(item, cacheVersion, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
-                         saveItems()
+                         lifecycleScope.launch { saveItems() }
                          onShowSnackbar("Đã xóa ${it.name}")
                      })
                  }
@@ -646,10 +646,13 @@ private fun logBg(msg: String) = log(msg)
         appsList = loaded.ifEmpty { emptyList() }.toMutableList()
     }
 
-    private fun saveItems() {
-        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-        val json = ApkItem.toJsonList(appsList)
-        prefs.edit().putString("list", json).apply()
+    private suspend fun saveItems() {
+        val itemsToSave = appsList
+        withContext(Dispatchers.IO) {
+            val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+            val json = ApkItem.toJsonList(itemsToSave)
+            prefs.edit().putString("list", json).apply()
+        }
     }
 
     private fun cacheFileFor(item: ApkItem): File {
