@@ -267,22 +267,26 @@ object RootInstaller {
             shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
 
             val paths = mutableListOf<Pair<File, String>>()
-            for (f in files) {
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                val remote = "$tmpDir/$safe"
-                val p = ProcessBuilder("su", "-c", "cat > $remote")
-                    .redirectErrorStream(true)
-                    .start()
-                f.inputStream().use { input ->
-                    p.outputStream.use { out ->
-                        input.copyTo(out)
-                        out.flush()
-                    }
+
+            val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
+                .redirectErrorStream(true)
+                .start()
+
+            p.outputStream.use { out ->
+                TarUtil.streamFiles(files, out) { f ->
+                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                    val remote = "$tmpDir/$safe"
+                    paths.add(f to remote)
+                    safe
                 }
-                p.waitFor()
-                shell.exec("chmod 644 $remote")
-                paths.add(f to remote)
             }
+            val tarExit = p.waitFor()
+            if (tarExit != 0) {
+                 val errorOutput = p.inputStream.bufferedReader().readText()
+                 shell.exec("rm -rf $tmpDir")
+                 return false to "tar extraction failed (exit=$tarExit): $errorOutput"
+            }
+            shell.exec("chmod 644 $tmpDir/*")
 
             val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {
