@@ -1043,38 +1043,7 @@ private suspend fun loadScriptsFromLocal() {
                 }
             }
             withContext(Dispatchers.Main) {
-                // Merge: Start with all known online scripts and check if they exist locally
-                // OPTIMIZATION: Use Map for O(1) lookup (O(N+M) complexity)
-                val localMap = HashMap<String, ScriptItem>()
-                for (local in newLocals) {
-                    // newLocals.find uses first match, so we only add if not present
-                    if (!localMap.containsKey(local.name)) {
-                        localMap[local.name] = local
-                    }
-                }
-
-                val mergedList = onlineScriptsList.map { onlineScript ->
-                    val match = localMap[onlineScript.name]
-                    if (match != null) {
-                        onlineScript.copy(localPath = match.localPath)
-                    } else {
-                        onlineScript
-                    }
-                }
-
-                // Efficiently identify used paths to filter unmatched locals
-                val usedLocalPaths = HashSet<String>()
-                for (item in mergedList) {
-                    if (item.localPath != null) {
-                        usedLocalPaths.add(item.localPath)
-                    }
-                }
-
-                val unmatchedLocals = newLocals.filter { local ->
-                    local.localPath != null && !usedLocalPaths.contains(local.localPath)
-                }
-
-                scriptsList = mergedList + unmatchedLocals
+                scriptsList = ScriptUtils.mergeScripts(onlineScriptsList, newLocals)
             }
         }
     }
@@ -1274,7 +1243,6 @@ private suspend fun loadScriptsFromLocal() {
 // Data models
 enum class SortMode { NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC }
 data class FileStats(val exists: Boolean, val size: Long, val lastModified: Long)
-data class ScriptItem(val id: String, val name: String, val gameName: String, val url: String? = null, val localPath: String? = null)
 
 data class ApkItem(
     val id: String,
