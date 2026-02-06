@@ -984,14 +984,16 @@ private fun logBg(msg: String) = log(msg)
                                     }
                                 }
                                 reader.endObject()
-                                newScripts.add(
-                                    ScriptItem(
-                                        id = stableIdFromUrl(url),
-                                        name = name,
-                                        gameName = gameName,
-                                        url = url
+                                if (url.isNotBlank()) {
+                                    newScripts.add(
+                                        ScriptItem(
+                                            id = stableIdFromUrl(url),
+                                            name = name,
+                                            gameName = gameName,
+                                            url = url
+                                        )
                                     )
-                                )
+                                }
                             }
                             reader.endArray()
                         }
