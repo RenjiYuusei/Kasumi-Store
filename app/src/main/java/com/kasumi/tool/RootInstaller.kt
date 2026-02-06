@@ -280,7 +280,13 @@ object RootInstaller {
                     safe
                 }
             }
-            p.waitFor()
+            val tarExit = p.waitFor()
+            if (tarExit != 0) {
+                 val errorOutput = p.inputStream.bufferedReader().readText()
+                 shell.exec("rm -rf $tmpDir")
+                 return false to "tar extraction failed (exit=$tarExit): $errorOutput"
+            }
+            shell.exec("chmod 644 $tmpDir/*")
             shell.exec("chmod 644 $tmpDir/*")
 
             val (exitCreate, outCreate) = shell.exec("pm install-create -r")

@@ -15,7 +15,12 @@ object TarUtil {
     fun streamFiles(files: List<File>, out: OutputStream, nameMapper: (File) -> String = { it.name }) {
         for (f in files) {
             if (f.isFile && f.exists()) {
-                writeTarEntry(f, nameMapper(f), out)
+                val name = nameMapper(f)
+                val nameBytes = name.toByteArray(StandardCharsets.UTF_8)
+                if (nameBytes.size > 100) {
+                    throw IllegalArgumentException("Tar entry name too long: '$name' (${nameBytes.size} bytes). Max is 100 bytes.")
+                }
+                writeTarEntry(f, name, out)
             }
         }
         // Write two empty blocks (1024 bytes) to mark end of archive
