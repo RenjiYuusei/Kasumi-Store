@@ -287,7 +287,6 @@ object RootInstaller {
                  return false to "tar extraction failed (exit=$tarExit): $errorOutput"
             }
             shell.exec("chmod 644 $tmpDir/*")
-            shell.exec("chmod 644 $tmpDir/*")
 
             val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {

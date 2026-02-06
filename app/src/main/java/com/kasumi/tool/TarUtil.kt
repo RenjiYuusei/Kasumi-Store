@@ -86,7 +86,7 @@ object TarUtil {
     }
 
     private fun writeString(buffer: ByteArray, offset: Int, length: Int, value: String) {
-        val bytes = value.toByteArray(StandardCharsets.US_ASCII)
+        val bytes = value.toByteArray(StandardCharsets.UTF_8)
         for (i in 0 until length) {
             if (i < bytes.size) {
                 buffer[offset + i] = bytes[i]
