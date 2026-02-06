@@ -48,6 +48,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import coil.compose.AsyncImage
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.google.gson.GsonBuilder
 import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
@@ -63,6 +64,12 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.io.BufferedReader
+import java.io.BufferedWriter
+import java.io.FileReader
+import java.io.FileWriter
+import java.io.Reader
+import java.io.Writer
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -642,9 +649,30 @@ private fun logBg(msg: String) = log(msg)
      */
     private suspend fun loadItems() {
         val loaded = withContext(Dispatchers.IO) {
-            val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-            val json = prefs.getString("list", null)
-            ApkItem.fromJsonList(json)
+            val file = File(filesDir, "items.json")
+            if (file.exists()) {
+                try {
+                    BufferedReader(FileReader(file)).use { reader ->
+                        ApkItem.readListFrom(reader)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    emptyList()
+                }
+            } else {
+                val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+                val json = prefs.getString("list", null)
+                val list = ApkItem.fromJsonList(json)
+                if (list.isNotEmpty()) {
+                    try {
+                        BufferedWriter(FileWriter(File(filesDir, "items.json"))).use { writer ->
+                            ApkItem.writeListTo(list, writer)
+                        }
+                        prefs.edit().remove("list").apply()
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+                list
+            }
         }
         appsList = loaded.ifEmpty { emptyList() }.toMutableList()
     }
@@ -652,9 +680,13 @@ private fun logBg(msg: String) = log(msg)
     private suspend fun saveItems() {
         saveMutex.withLock {
             withContext(Dispatchers.IO) {
-                val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-                val json = ApkItem.toJsonList(appsList)
-                prefs.edit().putString("list", json).apply()
+                try {
+                    BufferedWriter(FileWriter(File(filesDir, "items.json"))).use { writer ->
+                        ApkItem.writeListTo(appsList, writer)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
@@ -1301,6 +1333,20 @@ data class ApkItem(
             if (json.isNullOrBlank()) return emptyList()
             return try {
                 gson.fromJson(json, Array<ApkItem>::class.java)?.toList() ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+
+        fun writeListTo(list: List<ApkItem>, writer: Writer) {
+            val type = object : TypeToken<List<ApkItem>>() {}.type
+            gson.toJson(list, type, writer)
+        }
+
+        fun readListFrom(reader: Reader): List<ApkItem> {
+            val type = object : TypeToken<List<ApkItem>>() {}.type
+            return try {
+                gson.fromJson<List<ApkItem>>(reader, type) ?: emptyList()
             } catch (e: Exception) {
                 emptyList()
             }
