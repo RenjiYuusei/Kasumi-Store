@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0] - 2026-02-06
+### 🚀 Tính năng mới
+- **Web Editor**: Ra mắt công cụ quản lý dữ liệu (`apps.json`, `scripts.json`) trực quan trên nền web (`tools/web-editor`), hỗ trợ review và đóng góp dễ dàng hơn.
+- **Delta Updater**: Tích hợp quy trình tự động cập nhật script Delta mới nhất qua GitHub Actions.
+
+### ⚡ Hiệu năng & Kỹ thuật
+- **Root Installer 2.0**:
+  - Tái cấu trúc toàn bộ logic cài đặt Root sử dụng `ShellSession` để duy trì kết nối su, loại bỏ độ trễ khi tạo process mới.
+  - Tích hợp `TarUtil`: Stream và giải nén dữ liệu trực tiếp giúp cài đặt Split APKs nhanh và ổn định hơn.
+  - Tối ưu hóa I/O: Sử dụng `copyTo` native của Kotlin cho các thao tác stream dữ liệu.
+- **Script Engine**:
+  - Thuật toán gộp danh sách script mới (HashMap O(N+M)) giúp xử lý danh sách lớn tức thì.
+  - Cập nhật ProGuard rules bảo vệ các lớp dữ liệu quan trọng (`ScriptItem`).
+
+### 🐛 Sửa lỗi
+- **Giao diện**: Đồng bộ màu thanh trạng thái (Status Bar) với theme tối hoàn toàn.
+- **Danh sách**: Khắc phục triệt để lỗi hiển thị ứng dụng trùng lặp khi làm mới.
+
 ## [1.3.0] - 2026-1-09
 ### ✨ Cải tiến giao diện
 - Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.

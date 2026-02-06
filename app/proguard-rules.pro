@@ -7,6 +7,7 @@
 # Giữ lớp dữ liệu parse bằng Gson (tránh đổi tên field)
 -keep class com.kasumi.tool.PreloadApp { *; }
 -keep class com.kasumi.tool.ApkItem { *; }
+-keep class com.kasumi.tool.ScriptItem { *; }
 
 # Giữ các lớp nội bộ của Gson (thường không bắt buộc, nhưng an toàn)
 -keep class com.google.gson.stream.** { *; }
