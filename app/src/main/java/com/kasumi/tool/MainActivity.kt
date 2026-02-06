@@ -965,20 +965,38 @@ private fun logBg(msg: String) = log(msg)
                 val req = Request.Builder().url(DEFAULT_SCRIPTS_URL).header("User-Agent", "CloudPhoneTool/1.0").build()
                 client.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) return@withContext
-                    val body = resp.body?.string() ?: return@withContext
-                    val jsonArray = org.json.JSONArray(body)
+                    val stream = resp.body?.byteStream() ?: return@withContext
                     val newScripts = mutableListOf<ScriptItem>()
-                    for (i in 0 until jsonArray.length()) {
-                        val obj = jsonArray.getJSONObject(i)
-                        val url = obj.getString("url")
-                        newScripts.add(
-                            ScriptItem(
-                                id = stableIdFromUrl(url),
-                                name = obj.getString("name"),
-                                gameName = obj.getString("gameName"),
-                                url = url
-                            )
-                        )
+                    try {
+                        com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
+                            reader.beginArray()
+                            while (reader.hasNext()) {
+                                reader.beginObject()
+                                var name = ""
+                                var gameName = ""
+                                var url = ""
+                                while (reader.hasNext()) {
+                                    when (reader.nextName()) {
+                                        "name" -> name = reader.nextString()
+                                        "gameName" -> gameName = reader.nextString()
+                                        "url" -> url = reader.nextString()
+                                        else -> reader.skipValue()
+                                    }
+                                }
+                                reader.endObject()
+                                newScripts.add(
+                                    ScriptItem(
+                                        id = stableIdFromUrl(url),
+                                        name = name,
+                                        gameName = gameName,
+                                        url = url
+                                    )
+                                )
+                            }
+                            reader.endArray()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
 
                     withContext(Dispatchers.Main) {
