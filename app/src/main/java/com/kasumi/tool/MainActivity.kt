@@ -977,9 +977,9 @@ private fun logBg(msg: String) = log(msg)
                                 var url = ""
                                 while (reader.hasNext()) {
                                     when (reader.nextName()) {
-                                        "name" -> name = reader.nextString()
-                                        "gameName" -> gameName = reader.nextString()
-                                        "url" -> url = reader.nextString()
+                                        "name" -> name = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
+                                        "gameName" -> gameName = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
+                                        "url" -> url = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
                                         else -> reader.skipValue()
                                     }
                                 }
