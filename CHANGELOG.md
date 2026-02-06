@@ -1,6 +1,10 @@
 # Changelog
 
 ## [1.4.0] - 2026-2-06
+### 🐛 Sửa lỗi
+- **Ứng dụng trùng lặp**: Khắc phục lỗi hiển thị ứng dụng bị trùng lặp trong danh sách.
+- **Status Bar**: Cập nhật màu thanh trạng thái đồng bộ với giao diện (đen/tối).
+
 ### ⚡ Hiệu năng & Kỹ thuật
 - **Tối ưu hóa Script**: Nâng cấp thuật toán gộp danh sách script (online & local) sử dụng HashMap với độ phức tạp O(N+M), tăng tốc độ đáng kể khi xử lý danh sách lớn.
 - **Bảo mật**: Cập nhật ProGuard rules cho các lớp dữ liệu (`ScriptItem`) để đảm bảo tính ổn định sau khi obfuscate.
