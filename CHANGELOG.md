@@ -1,14 +1,22 @@
 # Changelog
 
 ## [1.4.0] - 2026-2-06
-### 🐛 Sửa lỗi
-- **Ứng dụng trùng lặp**: Khắc phục lỗi hiển thị ứng dụng bị trùng lặp trong danh sách.
-- **Status Bar**: Cập nhật màu thanh trạng thái đồng bộ với giao diện (đen/tối).
+### 🚀 Tính năng mới
+- **Web Editor**: Ra mắt công cụ quản lý dữ liệu (`apps.json`, `scripts.json`) trực quan trên nền web (`tools/web-editor`), hỗ trợ review và đóng góp dễ dàng hơn.
+- **Delta Updater**: Tích hợp quy trình tự động cập nhật script Delta mới nhất qua GitHub Actions.
 
 ### ⚡ Hiệu năng & Kỹ thuật
-- **Tối ưu hóa Script**: Nâng cấp thuật toán gộp danh sách script (online & local) sử dụng HashMap với độ phức tạp O(N+M), tăng tốc độ đáng kể khi xử lý danh sách lớn.
-- **Bảo mật**: Cập nhật ProGuard rules cho các lớp dữ liệu (`ScriptItem`) để đảm bảo tính ổn định sau khi obfuscate.
-- Nâng cấp phiên bản ứng dụng lên 1.4.0.
+- **Root Installer 2.0**:
+  - Tái cấu trúc toàn bộ logic cài đặt Root sử dụng `ShellSession` để duy trì kết nối su, loại bỏ độ trễ khi tạo process mới.
+  - Tích hợp `TarUtil`: Stream và giải nén dữ liệu trực tiếp giúp cài đặt Split APKs nhanh và ổn định hơn.
+  - Tối ưu hóa I/O: Sử dụng `copyTo` native của Kotlin cho các thao tác stream dữ liệu.
+- **Script Engine**:
+  - Thuật toán gộp danh sách script mới (HashMap O(N+M)) giúp xử lý danh sách lớn tức thì.
+  - Cập nhật ProGuard rules bảo vệ các lớp dữ liệu quan trọng (`ScriptItem`).
+
+### 🐛 Sửa lỗi
+- **Giao diện**: Đồng bộ màu thanh trạng thái (Status Bar) với theme tối hoàn toàn.
+- **Danh sách**: Khắc phục triệt để lỗi hiển thị ứng dụng trùng lặp khi làm mới.
 
 ## [1.3.0] - 2026-1-09
 ### ✨ Cải tiến giao diện
