@@ -56,6 +56,8 @@ import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -71,6 +73,7 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
 
+    private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .followRedirects(true)
@@ -429,7 +432,7 @@ class MainActivity : ComponentActivity() {
                  items(filteredApps, key = { it.id }) { item ->
                      AppItemRow(item, cacheVersion, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
-                         saveItems()
+                         lifecycleScope.launch { saveItems() }
                          onShowSnackbar("Đã xóa ${it.name}")
                      })
                  }
@@ -646,10 +649,14 @@ private fun logBg(msg: String) = log(msg)
         appsList = loaded.ifEmpty { emptyList() }.toMutableList()
     }
 
-    private fun saveItems() {
-        val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-        val json = ApkItem.toJsonList(appsList)
-        prefs.edit().putString("list", json).apply()
+    private suspend fun saveItems() {
+        saveMutex.withLock {
+            withContext(Dispatchers.IO) {
+                val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
+                val json = ApkItem.toJsonList(appsList)
+                prefs.edit().putString("list", json).apply()
+            }
+        }
     }
 
     private fun cacheFileFor(item: ApkItem): File {
