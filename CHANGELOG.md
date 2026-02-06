@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.4.0] - 2026-2-06
+## [1.4.0] - 2026-02-06
 ### 🚀 Tính năng mới
 - **Web Editor**: Ra mắt công cụ quản lý dữ liệu (`apps.json`, `scripts.json`) trực quan trên nền web (`tools/web-editor`), hỗ trợ review và đóng góp dễ dàng hơn.
 - **Delta Updater**: Tích hợp quy trình tự động cập nhật script Delta mới nhất qua GitHub Actions.
