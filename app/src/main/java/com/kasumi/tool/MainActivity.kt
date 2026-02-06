@@ -192,10 +192,10 @@ class MainActivity : ComponentActivity() {
 
         val snackbarHostState = remember { SnackbarHostState() }
 
-        // OPTIMIZATION: Compute file stats in background to avoid I/O in UI
+        // Compute file stats in background to avoid I/O in UI
         LaunchedEffect(appsList, cacheVersion) {
-            withContext(Dispatchers.IO) {
-                val newStats = appsList.associate { item ->
+            fileStats = withContext(Dispatchers.IO) {
+                appsList.associate { item ->
                     val f = cacheFileFor(item)
                     if (f.exists()) {
                         item.id to FileStats(true, f.length(), f.lastModified())
@@ -203,7 +203,6 @@ class MainActivity : ComponentActivity() {
                         item.id to FileStats(false, 0L, 0L)
                     }
                 }
-                fileStats = newStats
             }
         }
 

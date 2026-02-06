@@ -18,6 +18,7 @@
   - Hợp nhất danh sách script online và offline dựa trên tên file.
   - Cập nhật giao diện hộp thoại tải xuống theo chuẩn Material 3.
   - Tối ưu hiệu năng: Tăng tốc độ khớp script lên hơn 50 lần (sử dụng thuật toán O(N+M) thay vì O(N*M)).
+  - Tối ưu hiệu năng: Tính toán thông tin file trong background để tránh giật lag UI.
 
 ### 🐛 Các thay đổi khác
 - Cập nhật biểu tượng ứng dụng mới.
