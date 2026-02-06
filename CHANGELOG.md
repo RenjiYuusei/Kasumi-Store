@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2026-2-06
+### ⚡ Hiệu năng & Kỹ thuật
+- **Tối ưu hóa Script**: Nâng cấp thuật toán gộp danh sách script (online & local) sử dụng HashMap với độ phức tạp O(N+M), tăng tốc độ đáng kể khi xử lý danh sách lớn.
+- **Bảo mật**: Cập nhật ProGuard rules cho các lớp dữ liệu (`ScriptItem`) để đảm bảo tính ổn định sau khi obfuscate.
+- Nâng cấp phiên bản ứng dụng lên 1.4.0.
+
 ## [1.3.0] - 2026-1-09
 ### ✨ Cải tiến giao diện
 - Chuyển đổi toàn bộ giao diện sang Jetpack Compose Material 3 chuẩn.
