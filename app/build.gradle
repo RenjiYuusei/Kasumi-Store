@@ -7,7 +7,6 @@ plugins {
 import java.io.InputStreamReader
 
 android {
-    testOptions { unitTests.all { testLogging { events 'passed', 'skipped', 'failed', 'standardOut', 'standardError' } } }
     namespace 'com.kasumi.tool'
     compileSdk 34
 
@@ -85,7 +84,6 @@ if (keystorePropsFile.exists()) {
 
     if (missingKeys.isEmpty()) {
         android {
-    testOptions { unitTests.all { testLogging { events 'passed', 'skipped', 'failed', 'standardOut', 'standardError' } } }
             signingConfigs {
                 release {
                     storeFile storeFileResolved
@@ -106,7 +104,6 @@ if (keystorePropsFile.exists()) {
 }
 
 dependencies {
-    testImplementation 'junit:junit:4.13.2'
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
