@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.core.util.AtomicFile
 import androidx.lifecycle.lifecycleScope
 import coil.compose.AsyncImage
 import com.google.gson.Gson
@@ -664,12 +665,23 @@ private fun logBg(msg: String) = log(msg)
                 val json = prefs.getString("list", null)
                 val list = ApkItem.fromJsonList(json)
                 if (list.isNotEmpty()) {
-                    try {
-                        BufferedWriter(FileWriter(File(filesDir, "items.json"))).use { writer ->
+                    saveMutex.withLock {
+                        val atomicFile = AtomicFile(File(filesDir, "items.json"))
+                        var fos: FileOutputStream? = null
+                        try {
+                            fos = atomicFile.startWrite()
+                            val writer = BufferedWriter(java.io.OutputStreamWriter(fos))
                             ApkItem.writeListTo(list, writer)
+                            writer.flush()
+                            atomicFile.finishWrite(fos)
+                            prefs.edit().remove("list").apply()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            if (fos != null) {
+                                atomicFile.failWrite(fos)
+                            }
                         }
-                        prefs.edit().remove("list").apply()
-                    } catch (e: Exception) { e.printStackTrace() }
+                    }
                 }
                 list
             }
@@ -680,12 +692,19 @@ private fun logBg(msg: String) = log(msg)
     private suspend fun saveItems() {
         saveMutex.withLock {
             withContext(Dispatchers.IO) {
+                val atomicFile = AtomicFile(File(filesDir, "items.json"))
+                var fos: FileOutputStream? = null
                 try {
-                    BufferedWriter(FileWriter(File(filesDir, "items.json"))).use { writer ->
-                        ApkItem.writeListTo(appsList, writer)
-                    }
+                    fos = atomicFile.startWrite()
+                    val writer = BufferedWriter(java.io.OutputStreamWriter(fos))
+                    ApkItem.writeListTo(appsList, writer)
+                    writer.flush()
+                    atomicFile.finishWrite(fos)
                 } catch (e: Exception) {
                     e.printStackTrace()
+                    if (fos != null) {
+                        atomicFile.failWrite(fos)
+                    }
                 }
             }
         }
@@ -1345,11 +1364,7 @@ data class ApkItem(
 
         fun readListFrom(reader: Reader): List<ApkItem> {
             val type = object : TypeToken<List<ApkItem>>() {}.type
-            return try {
-                gson.fromJson<List<ApkItem>>(reader, type) ?: emptyList()
-            } catch (e: Exception) {
-                emptyList()
-            }
+            return gson.fromJson<List<ApkItem>>(reader, type) ?: emptyList()
         }
     }
 }
