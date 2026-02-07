@@ -166,22 +166,23 @@ def bypass_sub2unlock(url):
                 final_url = resp.url
                 print(f"Landed on (after Google): {final_url}")
 
-        if "bloggingdaze.com" in final_url or "bloggingdaze.com" in target_page_url:
-            soup = BeautifulSoup(resp.text, 'html.parser')
-
-            mf_links = soup.find_all('a', href=re.compile(r'mediafire\.com'))
-            if mf_links:
-                return mf_links[0]['href']
-
-            for a in soup.find_all('a', href=True):
-                if 'mediafire.com' in a['href']:
-                    return a['href']
-
-            print("Could not find MediaFire link on BloggingDaze page.")
-
-        elif "mediafire.com" in final_url:
+        # Check for MediaFire direct link
+        if "mediafire.com" in final_url:
             return final_url
 
+        # Generic scan for MediaFire links on the final page (handles bloggingdaze, dusarisalary, etc.)
+        print(f"Scanning {final_url} for MediaFire links...")
+        soup = BeautifulSoup(resp.text, 'html.parser')
+
+        mf_links = soup.find_all('a', href=re.compile(r'mediafire\.com'))
+        if mf_links:
+            return mf_links[0]['href']
+
+        for a in soup.find_all('a', href=True):
+            if 'mediafire.com' in a['href']:
+                return a['href']
+
+        print("Could not find MediaFire link on page.")
         return None
 
     except Exception as e:
