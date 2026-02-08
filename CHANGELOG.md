@@ -6,6 +6,7 @@
 - **Delta Updater**: Tích hợp quy trình tự động cập nhật script Delta mới nhất qua GitHub Actions.
 
 ### ⚡ Hiệu năng & Kỹ thuật
+- **Delta Updater**: Cập nhật cơ chế lấy link Delta VNG (Fix 261) theo vị trí cố định và hỗ trợ ghi đè phiên bản hiển thị.
 - **Root Installer 2.0**:
   - Tái cấu trúc toàn bộ logic cài đặt Root sử dụng `ShellSession` để duy trì kết nối su, loại bỏ độ trễ khi tạo process mới.
   - Tích hợp `TarUtil`: Stream và giải nén dữ liệu trực tiếp giúp cài đặt Split APKs nhanh và ổn định hơn.
