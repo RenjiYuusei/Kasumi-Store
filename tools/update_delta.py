@@ -227,40 +227,59 @@ def parse_anotepad_links(root_url):
     print(f"Parsing Anotepad root: {root_url}")
     soup, content_html = fetch_anotepad_content(root_url)
     if not content_html:
-        return None, None
+        return None, None, None
 
     intl_sub_url = None
     vng_sub_url = None
+    vng_version_override = None
 
     content_soup = BeautifulSoup(content_html, 'html.parser')
 
-    # Iterate all DIVs to find title blocks
+    # Find International (Original Search Logic)
     for div in content_soup.find_all('div'):
         text = div.get_text().strip().lower()
         if not text: continue
 
-        if "delta" in text or "deltax" in text:
-            # Check for International
-            if "quốc tế" in text or "quoc te" in text or "international" in text:
-                if not intl_sub_url:
-                    link = find_link_in_siblings(div)
-                    if link:
-                        print(f"Found candidate for International: {link}")
-                        intl_sub_url = urljoin("https://vi.anotepad.com", link)
+        if ("delta" in text or "deltax" in text) and ("quốc tế" in text or "quoc te" in text or "international" in text):
+             if not intl_sub_url:
+                link = find_link_in_siblings(div)
+                if link:
+                    print(f"Found candidate for International: {link}")
+                    intl_sub_url = urljoin("https://vi.anotepad.com", link)
 
-            # Check for VNG
-            elif "vng" in text:
-                if "fix lag" in text:
-                    print(f"Skipping VNG Fix Lag block: {text[:30]}...")
-                    continue
+    # Find VNG (Positional Logic - 3rd line)
+    try:
+        # fetch_anotepad_content wraps str(content_div) which might contain the wrapper itself or be the wrapper
+        # The content_soup is parsed from that string.
+        # Usually str(content_div) is <div class='plaintext'>...</div>
+        # So content_soup.find('div') returns that wrapper.
+        wrapper = content_soup.find('div')
+        if wrapper:
+            lines = wrapper.find_all('div', recursive=False)
+            if len(lines) >= 3:
+                # User says 3rd position. Assuming 1-based index 3 -> array index 2.
+                vng_line = lines[2]
+                vng_text_raw = vng_line.get_text().strip()
+                print(f"VNG Line Text: {vng_text_raw}")
 
-                if not vng_sub_url:
-                    link = find_link_in_siblings(div)
-                    if link:
-                        print(f"Found candidate for VNG (Official): {link}")
-                        vng_sub_url = urljoin("https://vi.anotepad.com", link)
+                # Extract Link
+                link_el = vng_line.find('a', href=re.compile(r'/notes/[\w]+'))
+                if link_el:
+                    vng_sub_url = urljoin("https://vi.anotepad.com", link_el['href'])
+                    print(f"Found positional VNG link: {vng_sub_url}")
 
-    return intl_sub_url, vng_sub_url
+                # Extract Version Override
+                # Expecting: 🥷 DeltaX V2.706 ( VNG Fix 261 )
+                match = re.search(r'(V\d+[\d\.]*.*(?:\(.*\))?)', vng_text_raw)
+                if match:
+                    vng_version_override = match.group(1).strip()
+                    print(f"Extracted VNG Version Override: {vng_version_override}")
+            else:
+                print(f"Not enough lines for positional VNG extraction. Found {len(lines)} lines.")
+    except Exception as e:
+        print(f"Error in positional VNG extraction: {e}")
+
+    return intl_sub_url, vng_sub_url, vng_version_override
 
 def resolve_sub2unlock_from_note(note_url):
     if not note_url: return None
@@ -318,7 +337,7 @@ def get_apk_version(apk_path):
         print(f"Error analyzing APK: {e}")
         return None
 
-def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix):
+def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix, override_version_name=None):
     target_app = next((a for a in apps_data if app_name_keyword in a['name']), None)
     if not target_app:
         print(f"App {app_name_keyword} not found in apps.json")
@@ -344,14 +363,17 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
         return False
 
     # Get Version from APK
-    new_version = get_apk_version(new_file_path)
-    if not new_version:
+    apk_version = get_apk_version(new_file_path)
+    if not apk_version:
         print("Failed to get version from new APK. Aborting update.")
         if os.path.exists(new_file_path): os.remove(new_file_path)
         return False
 
+    # Use override version if provided (e.g., from note text)
+    new_version = override_version_name if override_version_name else apk_version
+
     current_version = target_app.get('versionName')
-    print(f"Current Version: {current_version}, New Version: {new_version}")
+    print(f"Current Version: {current_version}, New Version: {new_version} (APK says: {apk_version})")
 
     updated = False
 
@@ -393,7 +415,7 @@ def main():
 
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
-    intl_note, vng_note = parse_anotepad_links(anotepad_root)
+    intl_note, vng_note, vng_version_override = parse_anotepad_links(anotepad_root)
 
     # 1. Update International
     intl_link_official = fetch_international_link()
@@ -408,7 +430,7 @@ def main():
 
     # 2. Update VNG
     if vng_note:
-        if process_app_update(client, apps_data, "Roblox VN (Delta)", vng_note, "delta_vng"):
+        if process_app_update(client, apps_data, "Roblox VN (Delta)", vng_note, "delta_vng", override_version_name=vng_version_override):
             any_update = True
     else:
         print("Could not find VNG note link in root.")
