@@ -279,25 +279,8 @@ def parse_anotepad_links(root_url):
             full_text = " ".join(collected_text)
             print(f"Extracted context text: {full_text[:100]}...")
 
-            # Regex for version: V2.706 ( VNG Fix 261 )
-            # Extract main version: 2.706
-            # Extract fix number: 261
-            version_match = re.search(r'V(\d+(?:\.\d+)+)', full_text)
-            fix_match = re.search(r'Fix\s*(\d+)', full_text)
-
-            if version_match and fix_match:
-                base_ver = version_match.group(1)
-                fix_ver = fix_match.group(1)
-                # Construct numeric version: 2.706.261
-                vng_version_override = f"{base_ver}.{fix_ver}"
-                print(f"Extracted VNG Version Override (Numeric): {vng_version_override}")
-            else:
-                 # Fallback to full string if parsing fails, but user wants numeric
-                 match = re.search(r'(V\d+.*?\s*\(.*?\))', full_text)
-                 if match:
-                    vng_version_override = match.group(1).strip()
-                    print(f"Could not parse numeric version. Fallback to string: {vng_version_override}")
-
+            # Use raw text as a "trigger" check to force update
+            vng_version_override = full_text
         else:
             print(f"Not enough note links for positional VNG extraction. Found {len(note_links)} links.")
 
@@ -362,7 +345,7 @@ def get_apk_version(apk_path):
         print(f"Error analyzing APK: {e}")
         return None
 
-def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix, override_version_name=None):
+def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix, override_version_trigger=None):
     target_app = next((a for a in apps_data if app_name_keyword in a['name']), None)
     if not target_app:
         print(f"App {app_name_keyword} not found in apps.json")
@@ -394,33 +377,33 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
         if os.path.exists(new_file_path): os.remove(new_file_path)
         return False
 
-    # Use override version if provided (e.g., from note text)
-    new_version = override_version_name if override_version_name else apk_version
-
     current_version = target_app.get('versionName')
-    print(f"Current Version: {current_version}, New Version: {new_version} (APK says: {apk_version})")
+    print(f"Current Version: {current_version}, New APK Version: {apk_version}")
+
+    # For saving, we prefer the APK version as requested by the user
+    new_version_to_save = apk_version
 
     updated = False
 
-    if new_version != current_version:
-        print("Version mismatch! Update detected.")
+    # Calculate MD5 of new file to check for updates
+    with open(new_file_path, "rb") as f: new_md5 = hashlib.md5(f.read()).hexdigest()
+    print("Uploading/Checking file on VSPhone...")
 
-        # Calculate MD5 for upload
-        with open(new_file_path, "rb") as f: new_md5 = hashlib.md5(f.read()).hexdigest()
+    # Upload and check URL
+    upload_name = f"{output_name_prefix}_{apk_version}.apk"
+    new_url = client.upload_file(new_file_path, upload_name)
 
-        print("Uploading to VSPhone...")
-        upload_name = f"{output_name_prefix}_{new_version}.apk"
-        new_url = client.upload_file(new_file_path, upload_name)
-
-        if new_url:
-            target_app['url'] = new_url
-            target_app['versionName'] = new_version
-            updated = True
-            print(f"Updated {target_app['name']} to version {new_version} @ {new_url}")
+    if new_url:
+        # Update if URL changes (new content) OR if version string changes (from old non-APK value to new APK value)
+        if new_url != target_app.get('url') or new_version_to_save != current_version:
+             target_app['url'] = new_url
+             target_app['versionName'] = new_version_to_save
+             updated = True
+             print(f"Updated {target_app['name']} to version {new_version_to_save} @ {new_url}")
         else:
-            print("Upload failed.")
+             print("File content identical (URL match) and Version match. No update needed.")
     else:
-        print("Versions match. No update needed.")
+        print("Upload failed.")
 
     if os.path.exists(new_file_path): os.remove(new_file_path)
     return updated
@@ -440,7 +423,7 @@ def main():
 
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
-    intl_note, vng_note, vng_version_override = parse_anotepad_links(anotepad_root)
+    intl_note, vng_note, vng_version_trigger = parse_anotepad_links(anotepad_root)
 
     # 1. Update International
     intl_link_official = fetch_international_link()
@@ -455,7 +438,8 @@ def main():
 
     # 2. Update VNG
     if vng_note:
-        if process_app_update(client, apps_data, "Roblox VN (Delta)", vng_note, "delta_vng", override_version_name=vng_version_override):
+        # Pass the trigger to force check, but logic inside will prioritize APK version for saving
+        if process_app_update(client, apps_data, "Roblox VN (Delta)", vng_note, "delta_vng", override_version_trigger=vng_version_trigger):
             any_update = True
     else:
         print("Could not find VNG note link in root.")
