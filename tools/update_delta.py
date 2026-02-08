@@ -280,10 +280,24 @@ def parse_anotepad_links(root_url):
             print(f"Extracted context text: {full_text[:100]}...")
 
             # Regex for version: V2.706 ( VNG Fix 261 )
-            match = re.search(r'(V\d+.*?\s*\(.*?\))', full_text)
-            if match:
-                vng_version_override = match.group(1).strip()
-                print(f"Extracted VNG Version Override: {vng_version_override}")
+            # Extract main version: 2.706
+            # Extract fix number: 261
+            version_match = re.search(r'V(\d+(?:\.\d+)+)', full_text)
+            fix_match = re.search(r'Fix\s*(\d+)', full_text)
+
+            if version_match and fix_match:
+                base_ver = version_match.group(1)
+                fix_ver = fix_match.group(1)
+                # Construct numeric version: 2.706.261
+                vng_version_override = f"{base_ver}.{fix_ver}"
+                print(f"Extracted VNG Version Override (Numeric): {vng_version_override}")
+            else:
+                 # Fallback to full string if parsing fails, but user wants numeric
+                 match = re.search(r'(V\d+.*?\s*\(.*?\))', full_text)
+                 if match:
+                    vng_version_override = match.group(1).strip()
+                    print(f"Could not parse numeric version. Fallback to string: {vng_version_override}")
+
         else:
             print(f"Not enough note links for positional VNG extraction. Found {len(note_links)} links.")
 
