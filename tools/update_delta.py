@@ -247,35 +247,46 @@ def parse_anotepad_links(root_url):
                     print(f"Found candidate for International: {link}")
                     intl_sub_url = urljoin("https://vi.anotepad.com", link)
 
-    # Find VNG (Positional Logic - 3rd line)
+    # Find VNG (Positional Logic - 3rd Link)
     try:
-        # fetch_anotepad_content wraps str(content_div) which might contain the wrapper itself or be the wrapper
-        # The content_soup is parsed from that string.
-        # Usually str(content_div) is <div class='plaintext'>...</div>
-        # So content_soup.find('div') returns that wrapper.
-        wrapper = content_soup.find('div')
-        if wrapper:
-            lines = wrapper.find_all('div', recursive=False)
-            if len(lines) >= 3:
-                # User says 3rd position. Assuming 1-based index 3 -> array index 2.
-                vng_line = lines[2]
-                vng_text_raw = vng_line.get_text().strip()
-                print(f"VNG Line Text: {vng_text_raw}")
+        # Find all valid note links
+        note_links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
+        # Exclude self reference if any (though regex handles it usually)
+        note_links = [l for l in note_links if 'pntxb676' not in l['href']]
 
-                # Extract Link
-                link_el = vng_line.find('a', href=re.compile(r'/notes/[\w]+'))
-                if link_el:
-                    vng_sub_url = urljoin("https://vi.anotepad.com", link_el['href'])
-                    print(f"Found positional VNG link: {vng_sub_url}")
+        if len(note_links) >= 3:
+            # 3rd link (Index 2)
+            target_link = note_links[2]
+            vng_sub_url = urljoin("https://vi.anotepad.com", target_link['href'])
+            print(f"Found positional VNG link (3rd): {vng_sub_url}")
 
-                # Extract Version Override
-                # Expecting: 🥷 DeltaX V2.706 ( VNG Fix 261 )
-                match = re.search(r'(V\d+[\d\.]*.*(?:\(.*\))?)', vng_text_raw)
-                if match:
-                    vng_version_override = match.group(1).strip()
-                    print(f"Extracted VNG Version Override: {vng_version_override}")
-            else:
-                print(f"Not enough lines for positional VNG extraction. Found {len(lines)} lines.")
+            # Extract Version Override by traversing backwards
+            collected_text = []
+            curr = target_link.previous_element
+            steps = 0
+            while curr and steps < 500: # Limit steps to avoid infinite loop
+                if curr.name == 'a' and re.search(r'/notes/', curr.get('href', '')):
+                    break # Stop at previous link
+
+                if isinstance(curr, str):
+                    text = curr.strip()
+                    if text:
+                        collected_text.insert(0, text)
+
+                curr = curr.previous_element
+                steps += 1
+
+            full_text = " ".join(collected_text)
+            print(f"Extracted context text: {full_text[:100]}...")
+
+            # Regex for version: V2.706 ( VNG Fix 261 )
+            match = re.search(r'(V\d+.*?\s*\(.*?\))', full_text)
+            if match:
+                vng_version_override = match.group(1).strip()
+                print(f"Extracted VNG Version Override: {vng_version_override}")
+        else:
+            print(f"Not enough note links for positional VNG extraction. Found {len(note_links)} links.")
+
     except Exception as e:
         print(f"Error in positional VNG extraction: {e}")
 
