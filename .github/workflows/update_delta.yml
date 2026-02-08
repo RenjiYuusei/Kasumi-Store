@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 */12 * * *"
   workflow_dispatch:
+    inputs:
+      vng_version_override:
+        description: "Version Override for Delta VNG (e.g. 2.706.261)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -25,6 +30,8 @@ jobs:
           pip install requests beautifulsoup4 cloudscraper androguard
 
       - name: Run update script
+        env:
+          VNG_VERSION_OVERRIDE: ${{ inputs.vng_version_override }}
         run: python tools/update_delta.py
 
       - name: Commit and push if changed
@@ -32,9 +39,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add source/apps.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
+          if ! git diff --staged --quiet; then
             git commit -m "chore: Update Delta versions [skip ci]"
             git push
           fi

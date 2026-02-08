@@ -380,8 +380,15 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
     current_version = target_app.get('versionName')
     print(f"Current Version: {current_version}, New APK Version: {apk_version}")
 
-    # For saving, we prefer the APK version as requested by the user
-    new_version_to_save = apk_version
+    # Check for manual environment override
+    env_override = os.environ.get("VNG_VERSION_OVERRIDE")
+    if env_override and output_name_prefix == "delta_vng": # Only apply to VNG if specifically requested or generic?
+        # Assuming VNG_VERSION_OVERRIDE is specifically for VNG as per variable name
+        print(f"Manual Version Override found in Env: {env_override}")
+        new_version_to_save = env_override
+    else:
+        # Default behavior: use APK version
+        new_version_to_save = apk_version
 
     updated = False
 
@@ -390,11 +397,12 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
     print("Uploading/Checking file on VSPhone...")
 
     # Upload and check URL
+    # Include version in filename to be safe
     upload_name = f"{output_name_prefix}_{apk_version}.apk"
     new_url = client.upload_file(new_file_path, upload_name)
 
     if new_url:
-        # Update if URL changes (new content) OR if version string changes (from old non-APK value to new APK value)
+        # Update if URL changes (new content) OR if version string changes
         if new_url != target_app.get('url') or new_version_to_save != current_version:
              target_app['url'] = new_url
              target_app['versionName'] = new_version_to_save
