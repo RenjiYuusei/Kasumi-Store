@@ -10,11 +10,12 @@ import cloudscraper
 from androguard.core.apk import APK
 
 # Configuration
-# Resolve paths relative to this script file
+APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-APPS_JSON_PATH = os.path.join(BASE_DIR, "../source/apps.json")
-VSPHONE_USER = "contradict6016@lordofmysteries.org"
-VSPHONE_PASS = "155260"
+
+# VSPhone Credentials (from Env)
+VSPHONE_USER = os.environ.get("VSPHONE_USER")
+VSPHONE_PASS = os.environ.get("VSPHONE_PASS")
 
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -69,6 +70,7 @@ class VSPhoneClient:
     def upload_file(self, file_path, file_name):
         if not self.token: return None
 
+        print(f"Preparing upload for {file_name}...")
         file_size = os.path.getsize(file_path)
         with open(file_path, 'rb') as f:
             file_md5 = hashlib.md5(f.read()).hexdigest()
@@ -96,7 +98,7 @@ class VSPhoneClient:
                     return check_data['data'][0]['downloadUrl']
                 else:
                     # Finish upload (simulate actual upload flow)
-                    print("Registering file upload...")
+                    print("Registering file upload (assuming pre-existence or instant finish)...")
                     finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
                     ext = file_name.split('.')[-1]
                     finish_payload = {
@@ -106,9 +108,16 @@ class VSPhoneClient:
                     }
                     finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers())
                     finish_data = finish_resp.json()
+
                     if finish_data.get('code') == 200 and finish_data.get('data'):
-                        return finish_data['data']['downloadUrl']
-            print("Upload check failed:", check_data.get('msg'))
+                         url = finish_data['data']['downloadUrl']
+                         print(f"Upload registered successfully: {url}")
+                         return url
+                    else:
+                         print(f"Finish upload failed: {finish_data}")
+            else:
+                print("Upload check failed:", check_data.get('msg'))
+                print("Full Check Response:", check_data)
         except Exception as e:
             print("Upload error:", e)
         return None
@@ -227,7 +236,7 @@ def parse_anotepad_links(root_url):
     print(f"Parsing Anotepad root: {root_url}")
     soup, content_html = fetch_anotepad_content(root_url)
     if not content_html:
-        return None, None, None
+        return None, None, None, None # Fixed unpack count
 
     intl_sub_url = None
     intl_version_override = None
@@ -355,6 +364,13 @@ def get_apk_version(apk_path):
     try:
         apk = APK(apk_path)
         version_name = apk.get_androidversion_name()
+
+        # Handle bytes or string encoded bytes (e.g., "b'2.706'")
+        if isinstance(version_name, bytes):
+            version_name = version_name.decode('utf-8', errors='ignore')
+        elif isinstance(version_name, str) and version_name.startswith("b'") and version_name.endswith("'"):
+             version_name = version_name[2:-1]
+
         print(f"Extracted version from APK: {version_name}")
         return version_name
     except Exception as e:
@@ -415,18 +431,14 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
                  else:
                      trigger_version = f"{apk_version}.{fix_num}"
 
-        # If not found or fallback, look for full version string (e.g. 2.706.261)
+        # If not found or fallback, look for full version string (e.g. 2.706.261) or partial (2.706)
         if not trigger_version:
-            match_full = re.search(r'(\d+\.\d+\.\d+)', override_version_trigger)
+            match_full = re.search(r'(\d+\.\d+(?:\.\d+)?)', override_version_trigger)
             if match_full:
                 trigger_version = match_full.group(1)
 
 
-
-
-
-    if env_override and output_name_prefix == "delta_vng": # Only apply to VNG if specifically requested or generic?
-        # Assuming VNG_VERSION_OVERRIDE is specifically for VNG as per variable name
+    if env_override and output_name_prefix == "delta_vng":
         print(f"Manual Version Override found in Env: {env_override}")
         new_version_to_save = env_override
     elif trigger_version:
@@ -437,13 +449,14 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
         new_version_to_save = apk_version
     updated = False
 
-    # Calculate MD5 of new file to check for updates
-    with open(new_file_path, "rb") as f: new_md5 = hashlib.md5(f.read()).hexdigest()
     print("Uploading/Checking file on VSPhone...")
 
     # Upload and check URL
     # Include version in filename to be safe
-    upload_name = f"{output_name_prefix}_{apk_version}.apk"
+    # Ensure version string is clean for filename
+    clean_version = "".join(c for c in str(apk_version) if c.isalnum() or c in ".-_")
+    upload_name = f"{output_name_prefix}_{clean_version}.apk"
+
     new_url = client.upload_file(new_file_path, upload_name)
 
     if new_url:
@@ -476,10 +489,16 @@ def main():
 
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
-    intl_note, vng_note, vng_version_trigger, intl_version_trigger = parse_anotepad_links(anotepad_root)
+
+    # Unpack safely
+    res = parse_anotepad_links(anotepad_root)
+    if not res or len(res) < 4:
+         print("Failed to parse Anotepad links.")
+         return
+    intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
 
     # 1. Update International
-    intl_link_official = fetch_international_link()
+    # intl_link_official = fetch_international_link() # Not used for update logic currently
 
     # Use Anotepad for International if found
     if intl_note:
