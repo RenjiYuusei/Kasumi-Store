@@ -230,6 +230,7 @@ def parse_anotepad_links(root_url):
         return None, None, None
 
     intl_sub_url = None
+    intl_version_override = None
     vng_sub_url = None
     vng_version_override = None
 
@@ -246,6 +247,7 @@ def parse_anotepad_links(root_url):
                 if link:
                     print(f"Found candidate for International: {link}")
                     intl_sub_url = urljoin("https://vi.anotepad.com", link)
+                    intl_version_override = text
 
     # Find VNG (Positional Logic - 3rd Link)
     try:
@@ -287,7 +289,7 @@ def parse_anotepad_links(root_url):
     except Exception as e:
         print(f"Error in positional VNG extraction: {e}")
 
-    return intl_sub_url, vng_sub_url, vng_version_override
+    return intl_sub_url, vng_sub_url, vng_version_override, intl_version_override
 
 def resolve_sub2unlock_from_note(note_url):
     if not note_url: return None
@@ -385,7 +387,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
 
     # Extract version from trigger text if available
     trigger_version = None
-    if override_version_trigger and output_name_prefix == "delta_vng":
+    if override_version_trigger:
         print(f"Analyzing override trigger: '{override_version_trigger}'")
         # Try to find "Fix XXX" pattern first
         match_fix = re.search(r'Fix\s*(\d+)', override_version_trigger, re.IGNORECASE)
@@ -456,7 +458,7 @@ def main():
 
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
-    intl_note, vng_note, vng_version_trigger = parse_anotepad_links(anotepad_root)
+    intl_note, vng_note, vng_version_trigger, intl_version_trigger = parse_anotepad_links(anotepad_root)
 
     # 1. Update International
     intl_link_official = fetch_international_link()
@@ -464,7 +466,7 @@ def main():
     # Use Anotepad for International if found
     if intl_note:
         print("Using Anotepad source for International.")
-        if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl"):
+        if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl", override_version_trigger=intl_version_trigger):
             any_update = True
     else:
         print("Could not find International source.")
