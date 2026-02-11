@@ -230,6 +230,7 @@ def parse_anotepad_links(root_url):
         return None, None, None
 
     intl_sub_url = None
+    intl_version_override = None
     vng_sub_url = None
     vng_version_override = None
 
@@ -246,6 +247,7 @@ def parse_anotepad_links(root_url):
                 if link:
                     print(f"Found candidate for International: {link}")
                     intl_sub_url = urljoin("https://vi.anotepad.com", link)
+                    intl_version_override = text
 
     # Find VNG (Positional Logic - 3rd Link)
     try:
@@ -253,6 +255,20 @@ def parse_anotepad_links(root_url):
         note_links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
         # Exclude self reference if any (though regex handles it usually)
         note_links = [l for l in note_links if 'pntxb676' not in l['href']]
+
+        print(f"DEBUG: Found {len(note_links)} note links.")
+        for i, l in enumerate(note_links):
+             # Try to get previous text for context
+             curr = l.previous_element
+             text_found = ""
+             steps = 0
+             while curr and steps < 20:
+                 if isinstance(curr, str) and curr.strip():
+                     text_found = curr.strip()
+                 curr = curr.previous_element
+                 steps += 1
+             print(f"DEBUG: Link {i}: {l.get('href')} - Context: {text_found[:50]}...")
+
 
         if len(note_links) >= 3:
             # 3rd link (Index 2)
@@ -287,7 +303,7 @@ def parse_anotepad_links(root_url):
     except Exception as e:
         print(f"Error in positional VNG extraction: {e}")
 
-    return intl_sub_url, vng_sub_url, vng_version_override
+    return intl_sub_url, vng_sub_url, vng_version_override, intl_version_override
 
 def resolve_sub2unlock_from_note(note_url):
     if not note_url: return None
@@ -382,14 +398,43 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
 
     # Check for manual environment override
     env_override = os.environ.get("VNG_VERSION_OVERRIDE")
+
+    # Extract version from trigger text if available
+    trigger_version = None
+    if override_version_trigger:
+        print(f"Analyzing override trigger: '{override_version_trigger}'")
+        # Try to find "Fix XXX" pattern first
+        match_fix = re.search(r'Fix\s*(\d+)', override_version_trigger, re.IGNORECASE)
+        if match_fix:
+             fix_num = match_fix.group(1)
+             print(f"Found Fix number: {fix_num}")
+             if apk_version:
+                 parts = apk_version.split('.')
+                 if len(parts) >= 2:
+                     trigger_version = f"{parts[0]}.{parts[1]}.{fix_num}"
+                 else:
+                     trigger_version = f"{apk_version}.{fix_num}"
+
+        # If not found or fallback, look for full version string (e.g. 2.706.261)
+        if not trigger_version:
+            match_full = re.search(r'(\d+\.\d+\.\d+)', override_version_trigger)
+            if match_full:
+                trigger_version = match_full.group(1)
+
+
+
+
+
     if env_override and output_name_prefix == "delta_vng": # Only apply to VNG if specifically requested or generic?
         # Assuming VNG_VERSION_OVERRIDE is specifically for VNG as per variable name
         print(f"Manual Version Override found in Env: {env_override}")
         new_version_to_save = env_override
+    elif trigger_version:
+        print(f"Version Override found in Trigger Text: {trigger_version}")
+        new_version_to_save = trigger_version
     else:
         # Default behavior: use APK version
         new_version_to_save = apk_version
-
     updated = False
 
     # Calculate MD5 of new file to check for updates
@@ -409,7 +454,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
              updated = True
              print(f"Updated {target_app['name']} to version {new_version_to_save} @ {new_url}")
         else:
-             print("File content identical (URL match) and Version match. No update needed.")
+             print(f"File content identical. URL: {new_url} == {target_app.get('url')} AND Version: {new_version_to_save} == {current_version}")
     else:
         print("Upload failed.")
 
@@ -431,7 +476,7 @@ def main():
 
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
-    intl_note, vng_note, vng_version_trigger = parse_anotepad_links(anotepad_root)
+    intl_note, vng_note, vng_version_trigger, intl_version_trigger = parse_anotepad_links(anotepad_root)
 
     # 1. Update International
     intl_link_official = fetch_international_link()
@@ -439,7 +484,7 @@ def main():
     # Use Anotepad for International if found
     if intl_note:
         print("Using Anotepad source for International.")
-        if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl"):
+        if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl", override_version_trigger=intl_version_trigger):
             any_update = True
     else:
         print("Could not find International source.")
