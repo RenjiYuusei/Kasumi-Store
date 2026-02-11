@@ -13,9 +13,9 @@ from androguard.core.apk import APK
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# VSPhone Credentials
-VSPHONE_USER = os.environ.get("VSPHONE_USER", "contradict6016@lordofmysteries.org")
-VSPHONE_PASS = os.environ.get("VSPHONE_PASS", "155260")
+# VSPhone Credentials (Hardcoded)
+VSPHONE_USER = "contradict6016@lordofmysteries.org"
+VSPHONE_PASS = "155260"
 
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -397,6 +397,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
 
     print(f"MediaFire Link: {mf_link}")
 
+    updated = False
     # Download new file
     new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new.apk")
     if not download_file(mf_link, new_file_path):
@@ -412,10 +413,10 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
     current_version = target_app.get('versionName')
     print(f"Current Version: {current_version}, New APK Version: {apk_version}")
 
-    # Check for manual environment override
+    # Manual Env Override (if any)
     env_override = os.environ.get("VNG_VERSION_OVERRIDE")
 
-    # Extract version from trigger text if available
+    # Trigger Text Logic
     trigger_version = None
     if override_version_trigger:
         print(f"Analyzing override trigger: '{override_version_trigger}'")
@@ -431,23 +432,32 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
                  else:
                      trigger_version = f"{apk_version}.{fix_num}"
 
-        # If not found or fallback, look for full version string (e.g. 2.706.261) or partial (2.706)
+        # Look for version strings in text (e.g. 2.706)
         if not trigger_version:
             match_full = re.search(r'(\d+\.\d+(?:\.\d+)?)', override_version_trigger)
             if match_full:
                 trigger_version = match_full.group(1)
 
 
+    new_version_to_save = apk_version # Default to APK
+
     if env_override and output_name_prefix == "delta_vng":
         print(f"Manual Version Override found in Env: {env_override}")
         new_version_to_save = env_override
     elif trigger_version:
-        print(f"Version Override found in Trigger Text: {trigger_version}")
-        new_version_to_save = trigger_version
-    else:
-        # Default behavior: use APK version
-        new_version_to_save = apk_version
-    updated = False
+        # Determine if this is a "real" fix override
+        # Check for explicit "Fix <number>" pattern
+        has_explicit_fix = bool(re.search(r"Fix\s*\d+", override_version_trigger, re.IGNORECASE))
+
+        if has_explicit_fix:
+             print(f"Explicit Fix Override found: {trigger_version}")
+             new_version_to_save = trigger_version
+        elif apk_version and len(str(apk_version)) >= len(str(trigger_version)) and str(apk_version).startswith(str(trigger_version)):
+             print(f"Preferring detailed APK version ({apk_version}) over short trigger ({trigger_version})")
+             new_version_to_save = apk_version
+        else:
+             print(f"Version Override found in Trigger Text: {trigger_version}")
+             new_version_to_save = trigger_version
 
     print("Uploading/Checking file on VSPhone...")
 
@@ -498,8 +508,6 @@ def main():
     intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
 
     # 1. Update International
-    # intl_link_official = fetch_international_link() # Not used for update logic currently
-
     # Use Anotepad for International if found
     if intl_note:
         print("Using Anotepad source for International.")
