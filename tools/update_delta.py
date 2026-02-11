@@ -407,6 +407,22 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
             if match_full:
                 trigger_version = match_full.group(1)
 
+    # Check filename/URL for Fix pattern if not found in trigger (for VNG especially)
+    if not trigger_version and mf_link:
+        # Match "Fix" followed by optional space/+/underscore/dash/etc and digits
+        match_fix_url = re.search(r'Fix[+\s\-_]*(\d+)', mf_link, re.IGNORECASE)
+        if match_fix_url:
+             fix_num = match_fix_url.group(1)
+             print(f"Found Fix number in URL: {fix_num}")
+             if apk_version:
+                 parts = apk_version.split('.')
+                 if len(parts) >= 2:
+                     trigger_version = f"{parts[0]}.{parts[1]}.{fix_num}"
+                 else:
+                     trigger_version = f"{apk_version}.{fix_num}"
+
+
+
     if env_override and output_name_prefix == "delta_vng": # Only apply to VNG if specifically requested or generic?
         # Assuming VNG_VERSION_OVERRIDE is specifically for VNG as per variable name
         print(f"Manual Version Override found in Env: {env_override}")
