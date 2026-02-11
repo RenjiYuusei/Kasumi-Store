@@ -43,3 +43,7 @@ Thumbs.db
 tools/web-editor/node_modules/
 tools/web-editor/dist/
 .kotlin/
+
+# Python
+__pycache__/
+*.pyc
