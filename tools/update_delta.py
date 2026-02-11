@@ -454,7 +454,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
              updated = True
              print(f"Updated {target_app['name']} to version {new_version_to_save} @ {new_url}")
         else:
-             print("File content identical (URL match) and Version match. No update needed.")
+             print(f"File content identical. URL: {new_url} == {target_app.get('url')} AND Version: {new_version_to_save} == {current_version}")
     else:
         print("Upload failed.")
 
