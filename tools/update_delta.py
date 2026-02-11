@@ -382,14 +382,39 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
 
     # Check for manual environment override
     env_override = os.environ.get("VNG_VERSION_OVERRIDE")
+
+    # Extract version from trigger text if available
+    trigger_version = None
+    if override_version_trigger and output_name_prefix == "delta_vng":
+        print(f"Analyzing override trigger: '{override_version_trigger}'")
+        # Try to find "Fix XXX" pattern first
+        match_fix = re.search(r'Fix\s*(\d+)', override_version_trigger, re.IGNORECASE)
+        if match_fix:
+             fix_num = match_fix.group(1)
+             print(f"Found Fix number: {fix_num}")
+             if apk_version:
+                 parts = apk_version.split('.')
+                 if len(parts) >= 2:
+                     trigger_version = f"{parts[0]}.{parts[1]}.{fix_num}"
+                 else:
+                     trigger_version = f"{apk_version}.{fix_num}"
+
+        # If not found or fallback, look for full version string (e.g. 2.706.261)
+        if not trigger_version:
+            match_full = re.search(r'(\d+\.\d+\.\d+)', override_version_trigger)
+            if match_full:
+                trigger_version = match_full.group(1)
+
     if env_override and output_name_prefix == "delta_vng": # Only apply to VNG if specifically requested or generic?
         # Assuming VNG_VERSION_OVERRIDE is specifically for VNG as per variable name
         print(f"Manual Version Override found in Env: {env_override}")
         new_version_to_save = env_override
+    elif trigger_version:
+        print(f"Version Override found in Trigger Text: {trigger_version}")
+        new_version_to_save = trigger_version
     else:
         # Default behavior: use APK version
         new_version_to_save = apk_version
-
     updated = False
 
     # Calculate MD5 of new file to check for updates
