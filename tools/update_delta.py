@@ -13,9 +13,9 @@ from androguard.core.apk import APK
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# VSPhone Credentials (from Env)
-VSPHONE_USER = os.environ.get("VSPHONE_USER")
-VSPHONE_PASS = os.environ.get("VSPHONE_PASS")
+# VSPhone Credentials
+VSPHONE_USER = os.environ.get("VSPHONE_USER", "contradict6016@lordofmysteries.org")
+VSPHONE_PASS = os.environ.get("VSPHONE_PASS", "155260")
 
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -236,7 +236,7 @@ def parse_anotepad_links(root_url):
     print(f"Parsing Anotepad root: {root_url}")
     soup, content_html = fetch_anotepad_content(root_url)
     if not content_html:
-        return None, None, None, None # Fixed unpack count
+        return None, None, None, None
 
     intl_sub_url = None
     intl_version_override = None
