@@ -256,11 +256,25 @@ def parse_anotepad_links(root_url):
         # Exclude self reference if any (though regex handles it usually)
         note_links = [l for l in note_links if 'pntxb676' not in l['href']]
 
-        if len(note_links) >= 3:
+        print(f"DEBUG: Found {len(note_links)} note links.")
+        for i, l in enumerate(note_links):
+             # Try to get previous text for context
+             curr = l.previous_element
+             text_found = ""
+             steps = 0
+             while curr and steps < 20:
+                 if isinstance(curr, str) and curr.strip():
+                     text_found = curr.strip()
+                 curr = curr.previous_element
+                 steps += 1
+             print(f"DEBUG: Link {i}: {l.get('href')} - Context: {text_found[:50]}...")
+
+
+        if len(note_links) >= 4:
             # 3rd link (Index 2)
-            target_link = note_links[2]
+            target_link = note_links[3]
             vng_sub_url = urljoin("https://vi.anotepad.com", target_link['href'])
-            print(f"Found positional VNG link (3rd): {vng_sub_url}")
+            print(f"Found positional VNG link (4th): {vng_sub_url}")
 
             # Extract Version Override by traversing backwards
             collected_text = []
