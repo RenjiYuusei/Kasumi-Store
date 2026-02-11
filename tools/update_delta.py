@@ -270,11 +270,11 @@ def parse_anotepad_links(root_url):
              print(f"DEBUG: Link {i}: {l.get('href')} - Context: {text_found[:50]}...")
 
 
-        if len(note_links) >= 4:
+        if len(note_links) >= 3:
             # 3rd link (Index 2)
-            target_link = note_links[3]
+            target_link = note_links[2]
             vng_sub_url = urljoin("https://vi.anotepad.com", target_link['href'])
-            print(f"Found positional VNG link (4th): {vng_sub_url}")
+            print(f"Found positional VNG link (3rd): {vng_sub_url}")
 
             # Extract Version Override by traversing backwards
             collected_text = []
@@ -421,19 +421,7 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
             if match_full:
                 trigger_version = match_full.group(1)
 
-    # Check filename/URL for Fix pattern if not found in trigger (for VNG especially)
-    if not trigger_version and mf_link:
-        # Match "Fix" followed by optional space/+/underscore/dash/etc and digits
-        match_fix_url = re.search(r'Fix[+\s\-_]*(\d+)', mf_link, re.IGNORECASE)
-        if match_fix_url:
-             fix_num = match_fix_url.group(1)
-             print(f"Found Fix number in URL: {fix_num}")
-             if apk_version:
-                 parts = apk_version.split('.')
-                 if len(parts) >= 2:
-                     trigger_version = f"{parts[0]}.{parts[1]}.{fix_num}"
-                 else:
-                     trigger_version = f"{apk_version}.{fix_num}"
+
 
 
 
