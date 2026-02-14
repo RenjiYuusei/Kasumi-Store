@@ -103,6 +103,8 @@ class MainActivity : ComponentActivity() {
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private var cacheVersion by mutableIntStateOf(0)
     private var fileStats by mutableStateOf<Map<String, FileStats>>(emptyMap())
+    private var playStoreResults by mutableStateOf<List<ApkItem>>(emptyList())
+    private var isSearchingOnline by mutableStateOf(false)
 
     private val installReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -442,6 +444,38 @@ class MainActivity : ComponentActivity() {
                          lifecycleScope.launch { saveItems() }
                          onShowSnackbar("Đã xóa ${it.name}")
                      })
+                 }
+                 if (searchQuery.isNotBlank()) {
+                     item {
+                         Button(
+                             onClick = { performOnlineSearch(searchQuery) },
+                             modifier = Modifier.fillMaxWidth().padding(16.dp),
+                             enabled = !isSearchingOnline
+                         ) {
+                             if (isSearchingOnline) {
+                                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                             } else {
+                                 Text("Tìm kiếm online: " + searchQuery)
+                             }
+                         }
+                     }
+                 }
+                 if (playStoreResults.isNotEmpty()) {
+                     item {
+                         Text(
+                             text = "Kết quả từ Play Store",
+                             style = MaterialTheme.typography.titleMedium,
+                             modifier = Modifier.padding(16.dp)
+                         )
+                     }
+                     items(playStoreResults) { item ->
+                         AppItemRow(
+                             item = item,
+                             cacheVersion = 0,
+                             onInstall = { onInstallClicked(it, onShowSnackbar) },
+                             onDelete = {}
+                         )
+                     }
                  }
              }
         }
@@ -789,13 +823,34 @@ private fun logBg(msg: String) = log(msg)
         }
     }
 
+    private fun performOnlineSearch(query: String) {
+        if (query.isBlank()) return
+        isSearchingOnline = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            val results = PlayStoreUtils.searchPlayStore(query)
+            withContext(Dispatchers.Main) {
+                playStoreResults = results
+                isSearchingOnline = false
+            }
+        }
+    }
+
     private fun onInstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
+        if (item.sourceType == SourceType.PLAY_STORE) {
+             try {
+                 startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+             } catch (e: Exception) {
+                 onShowSnackbar("Không thể mở Play Store")
+             }
+             return
+        }
         lifecycleScope.launch {
             setBusy(true)
             try {
                 val apkFile = when (item.sourceType) {
                     SourceType.LOCAL -> if (item.uri != null) copyFromUriIfNeeded(Uri.parse(item.uri)) else null
                     SourceType.URL -> downloadApk(item)
+                    else -> null
                 }
 
                 if (apkFile == null) {
@@ -1356,7 +1411,7 @@ data class ApkItem(
     }
 }
 
-enum class SourceType { URL, LOCAL }
+enum class SourceType { URL, LOCAL, PLAY_STORE }
 
 data class PreloadApp(
     val name: String,
