@@ -34,7 +34,7 @@ jobs:
 
     - name: Download Tools
       run: |
-        wget -O apktool.jar https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.12.1.jar
+        wget -O apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v2.12.1/apktool_2.12.1.jar
         wget -O uber-apk-signer.jar https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/uber-apk-signer-1.3.0.jar
         chmod +x apktool.jar uber-apk-signer.jar
 
