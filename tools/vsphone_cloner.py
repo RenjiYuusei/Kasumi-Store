@@ -17,22 +17,38 @@ UBER_SIGNER_JAR = "uber-apk-signer.jar"
 
 def get_online_version_info():
     try:
-        response = requests.get(API_URL)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("code") == 200 and data.get("data"):
-             # The API returns a direct download URL in data['data']
-             # Example: https://file.vsphone.com/common/appFile/vsphone-app-v1.0.41.1_seo.apk?t=1771161455225
-             url = data["data"]
-             # Extract version from URL using regex
-             match = re.search(r"vsphone-app-v([\d\.]+)_seo\.apk", url)
-             if match:
-                 return match.group(1), url
-             else:
-                 print(f"Could not extract version from URL: {url}")
-                 return None, None
+        # The API redirects (302) to the file URL. We need to catch that redirect.
+        response = requests.get(API_URL, allow_redirects=False)
+
+        if response.status_code in (301, 302, 307):
+            url = response.headers.get('Location')
+            if url:
+                 # Extract version from URL using regex
+                 # Example: https://file.vsphone.com/common/appFile/vsphone-app-v1.0.41.1_seo.apk?t=1771161455225
+                 match = re.search(r"vsphone-app-v([\d\.]+)_seo\.apk", url)
+                 if match:
+                     return match.group(1), url
+                 else:
+                     print(f"Could not extract version from URL: {url}")
+                     return None, None
+            else:
+                print("Redirected but no Location header found.")
+                return None, None
+        elif response.status_code == 200:
+             # Fallback if it returns JSON (though current observation says otherwise)
+             try:
+                 data = response.json()
+                 if data.get("code") == 200 and data.get("data"):
+                     url = data["data"]
+                     match = re.search(r"vsphone-app-v([\d\.]+)_seo\.apk", url)
+                     if match:
+                         return match.group(1), url
+             except:
+                 pass
+             print(f"Unexpected 200 response without valid JSON/Data: {response.text[:100]}")
+             return None, None
         else:
-            print("API response invalid or no data.")
+            print(f"API response failed with status {response.status_code}")
             return None, None
     except Exception as e:
         print(f"Error fetching version: {e}")
