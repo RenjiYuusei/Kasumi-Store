@@ -66,6 +66,45 @@ class VSPhoneClient:
             print("Login error:", e)
             return False
 
+    def get_oss_info(self):
+        url = f"{self.base_url}/oss/getOssInfo"
+        try:
+            resp = requests.get(url, headers=self.get_headers())
+            return resp.json().get('data')
+        except Exception as e:
+            print(f"OSS Info failed: {e}")
+            return None
+
+    def get_sts_token(self):
+        url = f"{self.base_url}/oss/getsts"
+        try:
+            resp = requests.get(url, headers=self.get_headers())
+            return resp.json().get('data')
+        except Exception as e:
+            print(f"STS Token failed: {e}")
+            return None
+
+    def init_cloud_file(self, file_name, file_size, file_md5):
+        url = f"{self.base_url}/cloudFile/init"
+        payload = {
+            "fileOriginName": file_name,
+            "operType": 2,
+            "userId": self.user_id,
+            "fileLength": file_size,
+            "fileMd5": file_md5
+        }
+        try:
+            # print(f"Calling initCloudFile with payload: {payload}")
+            resp = requests.post(url, json=payload, headers=self.get_headers())
+            data = resp.json()
+            # print(f"Init Response: {data}")
+            if data.get('code') == 200:
+                return data.get('data')
+            return None
+        except Exception as e:
+            print(f"Init failed: {e}")
+            return None
+
     def upload_file(self, file_path, file_name):
         if not self.token: return None
 
@@ -96,13 +135,52 @@ class VSPhoneClient:
                     print("File already exists on server.")
                     return check_data['data'][0]['downloadUrl']
                 else:
-                    # Finish upload (simulate actual upload flow)
-                    print("Registering file upload (assuming pre-existence or instant finish)...")
-                    finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
+                    # File not found, need full upload flow
+                    print("File not found on server, starting upload process...")
+
+                    # 1. Init Cloud File
+                    file_id = self.init_cloud_file(file_name, file_size, file_md5)
+                    if not file_id:
+                        print("Failed to initialize cloud file upload.")
+                        return None
+
+                    # 2. Get OSS Credentials
+                    oss_info = self.get_oss_info()
+                    sts_token = self.get_sts_token()
+
+                    if not oss_info or not sts_token:
+                        print("Failed to retrieve OSS credentials.")
+                        return None
+
+                    # 3. Upload to OSS
+                    try:
+                        import oss2
+                    except ImportError:
+                        print("Error: 'oss2' library is required for upload. Please install it via pip install oss2")
+                        return None
+
+                    auth = oss2.StsAuth(
+                        sts_token['AccessKeyId'],
+                        sts_token['AccessKeySecret'],
+                        sts_token['SecurityToken']
+                    )
+
+                    endpoint = oss_info['endpoint']
+                    bucket_name = oss_info['bucket']
+                    bucket = oss2.Bucket(auth, endpoint, bucket_name)
+
                     ext = file_name.split('.')[-1]
+                    object_name = f"userFile/{file_md5}.{ext}"
+
+                    print(f"Uploading to OSS: {object_name}...")
+                    bucket.put_object_from_file(object_name, file_path)
+                    print("OSS upload complete.")
+
+                    # 4. Finish Upload
+                    finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
                     finish_payload = {
-                        "fileId": 0,
-                        "filePath": f"userFile/{file_md5}.{ext}",
+                        "fileId": file_id,
+                        "filePath": object_name,
                         "fileOriginName": file_name
                     }
                     finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers())
@@ -119,6 +197,8 @@ class VSPhoneClient:
                 print("Full Check Response:", check_data)
         except Exception as e:
             print("Upload error:", e)
+            import traceback
+            traceback.print_exc()
         return None
 
 def get_online_version_info():
