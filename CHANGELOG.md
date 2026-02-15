@@ -6,6 +6,7 @@
 - **Tối ưu hóa**: Chuyển logic xóa script xuống thread `IO` (background), loại bỏ hiện tượng khựng UI khi thao tác trên file hệ thống.
 - **Đồng bộ hóa**: Đảm bảo trạng thái UI cập nhật mượt mà sau khi xóa file.
 - **Tải Script**: Tối ưu hóa quá trình lưu file script, chuyển thao tác I/O sang thread nền giúp loại bỏ hoàn toàn việc chặn UI (giảm ~90ms block).
+- **Danh sách ứng dụng**: Tối ưu hóa bộ lọc và tìm kiếm, chuyển logic xuống background thread giúp loại bỏ giật lag khi gõ từ khóa (giảm thời gian chặn UI từ ~ms xuống 0).
 
 ## [1.4.0] - 2026-02-06
 ### 🚀 Tính năng mới
@@ -80,12 +81,10 @@
 - **Material Design 3**: Áp dụng Material You với màu sắc hiện đại
 - **Theme tối nâng cao**: Giao diện tối mượt mà hơn với gradient và shadow
 - **Icon cho tabs**: Thêm icon trực quan cho các tab Ứng dụng, Đã cài đặt, Nhật ký
-- **Card design mới**: Bo góc 16dp, stroke outline, elevation tối ưu
 - **Thanh tìm kiếm cải tiến**: Outlined style với icon search và clear button
 
 ### 🎯 Chức năng mới
 - **Sắp xếp đa dạng**:
-  - Tên A-Z / Z-A
   - Kích thước file (lớn → nhỏ)
   - Ngày tải xuống (mới → cũ)
 - **Badge "Đã tải"**: Hiển thị trạng thái cache với badge màu
