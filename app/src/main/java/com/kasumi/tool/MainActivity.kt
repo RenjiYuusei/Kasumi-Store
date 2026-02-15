@@ -1103,9 +1103,13 @@ private suspend fun loadScriptsFromLocal() {
 
     private fun deleteScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
         if (script.localPath != null) {
-            File(script.localPath).delete()
-            onShowSnackbar(getString(R.string.deleted_script))
-            lifecycleScope.launch { loadScriptsFromLocal() }
+            lifecycleScope.launch {
+                withContext(Dispatchers.IO) {
+                    File(script.localPath).delete()
+                }
+                onShowSnackbar(getString(R.string.deleted_script))
+                loadScriptsFromLocal()
+            }
         }
     }
 

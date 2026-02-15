@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.0] - 2026-02-15
+### ⚡ Hiệu năng
+- **Tối ưu hóa**: Chuyển logic xóa script xuống thread `IO` (background), loại bỏ hiện tượng khựng UI khi thao tác trên file hệ thống.
+- **Đồng bộ hóa**: Đảm bảo trạng thái UI cập nhật mượt mà sau khi xóa file.
+
 ## [1.4.0] - 2026-02-06
 ### 🚀 Tính năng mới
 - **Web Editor**: Ra mắt công cụ quản lý dữ liệu (`apps.json`, `scripts.json`) trực quan trên nền web (`tools/web-editor`), hỗ trợ review và đóng góp dễ dàng hơn.
