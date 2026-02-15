@@ -1,5 +1,12 @@
 # Changelog
 
+
+## [1.5.1] - 2026-02-15
+### 🚀 Tính năng mới
+- **Cài đặt từ Cache**: Hỗ trợ cài đặt ứng dụng trực tiếp từ file đã tải (cache) mà không cần tải lại, tiết kiệm thời gian và băng thông. Nút tải xuống sẽ tự động chuyển thành nút "Cài đặt" (icon Play) khi phát hiện file.
+
+### 🐛 Sửa lỗi
+- **Giao diện Cache**: Khắc phục lỗi trạng thái "Đã tải" không cập nhật sau khi xóa cache hoặc tải xong. Giờ đây danh sách sẽ tự động làm mới ngay lập tức.
 ## [1.5.0] - 2026-02-15
 ### ⚡ Hiệu năng
 - **Hiệu năng UI**: Tối ưu hóa cập nhật danh sách ứng dụng, sử dụng `mutableStateMapOf` và xử lý thread an toàn giúp cập nhật trạng thái file nhanh hơn ~3700 lần (0.015ms vs 55ms), loại bỏ hoàn toàn giật lag khi tải file.
