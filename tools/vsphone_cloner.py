@@ -206,25 +206,17 @@ def main():
         print(f"Unsigned APK size: {os.path.getsize(unsigned_apk)} bytes")
 
         print("Signing APK...")
-        # uber-apk-signer
+        # uber-apk-signer with --overwrite modifies the file in place
         out, err = run_command(["java", "-jar", UBER_SIGNER_JAR, "-a", unsigned_apk, "--allowResign", "--overwrite"])
         print(out)
         if err: print(f"Stderr: {err}")
 
-        # Look for any signed APK in the work directory that matches pattern
-        # uber-apk-signer usually appends -aligned-debugSigned
-        pattern = os.path.join(work_dir, f"unsigned_{i}*-debugSigned.apk")
-        found_files = glob.glob(pattern)
+        # Since we used --overwrite, the signed APK is just unsigned_apk
+        signed_apk = unsigned_apk
 
-        if not found_files:
-             print(f"Error: Signed APK not found matching pattern: {pattern}")
-             print("Files in temp_work:")
-             for f in os.listdir(work_dir):
-                 print(f" - {f}")
+        if not os.path.exists(signed_apk):
+             print(f"Error: Signed APK not found at {signed_apk}")
              continue
-
-        signed_apk = found_files[0]
-        print(f"Found signed APK: {signed_apk}")
 
         final_apk_name = f"{clone_name}_v{online_version}.apk"
         final_apk_path = os.path.join(work_dir, final_apk_name)
