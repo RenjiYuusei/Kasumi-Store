@@ -103,6 +103,7 @@ class MainActivity : ComponentActivity() {
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
+    private var statsVersion by mutableIntStateOf(0)
 
     private val installReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -195,6 +196,7 @@ class MainActivity : ComponentActivity() {
         // Compute file stats in background to avoid I/O in UI
         LaunchedEffect(appsList) {
             FileStatsHelper.updateFileStats(appsList, fileStats, cacheDir)
+            statsVersion++
         }
 
         if (scriptToDownload != null) {
@@ -365,7 +367,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode) {
+        val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
             snapshotFlow {
                 Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
             }.collect { (params, stats) ->
@@ -744,6 +746,7 @@ private fun logBg(msg: String) = log(msg)
                 val cachedFile = FileUtils.getCacheFile(item, cacheDir)
                 val apkFile = if (item.sourceType == SourceType.URL && cachedFile.exists() && cachedFile.length() > 0) {
                      FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
+                     statsVersion++
                      cachedFile
                 } else {
                     when (item.sourceType) {
@@ -826,6 +829,7 @@ private fun logBg(msg: String) = log(msg)
                 }
             }
             FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
+            withContext(Dispatchers.Main) { statsVersion++ }
             outFile
         }
     }
@@ -888,13 +892,20 @@ private fun logBg(msg: String) = log(msg)
             var count = 0
             var size = 0L
 
+            // Delete known items first
+            appsList.forEach { item ->
+                val file = FileUtils.getCacheFile(item, cacheDir)
+                if (file.exists() && file.isFile) {
+                    size += file.length()
+                    if (file.delete()) count++
+                }
+            }
+            // Clean up orphans
             if (apkCacheDir.exists()) {
                 apkCacheDir.listFiles()?.forEach { file ->
-                    if (file.isFile) {
+                    if (file.isFile && file.exists()) {
                         size += file.length()
-                        if (file.delete()) {
-                            count++
-                        }
+                        if (file.delete()) count++
                     }
                 }
             }
@@ -908,7 +919,7 @@ private fun logBg(msg: String) = log(msg)
                  onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
                  // Refresh list to update UI state (re-calculate cache existence)
                  appsList = appsList.toList()
-                 lifecycleScope.launch { FileStatsHelper.refreshAll(appsList, fileStats, cacheDir) }
+                 lifecycleScope.launch { FileStatsHelper.refreshAll(appsList, fileStats, cacheDir); statsVersion++ }
              }
          }
     }
