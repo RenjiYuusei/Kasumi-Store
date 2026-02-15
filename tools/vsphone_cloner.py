@@ -3,7 +3,7 @@ import requests
 import subprocess
 import shutil
 import re
-import json
+import glob
 import time
 
 # Configuration
@@ -79,7 +79,7 @@ def run_command(command):
     if result.returncode != 0:
         print(f"Command failed: {result.stderr}")
         raise Exception(f"Command failed: {result.stderr}")
-    return result.stdout
+    return result.stdout, result.stderr
 
 def modify_manifest(manifest_path, clone_index):
     print(f"Modifying {manifest_path} for clone {clone_index}...")
@@ -180,32 +180,51 @@ def main():
     # Decode once
     decoded_dir = os.path.join(work_dir, "decoded")
     print("Decoding APK...")
-    run_command(["java", "-jar", APKTOOL_JAR, "d", "-f", "-o", decoded_dir, apk_path])
+    out, err = run_command(["java", "-jar", APKTOOL_JAR, "d", "-f", "-o", decoded_dir, apk_path])
+    print(out)
+    if err: print(f"Stderr: {err}")
 
     # Loop for 5 clones
     for i in range(1, 6):
         clone_name = f"Kasumi-{i}"
         print(f"\nProcessing {clone_name}...")
 
-        # We modify the SAME decoded directory for each iteration to save space/time,
-        # but we must be careful. Ideally, we'd copy it, but modify-build-modify-build is faster if we are careful.
-        # Actually, since we change package name each time, overwriting the previous change is fine.
-
         modify_manifest(os.path.join(decoded_dir, "AndroidManifest.xml"), i)
         modify_strings(os.path.join(decoded_dir, "res", "values", "strings.xml"), i)
 
         unsigned_apk = os.path.join(work_dir, f"unsigned_{i}.apk")
         print("Building APK...")
-        run_command(["java", "-jar", APKTOOL_JAR, "b", decoded_dir, "-o", unsigned_apk])
+        out, err = run_command(["java", "-jar", APKTOOL_JAR, "b", decoded_dir, "-o", unsigned_apk])
+        print(out)
+        if err: print(f"Stderr: {err}")
+
+        # Verify built APK exists
+        if not os.path.exists(unsigned_apk):
+             print(f"Error: Build failed, {unsigned_apk} not found.")
+             continue
+
+        print(f"Unsigned APK size: {os.path.getsize(unsigned_apk)} bytes")
 
         print("Signing APK...")
         # uber-apk-signer
-        run_command(["java", "-jar", UBER_SIGNER_JAR, "-a", unsigned_apk, "--allowResign", "--overwrite"])
+        out, err = run_command(["java", "-jar", UBER_SIGNER_JAR, "-a", unsigned_apk, "--allowResign", "--overwrite"])
+        print(out)
+        if err: print(f"Stderr: {err}")
 
-        signed_apk = os.path.join(work_dir, f"unsigned_{i}-aligned-debugSigned.apk")
-        if not os.path.exists(signed_apk):
-             print(f"Error: Signed APK not found: {signed_apk}")
+        # Look for any signed APK in the work directory that matches pattern
+        # uber-apk-signer usually appends -aligned-debugSigned
+        pattern = os.path.join(work_dir, f"unsigned_{i}*-debugSigned.apk")
+        found_files = glob.glob(pattern)
+
+        if not found_files:
+             print(f"Error: Signed APK not found matching pattern: {pattern}")
+             print("Files in temp_work:")
+             for f in os.listdir(work_dir):
+                 print(f" - {f}")
              continue
+
+        signed_apk = found_files[0]
+        print(f"Found signed APK: {signed_apk}")
 
         final_apk_name = f"{clone_name}_v{online_version}.apk"
         final_apk_path = os.path.join(work_dir, final_apk_name)
