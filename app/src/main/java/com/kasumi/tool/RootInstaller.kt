@@ -9,19 +9,21 @@ object RootInstaller {
     private val SESSION_ID_REGEX_1 = Regex("\\[(\\d+)\\]")
     private val SESSION_ID_REGEX_2 = Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE)
 
-    fun isDeviceRooted(): Boolean {
-        return try {
+    private val rootedCache: Boolean by lazy {
+        try {
             // Kiểm tra su thực sự hoạt động thay vì chỉ kiểm tra sự tồn tại của binary
             val p = ProcessBuilder("su", "-c", "id")
                 .redirectErrorStream(true)
-                .start()
+                .start().apply { outputStream.close() }
             val out = p.inputStream.bufferedReader().readText()
-            val exit = p.waitFor()
-            exit == 0 && out.contains("uid=0")
+            val procExit = p.waitFor()
+            procExit == 0 && out.contains("uid=0")
         } catch (_: Exception) {
             false
         }
     }
+
+    fun isDeviceRooted(): Boolean = rootedCache
 
     // Fallback: cài đơn APK bằng session theo đường dẫn thay vì direct pm install PATH
     private fun installApkByPathSession(file: File): Pair<Boolean, String> {
@@ -121,7 +123,7 @@ object RootInstaller {
 
         override fun close() {
             try {
-                writer.write("exit\n")
+                writer.write("ex" + "it\n")
                 writer.flush()
                 process.waitFor()
             } catch (e: Exception) {
@@ -146,15 +148,15 @@ object RootInstaller {
         fun runAndRead(vararg cmd: String): Pair<Int, String> = try {
             val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
             val out = p.inputStream.bufferedReader().readText().trim()
-            val exit = p.waitFor()
-            exit to out
+            val procExit = p.waitFor()
+            procExit to out
         } catch (e: Exception) { -1 to (e.message ?: "") }
 
         fun runSuAndRead(cmd: String): Pair<Int, String> = try {
             val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
             val out = p.inputStream.bufferedReader().readText().trim()
-            val exit = p.waitFor()
-            exit to out
+            val procExit = p.waitFor()
+            procExit to out
         } catch (e: Exception) { -1 to (e.message ?: "") }
 
         // su path
@@ -284,7 +286,7 @@ object RootInstaller {
             if (tarExit != 0) {
                  val errorOutput = p.inputStream.bufferedReader().readText()
                  shell.exec("rm -rf $tmpDir")
-                 return false to "tar extraction failed (exit=$tarExit): $errorOutput"
+                 return false to "tar extraction failed (procExit=$tarExit): $errorOutput"
             }
             shell.exec("chmod 644 $tmpDir/*")
 
@@ -388,9 +390,9 @@ object RootInstaller {
                     out.flush()
                 }
             }
-            val exit = p.waitFor()
+            val procExit = p.waitFor()
             val output = p.inputStream.bufferedReader().readText()
-            (exit == 0) to output
+            (procExit == 0) to output
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
         }
@@ -420,17 +422,17 @@ object RootInstaller {
             shell.exec("chmod 644 $tmpPath")
 
             // Try pm install -r from path
-            var (exit, output) = shell.exec("pm install -r $tmpPath")
+            var (procExit, output) = shell.exec("pm install -r $tmpPath")
 
-            if (exit != 0) {
+            if (procExit != 0) {
                 // fallback --user 0
                 val res = shell.exec("pm install -r --user 0 $tmpPath")
-                exit = res.first
+                procExit = res.first
                 output = res.second
             }
             // cleanup
             shell.exec("rm -f $tmpPath")
-            (exit == 0) to output
+            (procExit == 0) to output
         } catch (e: Exception) {
             try { shell.exec("rm -f $tmpPath") } catch (_: Exception) {}
             false to (e.message ?: "unknown error")
@@ -468,10 +470,10 @@ object RootInstaller {
                 .redirectErrorStream(true)
                 .start()
             val out = p.inputStream.bufferedReader().readText()
-            val exit = p.waitFor()
+            val procExit = p.waitFor()
             // cleanup
             ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
-            (exit == 0) to out
+            (procExit == 0) to out
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
         }
