@@ -2,7 +2,7 @@
 
 ## [1.5.0] - 2026-02-15
 ### ⚡ Hiệu năng
-- **Hiệu năng UI**: Tối ưu hóa cập nhật danh sách ứng dụng, sử dụng `mutableStateMapOf` giúp cập nhật trạng thái file nhanh hơn ~3700 lần (0.015ms vs 55ms).
+- **Hiệu năng UI**: Tối ưu hóa cập nhật danh sách ứng dụng, sử dụng `mutableStateMapOf` và xử lý thread an toàn giúp cập nhật trạng thái file nhanh hơn ~3700 lần (0.015ms vs 55ms), loại bỏ hoàn toàn giật lag khi tải file.
 - **Tối ưu hóa**: Chuyển logic xóa script xuống thread `IO` (background), loại bỏ hiện tượng khựng UI khi thao tác trên file hệ thống.
 - **Đồng bộ hóa**: Đảm bảo trạng thái UI cập nhật mượt mà sau khi xóa file.
 
