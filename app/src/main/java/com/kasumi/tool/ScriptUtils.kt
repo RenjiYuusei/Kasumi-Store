@@ -1,5 +1,9 @@
 package com.kasumi.tool
 
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 object ScriptUtils {
     /**
      * Merges online scripts with local scripts.
@@ -45,5 +49,23 @@ object ScriptUtils {
         }
 
         return mergedList + unmatchedLocals
+    }
+
+    /**
+     * Saves the script content to a file in the specified directory.
+     * This operation is performed on the IO dispatcher to avoid blocking the caller.
+     *
+     * @param directory The target directory.
+     * @param fileName The name of the file to save (should include extension).
+     * @param content The content to write.
+     * @return The File object that was written.
+     */
+    suspend fun saveScriptToFile(directory: File, fileName: String, content: String): File = withContext(Dispatchers.IO) {
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+        val file = File(directory, fileName)
+        file.writeText(content)
+        file
     }
 }
