@@ -1,20 +1,32 @@
 package com.kasumi.tool
 
 import java.io.File
+import java.net.URI
 import java.security.MessageDigest
 import java.util.Locale
 
 object FileUtils {
     fun getCacheFile(item: ApkItem, contextCacheDir: File): File {
         val dir = File(contextCacheDir, "apks")
-        val u = item.url?.lowercase(Locale.ROOT)
-        // Simple extension detection
-        val ext = when {
-            u != null && u.contains(".xapk") -> "xapk"
-            u != null && u.contains(".apks") -> "apks"
-            u != null && u.contains(".apkm") -> "apkm"
-            else -> "apk"
+
+        val ext = try {
+            val urlStr = item.url
+            if (urlStr != null) {
+                // Parse path to avoid query params
+                val path = URI(urlStr).path?.lowercase(Locale.ROOT) ?: ""
+                when {
+                    path.endsWith(".xapk") -> "xapk"
+                    path.endsWith(".apks") -> "apks"
+                    path.endsWith(".apkm") -> "apkm"
+                    else -> "apk"
+                }
+            } else {
+                "apk"
+            }
+        } catch (e: Exception) {
+            "apk"
         }
+
         return File(dir, "${item.id}.$ext")
     }
 

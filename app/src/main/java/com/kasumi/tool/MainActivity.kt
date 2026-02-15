@@ -831,9 +831,7 @@ private fun logBg(msg: String) = log(msg)
                     input.copyTo(out)
                 }
             }
-            withContext(Dispatchers.Main) {
-                FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
-            }
+            FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
             outFile
         }
     }
@@ -911,7 +909,7 @@ private fun logBg(msg: String) = log(msg)
                  onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
                  // Refresh list to update UI state (re-calculate cache existence)
                  appsList = appsList.toList()
-                 FileStatsHelper.refreshAll(appsList, fileStats, cacheDir)
+                 lifecycleScope.launch { FileStatsHelper.refreshAll(appsList, fileStats, cacheDir) }
              }
          }
     }
