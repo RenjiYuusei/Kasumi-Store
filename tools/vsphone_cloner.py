@@ -112,31 +112,37 @@ def modify_strings(strings_path, clone_index):
     with open(strings_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-def upload_to_catbox(filepath):
+def upload_to_catbox(filepath, retries=3):
     print(f"Uploading {filepath} to Catbox...")
-    try:
-        with open(filepath, "rb") as f:
-            files = {'fileToUpload': f}
-            data = {'reqtype': 'fileupload', 'userhash': ''} # Anonymous upload
-            response = requests.post(CATBOX_API_URL, data=data, files=files)
-            response.raise_for_status()
-            return response.text.strip()
-    except Exception as e:
-        print(f"Upload failed: {e}")
-        return None
+    for i in range(retries):
+        try:
+            with open(filepath, "rb") as f:
+                files = {'fileToUpload': f}
+                data = {'reqtype': 'fileupload', 'userhash': ''} # Anonymous upload
+                response = requests.post(CATBOX_API_URL, data=data, files=files, timeout=300) # Increased timeout
+                response.raise_for_status()
+                return response.text.strip()
+        except Exception as e:
+            print(f"Upload attempt {i+1} failed: {e}")
+            time.sleep(5) # Wait before retry
+
+    print("All upload attempts failed.")
+    return None
 
 def send_discord_notification(links, original_version):
     print("Sending Discord notification...")
     embeds = []
-    description = f"New VSPhone version {original_version} detected and cloned!\n\n"
+
+    # Updated description to be cleaner and in Vietnamese
+    description = f"VSPhone phiên bản mới {original_version} !\n\n"
 
     for name, link in links.items():
         description += f"**{name}**: {link}\n"
 
     payload = {
-        "content": "New Kasumi Clones Available!",
+        # Removed "content" to send only embed
         "embeds": [{
-            "title": f"VSPhone Clones (v{original_version})",
+            "title": f"Phiên bản mới Kasumi",
             "description": description,
             "color": 3447003
         }]
@@ -228,6 +234,9 @@ def main():
             print(f"Uploaded {clone_name}: {link}")
         else:
             print(f"Failed to upload {clone_name}")
+
+        # Add a small delay to avoid rate limiting
+        time.sleep(2)
 
     if links:
         send_discord_notification(links, online_version)
