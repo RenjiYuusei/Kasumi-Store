@@ -6,7 +6,7 @@
 - **Tối ưu hóa**: Chuyển logic xóa script xuống thread `IO` (background), loại bỏ hiện tượng khựng UI khi thao tác trên file hệ thống.
 - **Đồng bộ hóa**: Đảm bảo trạng thái UI cập nhật mượt mà sau khi xóa file.
 - **Tải Script**: Tối ưu hóa quá trình lưu file script, chuyển thao tác I/O sang thread nền giúp loại bỏ hoàn toàn việc chặn UI (giảm ~90ms block).
-- **Danh sách ứng dụng**: Tối ưu hóa bộ lọc và tìm kiếm, chuyển logic xuống background thread giúp loại bỏ giật lag khi gõ từ khóa (giảm thời gian chặn UI từ ~ms xuống 0).
+- **Danh sách ứng dụng**: Tối ưu hóa bộ lọc và tìm kiếm, chuyển logic lọc/sắp xếp sang background thread (`Dispatchers.Default`) giúp loại bỏ giật lag khi gõ từ khóa trên thiết bị yếu hoặc danh sách lớn (thời gian chặn main thread giảm về ~0ms).
 - **Root Installer**: Tối ưu hóa kiểm tra quyền root (`isDeviceRooted`) bằng cơ chế lazy caching, giảm thời gian kiểm tra từ ~1000ms xuống ~0ms cho các lần gọi sau, đồng thời sửa lỗi treo khi process `su` chờ input.
 
 ## [1.4.0] - 2026-02-06
