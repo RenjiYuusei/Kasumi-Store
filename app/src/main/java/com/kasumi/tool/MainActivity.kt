@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.collect
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -364,25 +365,13 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val filteredApps = remember(appsList, searchQuery, sortMode, fileStats) {
-            val q = searchQuery.trim().lowercase()
-            val filtered = if (q.isEmpty()) {
-                appsList
-            } else {
-                appsList.filter {
-                    it.name.lowercase().contains(q) ||
-                            (it.url?.lowercase()?.contains(q) == true)
-                }
-            }
-
-            when (sortMode) {
-                SortMode.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
-                SortMode.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
-                SortMode.SIZE_DESC -> filtered.sortedByDescending {
-                     fileStats[it.id]?.size ?: 0L
-                }
-                SortMode.DATE_DESC -> filtered.sortedByDescending {
-                     fileStats[it.id]?.lastModified ?: 0L
+        val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode) {
+            snapshotFlow {
+                Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
+            }.collect { (params, stats) ->
+                val (list, query, mode) = params
+                value = withContext(Dispatchers.Default) {
+                    filterAndSortApps(list, query, mode, stats)
                 }
             }
         }
