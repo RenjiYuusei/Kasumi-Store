@@ -7,6 +7,7 @@
 - **Đồng bộ hóa**: Đảm bảo trạng thái UI cập nhật mượt mà sau khi xóa file.
 - **Tải Script**: Tối ưu hóa quá trình lưu file script, chuyển thao tác I/O sang thread nền giúp loại bỏ hoàn toàn việc chặn UI (giảm ~90ms block).
 - **Danh sách ứng dụng**: Tối ưu hóa bộ lọc và tìm kiếm, chuyển logic xuống background thread giúp loại bỏ giật lag khi gõ từ khóa (giảm thời gian chặn UI từ ~ms xuống 0).
+- **Root Installer**: Tối ưu hóa kiểm tra quyền root (`isDeviceRooted`) bằng cơ chế lazy caching, giảm thời gian kiểm tra từ ~1000ms xuống ~0ms cho các lần gọi sau, đồng thời sửa lỗi treo khi process `su` chờ input.
 
 ## [1.4.0] - 2026-02-06
 ### 🚀 Tính năng mới
