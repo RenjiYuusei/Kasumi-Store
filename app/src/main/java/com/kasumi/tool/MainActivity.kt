@@ -101,8 +101,7 @@ class MainActivity : ComponentActivity() {
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
-    private var cacheVersion by mutableIntStateOf(0)
-    private var fileStats by mutableStateOf<Map<String, FileStats>>(emptyMap())
+    private val fileStats = mutableStateMapOf<String, FileStats>()
 
     private val installReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -193,17 +192,8 @@ class MainActivity : ComponentActivity() {
         val snackbarHostState = remember { SnackbarHostState() }
 
         // Compute file stats in background to avoid I/O in UI
-        LaunchedEffect(appsList, cacheVersion) {
-            fileStats = withContext(Dispatchers.IO) {
-                appsList.associate { item ->
-                    val f = cacheFileFor(item)
-                    if (f.exists()) {
-                        item.id to FileStats(true, f.length(), f.lastModified())
-                    } else {
-                        item.id to FileStats(false, 0L, 0L)
-                    }
-                }
-            }
+        LaunchedEffect(appsList) {
+            FileStatsHelper.updateFileStats(appsList, fileStats, cacheDir)
         }
 
         if (scriptToDownload != null) {
@@ -437,7 +427,7 @@ class MainActivity : ComponentActivity() {
                  contentPadding = PaddingValues(bottom = 80.dp)
              ) {
                  items(filteredApps, key = { it.id }) { item ->
-                     AppItemRow(item, cacheVersion, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                     AppItemRow(item, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
                          lifecycleScope.launch { saveItems() }
                          onShowSnackbar("Đã xóa ${it.name}")
@@ -448,7 +438,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, cacheVersion: Int, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+    fun AppItemRow(item: ApkItem, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
         val context = LocalContext.current
         val stats = fileStats[item.id]
         val isCached = stats?.exists == true
@@ -709,36 +699,6 @@ private fun logBg(msg: String) = log(msg)
         }
     }
 
-    private fun cacheFileFor(item: ApkItem): File {
-        val dir = File(cacheDir, "apks")
-        val ext = try {
-            val u = item.url?.lowercase(Locale.ROOT)
-            when {
-                u != null && u.contains(".xapk") -> "xapk"
-                u != null && u.contains(".apks") -> "apks"
-                u != null && u.contains(".apkm") -> "apkm"
-                else -> "apk"
-            }
-        } catch (_: Exception) { "apk" }
-        return File(dir, "${item.id}.$ext")
-    }
-
-    private fun stableIdFromUrl(url: String): String {
-        return try {
-            val md = MessageDigest.getInstance("SHA-1")
-            val bytes = md.digest(url.toByteArray())
-            val hexChars = "0123456789abcdef"
-            val result = StringBuilder(bytes.size * 2)
-            for (b in bytes) {
-                val i = b.toInt()
-                result.append(hexChars[i shr 4 and 0x0f])
-                result.append(hexChars[i and 0x0f])
-            }
-            result.toString()
-        } catch (_: Exception) {
-            url.hashCode().toString()
-        }
-    }
 
     private fun normalizeUrl(raw: String): String {
         var url = raw
@@ -772,7 +732,7 @@ private fun logBg(msg: String) = log(msg)
         if (preloaded != null) {
             val newItems = preloaded.map { p ->
                 val normalized = normalizeUrl(p.url)
-                val id = stableIdFromUrl(p.url)
+                val id = FileUtils.stableIdFromUrl(p.url)
                 ApkItem(
                     id = id,
                     name = p.name,
@@ -858,7 +818,7 @@ private fun logBg(msg: String) = log(msg)
 
     private suspend fun downloadApk(item: ApkItem): File? = withContext(Dispatchers.IO) {
         val url = item.url ?: return@withContext null
-        val outFile = cacheFileFor(item)
+        val outFile = FileUtils.getCacheFile(item, cacheDir)
         outFile.parentFile?.mkdirs()
         val req = Request.Builder()
             .url(url)
@@ -871,9 +831,7 @@ private fun logBg(msg: String) = log(msg)
                     input.copyTo(out)
                 }
             }
-            withContext(Dispatchers.Main) {
-                cacheVersion++
-            }
+            FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
             outFile
         }
     }
@@ -951,7 +909,7 @@ private fun logBg(msg: String) = log(msg)
                  onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
                  // Refresh list to update UI state (re-calculate cache existence)
                  appsList = appsList.toList()
-                 cacheVersion++
+                 lifecycleScope.launch { FileStatsHelper.refreshAll(appsList, fileStats, cacheDir) }
              }
          }
     }
@@ -986,7 +944,7 @@ private fun logBg(msg: String) = log(msg)
                                 if (url.isNotBlank()) {
                                     newScripts.add(
                                         ScriptItem(
-                                            id = stableIdFromUrl(url),
+                                            id = FileUtils.stableIdFromUrl(url),
                                             name = name,
                                             gameName = gameName,
                                             url = url
@@ -1243,128 +1201,3 @@ private suspend fun loadScriptsFromLocal() {
     }
 }
 
-// Data models
-enum class SortMode { NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC }
-data class FileStats(val exists: Boolean, val size: Long, val lastModified: Long)
-
-data class ApkItem(
-    val id: String,
-    val name: String,
-    val sourceType: SourceType,
-    val url: String?,
-    val uri: String?,
-    val versionName: String? = null,
-    val versionCode: Long? = null,
-    val iconUrl: String? = null
-) {
-    companion object {
-        private val gson = GsonBuilder()
-            .registerTypeAdapter(ApkItem::class.java, object : TypeAdapter<ApkItem>() {
-                override fun write(out: JsonWriter, value: ApkItem?) {
-                    if (value == null) {
-                        out.nullValue()
-                        return
-                    }
-                    out.beginObject()
-                    out.name("id").value(value.id)
-                    out.name("name").value(value.name)
-                    out.name("sourceType").value(value.sourceType.name)
-                    out.name("url").value(value.url)
-                    out.name("uri").value(value.uri)
-                    out.name("versionName").value(value.versionName)
-                    out.name("versionCode")
-                    if (value.versionCode == null) out.nullValue() else out.value(value.versionCode)
-                    out.name("iconUrl").value(value.iconUrl)
-                    out.endObject()
-                }
-
-                override fun read(input: JsonReader): ApkItem {
-                    if (input.peek() == JsonToken.NULL) {
-                        input.nextNull()
-                        throw IllegalStateException("ApkItem cannot be null")
-                    }
-
-                    var id: String? = null
-                    var name: String? = null
-                    var sourceType: SourceType = SourceType.URL
-                    var url: String? = null
-                    var uri: String? = null
-                    var versionName: String? = null
-                    var versionCode: Long? = null
-                    var iconUrl: String? = null
-
-                    input.beginObject()
-                    while (input.hasNext()) {
-                        val propertyName = input.nextName()
-                        if (input.peek() == JsonToken.NULL) {
-                            input.nextNull()
-                            continue
-                        }
-                        when (propertyName) {
-                            "id" -> id = input.nextString()
-                            "name" -> name = input.nextString()
-                            "sourceType" -> {
-                                sourceType = try {
-                                    SourceType.valueOf(input.nextString())
-                                } catch (_: Exception) {
-                                    SourceType.URL
-                                }
-                            }
-                            "url" -> url = input.nextString()
-                            "uri" -> uri = input.nextString()
-                            "versionName" -> versionName = input.nextString()
-                            "versionCode" -> versionCode = input.nextLong()
-                            "iconUrl" -> iconUrl = input.nextString()
-                            else -> input.skipValue()
-                        }
-                    }
-                    input.endObject()
-
-                    return ApkItem(
-                        id = id ?: UUID.randomUUID().toString(),
-                        name = name ?: "APK",
-                        sourceType = sourceType,
-                        url = url,
-                        uri = uri,
-                        versionName = versionName,
-                        versionCode = versionCode,
-                        iconUrl = iconUrl
-                    )
-                }
-            })
-            .create()
-
-        fun toJsonList(list: List<ApkItem>): String {
-            return gson.toJson(list)
-        }
-
-        fun fromJsonList(json: String?): List<ApkItem> {
-            if (json.isNullOrBlank()) return emptyList()
-            return try {
-                gson.fromJson(json, Array<ApkItem>::class.java)?.toList() ?: emptyList()
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-
-        fun writeListTo(list: List<ApkItem>, writer: Writer) {
-            val type = object : TypeToken<List<ApkItem>>() {}.type
-            gson.toJson(list, type, writer)
-        }
-
-        fun readListFrom(reader: Reader): List<ApkItem> {
-            val type = object : TypeToken<List<ApkItem>>() {}.type
-            return gson.fromJson<List<ApkItem>>(reader, type) ?: emptyList()
-        }
-    }
-}
-
-enum class SourceType { URL, LOCAL }
-
-data class PreloadApp(
-    val name: String,
-    val url: String,
-    val versionName: String? = null,
-    val versionCode: Long? = null,
-    val iconUrl: String? = null
-)
