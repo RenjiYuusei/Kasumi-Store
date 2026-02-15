@@ -416,7 +416,7 @@ class MainActivity : ComponentActivity() {
                  contentPadding = PaddingValues(bottom = 80.dp)
              ) {
                  items(filteredApps, key = { it.id }) { item ->
-                     AppItemRow(item, onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                     AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
                          appsList = appsList.filter { x -> x.id != it.id }
                          lifecycleScope.launch { saveItems() }
                          onShowSnackbar("Đã xóa ${it.name}")
@@ -427,10 +427,8 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
-        val context = LocalContext.current
-        val stats = fileStats[item.id]
-        val isCached = stats?.exists == true
+    fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+        val context = LocalContext.current        val isCached = stats?.exists == true
         val fileSize = stats?.size ?: 0L
         
         Card(
@@ -742,9 +740,15 @@ private fun logBg(msg: String) = log(msg)
         lifecycleScope.launch {
             setBusy(true)
             try {
-                val apkFile = when (item.sourceType) {
-                    SourceType.LOCAL -> if (item.uri != null) copyFromUriIfNeeded(Uri.parse(item.uri)) else null
-                    SourceType.URL -> downloadApk(item)
+                val cachedFile = FileUtils.getCacheFile(item, cacheDir)
+                val apkFile = if (item.sourceType == SourceType.URL && cachedFile.exists() && cachedFile.length() > 0) {
+                     FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
+                     cachedFile
+                } else {
+                    when (item.sourceType) {
+                        SourceType.LOCAL -> if (item.uri != null) copyFromUriIfNeeded(Uri.parse(item.uri)) else null
+                        SourceType.URL -> downloadApk(item)
+                    }
                 }
 
                 if (apkFile == null) {
@@ -885,11 +889,16 @@ private fun logBg(msg: String) = log(msg)
 
             if (apkCacheDir.exists()) {
                 apkCacheDir.listFiles()?.forEach { file ->
-                    size += file.length()
-                    file.delete()
-                    count++
+                    if (file.isFile) {
+                        size += file.length()
+                        if (file.delete()) {
+                            count++
+                        }
+                    }
                 }
             }
+            // Refresh stats to update UI
+            FileStatsHelper.refreshAll(appsList, fileStats, cacheDir)
              if (splitsDir.exists()) splitsDir.deleteRecursively()
              if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
 
