@@ -1060,10 +1060,9 @@ private suspend fun loadScriptsFromLocal() {
                 }
 
                 val dir = File(getDeltaDir(), targetFolder)
-                dir.mkdirs()
                 // Save with .txt extension as requested
                 val fileName = if (script.name.lowercase().endsWith(".txt")) script.name else "${script.name}.txt"
-                File(dir, fileName).writeText(content)
+                ScriptUtils.saveScriptToFile(dir, fileName, content)
                 onShowSnackbar(getString(R.string.saved_to, targetFolder))
                 loadScriptsFromLocal() // Refresh
             } catch (e: Exception) {
