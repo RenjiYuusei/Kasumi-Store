@@ -428,7 +428,8 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
-        val context = LocalContext.current        val isCached = stats?.exists == true
+        val context = LocalContext.current
+        val isCached = stats?.exists == true
         val fileSize = stats?.size ?: 0L
         
         Card(
