@@ -7,6 +7,7 @@ import glob
 import time
 import json
 import hashlib
+import oss2
 
 # Configuration
 API_URL = "https://api.vsphone.com/vsphone/api/appVersion/getApkUrl?channelName=seo"
@@ -153,12 +154,6 @@ class VSPhoneClient:
                         return None
 
                     # 3. Upload to OSS
-                    try:
-                        import oss2
-                    except ImportError:
-                        print("Error: 'oss2' library is required for upload. Please install it via pip install oss2")
-                        return None
-
                     auth = oss2.StsAuth(
                         sts_token['AccessKeyId'],
                         sts_token['AccessKeySecret'],
