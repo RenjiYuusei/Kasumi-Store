@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [1.5.2] - 2026-02-17
+### 🐛 Sửa lỗi
+- **Cập nhật trạng thái cache tức thì**: Sửa lỗi sau khi tải app xong, số lượng ứng dụng đã cache/nhãn "Đã tải" đôi khi chưa cập nhật ngay (phải thoát và mở lại).
+- **Nút Xóa cache**: Sửa lỗi sau khi bấm xóa cache, bảng trạng thái vẫn còn hiển thị còn 1 ứng dụng đã cache dù tệp đã xóa.
+- **Đồng bộ UI**: Tối ưu lại luồng làm mới `fileStats` và trigger recomposition để toàn bộ danh sách + thống kê cache đồng bộ ngay trong phiên hiện tại.
+
 ## [1.5.1] - 2026-02-15
 ### 🚀 Tính năng mới
 - **Cài đặt từ Cache**: Hỗ trợ cài đặt ứng dụng trực tiếp từ file đã tải (cache) mà không cần tải lại, tiết kiệm thời gian và băng thông. Nút tải xuống sẽ tự động chuyển thành nút "Cài đặt" (icon Play) khi phát hiện file.
