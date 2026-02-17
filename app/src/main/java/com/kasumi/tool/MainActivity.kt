@@ -379,14 +379,8 @@ class MainActivity : ComponentActivity() {
         }
 
         // Stats
-        val cachedCount = remember(filteredApps, fileStats) {
-            filteredApps.count { fileStats[it.id]?.exists == true }
-        }
-        val totalSize = remember(filteredApps, fileStats) {
-            filteredApps.sumOf {
-                fileStats[it.id]?.size ?: 0L
-            }
-        }
+        val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
+        val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
         Column {
              Row(
@@ -885,7 +879,8 @@ private fun logBg(msg: String) = log(msg)
     }
 
     private fun clearCache(onShowSnackbar: (String) -> Unit) {
-         lifecycleScope.launch(Dispatchers.IO) {
+         lifecycleScope.launch {
+            val (count, size) = withContext(Dispatchers.IO) {
             val apkCacheDir = File(cacheDir, "apks")
             val splitsDir = File(cacheDir, "splits")
             val obbCacheDir = File(cacheDir, "obb")
@@ -909,18 +904,19 @@ private fun logBg(msg: String) = log(msg)
                     }
                 }
             }
-            // Refresh stats to update UI
-            FileStatsHelper.refreshAll(appsList, fileStats, cacheDir)
              if (splitsDir.exists()) splitsDir.deleteRecursively()
              if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
 
-             withContext(Dispatchers.Main) {
-                 val sizeStr = formatFileSize(size)
-                 onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
-                 // Refresh list to update UI state (re-calculate cache existence)
-                 appsList = appsList.toList()
-                 lifecycleScope.launch { FileStatsHelper.refreshAll(appsList, fileStats, cacheDir); statsVersion++ }
-             }
+             count to size
+            }
+
+            FileStatsHelper.refreshAll(appsList, fileStats, cacheDir)
+            statsVersion++
+            // Force recomposition in case list content stays the same but file stats changed.
+            appsList = appsList.toList()
+
+            val sizeStr = formatFileSize(size)
+            onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
          }
     }
 
@@ -1210,4 +1206,3 @@ private suspend fun loadScriptsFromLocal() {
         }
     }
 }
-
