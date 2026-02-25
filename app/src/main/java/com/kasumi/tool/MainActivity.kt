@@ -1048,12 +1048,14 @@ private suspend fun loadScriptsFromLocal() {
     private fun copyScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
          lifecycleScope.launch {
             try {
-                val content = if (script.localPath != null) {
-                    File(script.localPath).readText()
-                } else if (script.url != null) {
-                    if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
-                    else "loadstring(game:HttpGet(\"${script.url}\"))()"
-                } else ""
+                val content = withContext(Dispatchers.IO) {
+                    if (script.localPath != null) {
+                        File(script.localPath).readText()
+                    } else if (script.url != null) {
+                        if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
+                        else "loadstring(game:HttpGet(\"${script.url}\"))()"
+                    } else ""
+                }
 
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
