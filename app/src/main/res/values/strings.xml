@@ -31,4 +31,15 @@
     <string name="copied_script">Đã sao chép script</string>
     <string name="deleted_script">Đã xóa script</string>
     <string name="error_prefix">Lỗi: %s</string>
+    <string name="fix_lag">Fix Lag</string>
+    <string name="fix_lag_note">Lưu ý: Tính năng này yêu cầu quyền Root để thay đổi độ phân giải màn hình. Cần cân nhắc trước khi sử dụng.</string>
+    <string name="fix_lag_level_1">Giảm đồ họa Mức 1</string>
+    <string name="fix_lag_level_1_desc">Độ phân giải 720p, Density 240 (Ít lag)</string>
+    <string name="fix_lag_level_2">Giảm đồ họa Mức 2</string>
+    <string name="fix_lag_level_2_desc">Độ phân giải 540p, Density 180 (Lag trung bình)</string>
+    <string name="fix_lag_level_3">Giảm đồ họa Mức 3</string>
+    <string name="fix_lag_level_3_desc">Độ phân giải 360p, Density 120 (Siêu mượt)</string>
+    <string name="fix_lag_reset">Khôi phục mặc định</string>
+    <string name="fix_lag_reset_desc">Trả về độ phân giải và mật độ điểm ảnh gốc</string>
+    <string name="apply">Áp dụng</string>
 </resources>

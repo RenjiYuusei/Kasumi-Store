@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -277,6 +278,12 @@ class MainActivity : ComponentActivity() {
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1; searchQuery = "" }
                     )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Speed, contentDescription = stringResource(R.string.fix_lag)) },
+                        label = { Text(stringResource(R.string.fix_lag)) },
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2; searchQuery = "" }
+                    )
                 }
             }
         ) { innerPadding ->
@@ -295,11 +302,15 @@ class MainActivity : ComponentActivity() {
                     AppsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
-                } else {
+                } else if (selectedTab == 1) {
                     ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     }, onDownloadRequest = { script ->
                         scriptToDownload = script
+                    })
+                } else {
+                    FixLagContent(onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
                 }
             }
@@ -918,6 +929,84 @@ private fun logBg(msg: String) = log(msg)
             val sizeStr = formatFileSize(size)
             onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
          }
+    }
+
+
+    @Composable
+    fun FixLagContent(onShowSnackbar: (String) -> Unit) {
+        val options = listOf(
+            Triple(stringResource(R.string.fix_lag_level_1), stringResource(R.string.fix_lag_level_1_desc), { applyFixLag(1, onShowSnackbar) }),
+            Triple(stringResource(R.string.fix_lag_level_2), stringResource(R.string.fix_lag_level_2_desc), { applyFixLag(2, onShowSnackbar) }),
+            Triple(stringResource(R.string.fix_lag_level_3), stringResource(R.string.fix_lag_level_3_desc), { applyFixLag(3, onShowSnackbar) }),
+            Triple(stringResource(R.string.fix_lag_reset), stringResource(R.string.fix_lag_reset_desc), { applyFixLag(0, onShowSnackbar) })
+        )
+
+        LazyColumn(
+             contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Text(
+                        text = stringResource(R.string.fix_lag_note),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            items(options) { (title, desc, onClick) ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = onClick,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.apply))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyFixLag(level: Int, onShowSnackbar: (String) -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            withContext(Dispatchers.Main) { setBusy(true) }
+            try {
+                if (!RootInstaller.isDeviceRooted()) {
+                    withContext(Dispatchers.Main) { onShowSnackbar("Thiết bị chưa root!") }
+                    return@launch
+                }
+                val result = RootInstaller.applyFixLag(level)
+                withContext(Dispatchers.Main) { onShowSnackbar(result) }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) { onShowSnackbar("Lỗi: ${e.message}") }
+            } finally {
+                withContext(Dispatchers.Main) { setBusy(false) }
+            }
+        }
     }
 
     // --- Scripts Logic ---

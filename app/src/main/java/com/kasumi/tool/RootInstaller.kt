@@ -478,4 +478,43 @@ object RootInstaller {
             false to (e.message ?: "unknown error")
         }
     }
+
+    fun applyFixLag(level: Int): String {
+        return try {
+            val p1: Process
+            val p2: Process
+            when (level) {
+                1 -> {
+                    p1 = ProcessBuilder("su", "-c", "wm size 720x1280").start()
+                    p1.waitFor()
+                    p2 = ProcessBuilder("su", "-c", "wm density 240").start()
+                    p2.waitFor()
+                    "Đã áp dụng Mức 1 (720p)"
+                }
+                2 -> {
+                    p1 = ProcessBuilder("su", "-c", "wm size 540x960").start()
+                    p1.waitFor()
+                    p2 = ProcessBuilder("su", "-c", "wm density 180").start()
+                    p2.waitFor()
+                    "Đã áp dụng Mức 2 (540p)"
+                }
+                3 -> {
+                    p1 = ProcessBuilder("su", "-c", "wm size 360x640").start()
+                    p1.waitFor()
+                    p2 = ProcessBuilder("su", "-c", "wm density 120").start()
+                    p2.waitFor()
+                    "Đã áp dụng Mức 3 (360p)"
+                }
+                else -> {
+                    p1 = ProcessBuilder("su", "-c", "wm size reset").start()
+                    p1.waitFor()
+                    p2 = ProcessBuilder("su", "-c", "wm density reset").start()
+                    p2.waitFor()
+                    "Đã khôi phục cài đặt gốc"
+                }
+            }
+        } catch (e: Exception) {
+            "Lỗi áp dụng: ${e.message}"
+        }
+    }
 }
