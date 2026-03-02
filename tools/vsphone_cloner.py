@@ -18,8 +18,8 @@ APKTOOL_JAR = "apktool.jar"
 UBER_SIGNER_JAR = "uber-apk-signer.jar"
 
 # VSPhone Credentials
-VSPHONE_USER = "weep1068@buzzcut.ws"
-VSPHONE_PASS = "295372"
+VSPHONE_USER = "shrubby8213@gagcalculator.me"
+VSPHONE_PASS = "839241"
 
 class VSPhoneClient:
     def __init__(self):
