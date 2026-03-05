@@ -13,7 +13,12 @@ object FileUtils {
             val urlStr = item.url
             if (urlStr != null) {
                 // Parse path to avoid query params
-                val path = URI(urlStr).path?.lowercase(Locale.ROOT) ?: ""
+                val qIdx = urlStr.indexOf("?")
+                val hIdx = urlStr.indexOf("#")
+                val qEnd = if (qIdx == -1) urlStr.length else qIdx
+                val hEnd = if (hIdx == -1) urlStr.length else hIdx
+                val endIdx = kotlin.math.min(qEnd, hEnd)
+                val path = urlStr.substring(0, endIdx).lowercase(java.util.Locale.ROOT)
                 when {
                     path.endsWith(".xapk") -> "xapk"
                     path.endsWith(".apks") -> "apks"
