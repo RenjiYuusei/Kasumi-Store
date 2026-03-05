@@ -22,7 +22,7 @@ fun filterAndSortApps(
 
     return when (sortMode) {
         SortMode.NAME_ASC -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-        SortMode.NAME_DESC -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }).reversed()
+        SortMode.NAME_DESC -> filtered.sortedWith(compareBy<ApkItem>(String.CASE_INSENSITIVE_ORDER) { it.name }.reversed())
         SortMode.SIZE_DESC -> filtered.sortedByDescending {
              fileStats[it.id]?.size ?: 0L
         }
