@@ -15,14 +15,14 @@ fun filterAndSortApps(
         appsList
     } else {
         appsList.filter {
-            it.name.lowercase().contains(q) ||
-                    (it.url?.lowercase()?.contains(q) == true)
+            it.name.contains(q, ignoreCase = true) ||
+                    (it.url?.contains(q, ignoreCase = true) == true)
         }
     }
 
     return when (sortMode) {
-        SortMode.NAME_ASC -> filtered.sortedBy { it.name.lowercase() }
-        SortMode.NAME_DESC -> filtered.sortedByDescending { it.name.lowercase() }
+        SortMode.NAME_ASC -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        SortMode.NAME_DESC -> filtered.sortedWith(compareBy<ApkItem, String>(String.CASE_INSENSITIVE_ORDER) { it.name }.reversed())
         SortMode.SIZE_DESC -> filtered.sortedByDescending {
              fileStats[it.id]?.size ?: 0L
         }
