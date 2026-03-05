@@ -91,6 +91,7 @@ class MainActivity : ComponentActivity() {
             .readTimeout(5, TimeUnit.MINUTES)
             .build()
     }
+    private val gson = Gson()
 
     private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
     private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
@@ -702,7 +703,7 @@ private fun logBg(msg: String) = log(msg)
             client.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 val body = resp.body?.string() ?: return@withContext null
-                val arr: Array<PreloadApp> = Gson().fromJson(body, Array<PreloadApp>::class.java)
+                val arr: Array<PreloadApp> = gson.fromJson(body, Array<PreloadApp>::class.java)
                 arr.toList()
             }
         } catch (e: Exception) {
