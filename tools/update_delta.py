@@ -632,12 +632,19 @@ def main():
     any_update = False
     anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
 
-    # Unpack safely
-    res = parse_anotepad_links(anotepad_root)
-    if not res or len(res) < 4:
-         print("Failed to parse Anotepad links.")
-         return
-    intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
+    # Unpack safely (do not abort whole run if Anotepad is down)
+    intl_note = None
+    vng_note = None
+    vng_version_trigger = None
+    intl_version_trigger = None
+    try:
+        res = parse_anotepad_links(anotepad_root)
+        if res and len(res) >= 4:
+            intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
+        else:
+            print("Failed to parse Anotepad links. Continuing with APKMirror sources...")
+    except Exception as e:
+        print(f"Anotepad parsing failed: {e}. Continuing with APKMirror sources...")
 
     # 1. Update International
     # Use Anotepad for International if found
