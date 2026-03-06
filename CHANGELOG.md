@@ -1,13 +1,12 @@
 # Changelog
 
-## [1.5.4] - 2026-03-06
+## [1.5.3] - 2026-03-6
 ### ✨ Cải tiến giao diện
 - **Thanh tìm kiếm**: Thêm nút xóa nhanh (clear) ở cuối ô tìm kiếm để reset từ khóa chỉ với 1 chạm.
 - **Trạng thái rỗng**: Bổ sung `EmptyState` cho danh sách ứng dụng và script khi không có kết quả, giúp người dùng hiểu rõ trạng thái hiện tại.
 - **Ngữ cảnh danh sách script**: Hiển thị số lượng script phù hợp ngay phía trên danh sách.
 - **Card hiện đại hơn**: Tinh chỉnh bo góc lớn hơn (`16dp`) và tăng nhẹ đổ bóng để giao diện đồng nhất, dễ nhìn hơn.
 
-## [1.5.3] - 2026-03-6
 ### ⚡ Hiệu năng
 - **Tối ưu hóa xóa Cache**: Thay thế vòng lặp kiểm tra từng ứng dụng bằng một thao tác liệt kê thư mục duy nhất (`listFiles`) trong `clearCache`, giúp tăng tốc độ xóa cache lên khoảng 650 lần và loại bỏ hoàn toàn hiện tượng thắt nút cổ chai I/O khi danh sách ứng dụng lớn.
 - **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm ~57% thời gian xử lý và giảm cấp phát bộ nhớ.
