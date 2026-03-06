@@ -642,9 +642,9 @@ def main():
         if res and len(res) >= 4:
             intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
         else:
-            print("Failed to parse Anotepad links. Continuing with APKMirror sources...")
+            print("Failed to parse Anotepad links. Skipping Delta update sources for this run.")
     except Exception as e:
-        print(f"Anotepad parsing failed: {e}. Continuing with APKMirror sources...")
+        print(f"Anotepad parsing failed: {e}. Skipping Delta update sources for this run.")
 
     # 1. Update International
     # Use Anotepad for International if found
@@ -663,13 +663,6 @@ def main():
     else:
         print("Could not find VNG note link in root.")
 
-    # 3. Update Roblox VN from APKMirror (apksearch)
-    if process_apkmirror_update(client, apps_data, "Roblox VN", "com.roblox.client.vnggames", "roblox_vng"):
-        any_update = True
-
-    # 4. Update/Add Roblox International from APKMirror (apksearch)
-    if process_apkmirror_update(client, apps_data, "Roblox Quốc Tế", "com.roblox.client", "roblox_intl", create_if_missing=True):
-        any_update = True
 
     if any_update:
         print("Saving apps.json...")
