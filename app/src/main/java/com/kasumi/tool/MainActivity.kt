@@ -497,13 +497,13 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val filteredScripts = remember(scriptsList, searchQuery) {
-            val q = searchQuery.trim().lowercase()
+            val q = searchQuery.trim()
              if (q.isEmpty()) {
                 scriptsList
             } else {
                 scriptsList.filter {
-                    it.name.lowercase().contains(q) ||
-                            it.gameName.lowercase().contains(q)
+                    it.name.contains(q, ignoreCase = true) ||
+                            it.gameName.contains(q, ignoreCase = true)
                 }
             }
         }
