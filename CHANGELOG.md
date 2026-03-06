@@ -1,17 +1,15 @@
 # Changelog
 
-
+## [1.5.3] - 2026-03-6
+### ⚡ Hiệu năng
 - **Tối ưu hóa xóa Cache**: Thay thế vòng lặp kiểm tra từng ứng dụng bằng một thao tác liệt kê thư mục duy nhất (`listFiles`) trong `clearCache`, giúp tăng tốc độ xóa cache lên khoảng 650 lần và loại bỏ hoàn toàn hiện tượng thắt nút cổ chai I/O khi danh sách ứng dụng lớn.
 - **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm ~57% thời gian xử lý và giảm cấp phát bộ nhớ.
-
-
-## [1.5.2] - 2026-02-17
-### ⚡ Hiệu năng
 - **Tối ưu hóa tìm kiếm Script**: Tối ưu hóa bộ lọc trong danh sách Script bằng thuật toán `contains(q, ignoreCase = true)`, loại bỏ hoàn toàn việc cấp phát chuỗi `.lowercase()` thừa trong quá trình duyệt qua danh sách, giúp tăng tốc độ lọc danh sách Script lên khoảng 3.7 lần.
 - **Tối ưu Gson**: Tái sử dụng đối tượng `Gson` dùng chung thay vì cấp phát mới liên tục, giúp cải thiện tốc độ phân tích cú pháp khoảng 8 lần và giảm áp lực lên bộ dọn rác (Garbage Collector).
 - **Tối ưu hóa tìm kiếm & sắp xếp**: Tối ưu hóa bộ lọc và sắp xếp ứng dụng bằng các thuật toán so sánh không phân biệt chữ hoa chữ thường. Giảm thiểu rác bộ nhớ phát sinh, giúp thuật toán nhanh hơn khoảng 3.4 lần so với dùng `.lowercase()`.
 - **Tối ưu FileUtils**: Sử dụng phương pháp xử lý chuỗi trực tiếp thay vì `java.net.URI` để trích xuất đuôi file trong `getCacheFile`, tăng tốc độ xử lý hơn 13 lần, giảm đáng kể overhead khi cập nhật UI.
 
+## [1.5.2] - 2026-02-17
 ### 🐛 Sửa lỗi
 - **Cập nhật trạng thái cache tức thì**: Sửa lỗi sau khi tải app xong, số lượng ứng dụng đã cache/nhãn "Đã tải" đôi khi chưa cập nhật ngay (phải thoát và mở lại).
 - **Nút Xóa cache**: Sửa lỗi sau khi bấm xóa cache, bảng trạng thái vẫn còn hiển thị còn 1 ứng dụng đã cache dù tệp đã xóa.
