@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 apksearch
+          pip install requests beautifulsoup4 apksearch oss2
 
       - name: Run Roblox update script
         run: python tools/update_roblox.py
