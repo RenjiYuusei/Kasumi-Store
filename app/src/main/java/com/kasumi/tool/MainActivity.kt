@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.collect
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -835,7 +836,12 @@ private fun logBg(msg: String) = log(msg)
             val outFile = File(dir, "picked_${System.currentTimeMillis()}.apk")
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(outFile).use { out ->
-                    input.copyTo(out)
+                    val buffer = ByteArray(64 * 1024)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } >= 0) {
+                        out.write(buffer, 0, bytesRead)
+                        yield()
+                    }
                 }
             }
             outFile
