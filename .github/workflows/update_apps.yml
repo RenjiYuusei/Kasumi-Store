@@ -1,4 +1,4 @@
-name: Update Roblox
+name: Update Apps
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  update-roblox:
+  update-apps:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,8 +24,8 @@ jobs:
         run: |
           pip install requests beautifulsoup4 apksearch oss2
 
-      - name: Run Roblox update script
-        run: python tools/update_roblox.py
+      - name: Run app update script
+        run: python tools/update_apps.py
 
       - name: Commit and push if changed
         run: |
@@ -33,6 +33,6 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add source/apps.json
           if ! git diff --staged --quiet; then
-            git commit -m "chore: Update Roblox versions [skip ci]"
+            git commit -m "chore: Update app versions [skip ci]"
             git push
           fi
