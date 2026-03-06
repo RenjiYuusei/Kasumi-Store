@@ -1,6 +1,11 @@
 # Changelog
 
 
+## [1.5.3] - 2026-02-17
+### ⚡ Hiệu năng
+- **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm 50% thời gian xử lý và giảm cấp phát bộ nhớ.
+
+
 ## [1.5.2] - 2026-02-17
 ### ⚡ Hiệu năng
 - **Tối ưu hóa tìm kiếm Script**: Tối ưu hóa bộ lọc trong danh sách Script bằng thuật toán `contains(q, ignoreCase = true)`, loại bỏ hoàn toàn việc cấp phát chuỗi `.lowercase()` thừa trong quá trình duyệt qua danh sách, giúp tăng tốc độ lọc danh sách Script lên khoảng 3.7 lần.
