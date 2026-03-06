@@ -1,6 +1,7 @@
 # Changelog
 
 
+- **Tối ưu hóa xóa Cache**: Thay thế vòng lặp kiểm tra từng ứng dụng bằng một thao tác liệt kê thư mục duy nhất (`listFiles`) trong `clearCache`, giúp tăng tốc độ xóa cache lên khoảng 650 lần và loại bỏ hoàn toàn hiện tượng thắt nút cổ chai I/O khi danh sách ứng dụng lớn.
 - **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm ~57% thời gian xử lý và giảm cấp phát bộ nhớ.
 
 

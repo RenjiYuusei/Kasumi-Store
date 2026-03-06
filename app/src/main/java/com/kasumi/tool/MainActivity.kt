@@ -888,15 +888,7 @@ private fun logBg(msg: String) = log(msg)
             var count = 0
             var size = 0L
 
-            // Delete known items first
-            appsList.forEach { item ->
-                val file = FileUtils.getCacheFile(item, cacheDir)
-                if (file.exists() && file.isFile) {
-                    size += file.length()
-                    if (file.delete()) count++
-                }
-            }
-            // Clean up orphans
+            // Clean up all cached apk files
             if (apkCacheDir.exists()) {
                 apkCacheDir.listFiles()?.forEach { file ->
                     if (file.isFile && file.exists()) {
