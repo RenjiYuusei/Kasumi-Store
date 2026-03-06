@@ -1,9 +1,7 @@
 # Changelog
 
 
-## [1.5.3] - 2026-02-17
-### ⚡ Hiệu năng
-- **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm 50% thời gian xử lý và giảm cấp phát bộ nhớ.
+- **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm ~57% thời gian xử lý và giảm cấp phát bộ nhớ.
 
 
 ## [1.5.2] - 2026-02-17
