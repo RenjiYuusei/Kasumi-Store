@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
@@ -324,9 +325,16 @@ class MainActivity : ComponentActivity() {
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
+            .padding(8.dp),
             placeholder = { Text(hint) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
+                    }
+                }
+            },
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
         )
@@ -409,17 +417,24 @@ class MainActivity : ComponentActivity() {
                  }
              }
 
-             LazyColumn(
-                 contentPadding = PaddingValues(bottom = 80.dp)
-             ) {
-                 items(filteredApps, key = { it.id }) { item ->
-                     AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
-                         appsList = appsList.filter { x -> x.id != it.id }
-                         lifecycleScope.launch { saveItems() }
-                         onShowSnackbar("Đã xóa ${it.name}")
-                     })
-                 }
-             }
+            if (filteredApps.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.no_apps_title),
+                    subtitle = stringResource(R.string.no_apps_subtitle)
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(filteredApps, key = { it.id }) { item ->
+                        AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                            appsList = appsList.filter { x -> x.id != it.id }
+                            lifecycleScope.launch { saveItems() }
+                            onShowSnackbar("Đã xóa ${it.name}")
+                        })
+                    }
+                }
+            }
         }
     }
 
@@ -433,7 +448,8 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -495,6 +511,34 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    fun EmptyState(title: String, subtitle: String) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 20.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim()
@@ -508,16 +552,31 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        LazyColumn(
-             contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(filteredScripts, key = { it.id }) { script ->
-                ScriptItemRow(
-                    script = script,
-                    onDownload = { onDownloadRequest(script) },
-                    onCopy = { copyScript(it, onShowSnackbar) },
-                    onDelete = { deleteScript(it, onShowSnackbar) }
+        Column {
+            Text(
+                text = stringResource(R.string.scripts_count, filteredScripts.size),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (filteredScripts.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.no_scripts_title),
+                    subtitle = stringResource(R.string.no_scripts_subtitle)
                 )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(filteredScripts, key = { it.id }) { script ->
+                        ScriptItemRow(
+                            script = script,
+                            onDownload = { onDownloadRequest(script) },
+                            onCopy = { copyScript(it, onShowSnackbar) },
+                            onDelete = { deleteScript(it, onShowSnackbar) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -528,7 +587,8 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
