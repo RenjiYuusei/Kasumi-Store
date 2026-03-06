@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4 cloudscraper androguard
+          pip install requests beautifulsoup4 cloudscraper androguard apksearch
 
       - name: Run update script
         run: python tools/update_delta.py
