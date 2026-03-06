@@ -8,6 +8,7 @@ from urllib.parse import urlparse, parse_qs, urljoin
 from bs4 import BeautifulSoup
 import cloudscraper
 from androguard.core.apk import APK
+from apksearch import APKMirror
 
 # Configuration
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
@@ -484,6 +485,137 @@ def process_app_update(client, apps_data, app_name_keyword, source_link, output_
     if os.path.exists(new_file_path): os.remove(new_file_path)
     return updated
 
+def resolve_apkmirror_download_url(mirror, apk_download_page_url):
+    try:
+        page_resp = mirror.session.get(apk_download_page_url, headers=mirror.headers)
+        page_resp.raise_for_status()
+        page_soup = BeautifulSoup(page_resp.text, 'html.parser')
+
+        continue_link = None
+        for link in page_soup.find_all('a', href=True):
+            href = link['href']
+            if '/download/?key=' in href:
+                continue_link = urljoin(mirror.base_url, href)
+                break
+
+        if not continue_link:
+            print(f"Could not find APKMirror continue link from {apk_download_page_url}")
+            return None
+
+        continue_resp = mirror.session.get(continue_link, headers=mirror.headers)
+        continue_resp.raise_for_status()
+        continue_soup = BeautifulSoup(continue_resp.text, 'html.parser')
+
+        direct_link = None
+        for link in continue_soup.find_all('a', href=True):
+            href = link['href']
+            if '/wp-content/themes/APKMirror/download.php?' in href:
+                direct_link = urljoin(mirror.base_url, href)
+                break
+
+        if not direct_link:
+            print(f"Could not find APKMirror direct resolver link from {continue_link}")
+            return None
+
+        final_resp = mirror.session.get(direct_link, headers=mirror.headers, allow_redirects=False)
+        final_url = final_resp.headers.get('Location')
+        if not final_url:
+            print(f"APKMirror download resolver did not return redirect for {direct_link}")
+            return None
+
+        return final_url
+    except Exception as e:
+        print(f"Error resolving APKMirror download URL: {e}")
+        return None
+
+
+def process_apkmirror_update(client, apps_data, app_name, package_name, output_name_prefix, create_if_missing=False):
+    target_app = next((a for a in apps_data if a.get('name') == app_name), None)
+    if not target_app and not create_if_missing:
+        print(f"App {app_name} not found in apps.json")
+        return False
+
+    mirror = APKMirror(package_name)
+    print(f"Processing {app_name} via apksearch/APKMirror ({package_name})...")
+
+    try:
+        api_url = mirror.api_url + '/app_exists'
+        resp = mirror.session.post(api_url, json={'pnames': package_name}, headers=mirror.headers)
+        result = resp.json()['data'][0]
+    except Exception as e:
+        print(f"APKMirror search failed: {e}")
+        return False
+
+    if not result or not result.get('exists'):
+        print(f"No APKMirror result found for {package_name}")
+        return False
+
+    release = result.get('release') or {}
+    apks = result.get('apks') or []
+    app_info = result.get('app') or {}
+
+    latest_version = release.get('version')
+    if not latest_version:
+        print(f"No release version found on APKMirror for {package_name}")
+        return False
+
+    apk_download_link = None
+    if apks:
+        apk_download_link = urljoin(mirror.base_url, apks[0].get('link', ''))
+
+    if not apk_download_link:
+        print(f"No APK download link found on APKMirror for {package_name}")
+        return False
+
+    if not target_app and create_if_missing:
+        target_app = {
+            'name': app_name,
+            'url': '',
+            'versionName': '',
+            'iconUrl': app_info.get('icon_url', '')
+        }
+        apps_data.append(target_app)
+        print(f"Added missing app entry: {app_name}")
+
+    current_version = target_app.get('versionName')
+    print(f"Current Version: {current_version}, Latest APKMirror Version: {latest_version}")
+
+    if latest_version == current_version and target_app.get('url'):
+        print('Version is already up to date.')
+        return False
+
+    final_download_url = resolve_apkmirror_download_url(mirror, apk_download_link)
+    if not final_download_url:
+        return False
+
+    parsed_path = urlparse(final_download_url).path.lower()
+    file_ext = '.apkm' if parsed_path.endswith('.apkm') else '.apk'
+
+    new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new{file_ext}")
+    if not download_file(final_download_url, new_file_path):
+        return False
+
+    print('Uploading/Checking file on VSPhone...')
+    clean_version = ''.join(c for c in str(latest_version) if c.isalnum() or c in '.-_')
+    upload_name = f"{output_name_prefix}_{clean_version}{file_ext}"
+    new_url = client.upload_file(new_file_path, upload_name)
+
+    updated = False
+    if new_url:
+        target_app['url'] = new_url
+        target_app['versionName'] = latest_version
+        if app_info.get('icon_url'):
+            target_app['iconUrl'] = app_info['icon_url']
+        updated = True
+        print(f"Updated {target_app['name']} to version {latest_version} @ {new_url}")
+    else:
+        print('Upload failed.')
+
+    if os.path.exists(new_file_path):
+        os.remove(new_file_path)
+
+    return updated
+
 def main():
     if not os.path.exists(APPS_JSON_PATH):
         print(f"Error: {APPS_JSON_PATH} not found.")
@@ -523,6 +655,14 @@ def main():
             any_update = True
     else:
         print("Could not find VNG note link in root.")
+
+    # 3. Update Roblox VN from APKMirror (apksearch)
+    if process_apkmirror_update(client, apps_data, "Roblox VN", "com.roblox.client.vnggames", "roblox_vng"):
+        any_update = True
+
+    # 4. Update/Add Roblox International from APKMirror (apksearch)
+    if process_apkmirror_update(client, apps_data, "Roblox Quốc Tế", "com.roblox.client", "roblox_intl", create_if_missing=True):
+        any_update = True
 
     if any_update:
         print("Saving apps.json...")
