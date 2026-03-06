@@ -255,7 +255,53 @@ def get_release_data(package_name):
     return mirror, result
 
 
-def process_roblox(client, apps_data, app_name, package_name, output_prefix):
+def get_latest_stable_release(mirror, app_link):
+    app_url = urljoin(mirror.base_url, app_link)
+    try:
+        resp = mirror.session.get(app_url, headers=mirror.headers, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Failed to load app page for stable release lookup: {e}")
+        return None, None
+
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    for row in soup.select('div.appRow'):
+        release_link_el = row.select_one('h5 a[href*="-release/"]')
+        if not release_link_el:
+            continue
+
+        release_href = release_link_el.get('href', '')
+        if not release_href.startswith(app_link):
+            continue
+
+        release_title = ' '.join(release_link_el.get_text(' ', strip=True).split())
+        if 'stable' not in release_title.lower():
+            continue
+
+        return release_title, release_href
+
+    print("No stable release entry found on APKMirror app page")
+    return None, None
+
+
+def get_first_download_page_from_release(mirror, release_link):
+    release_url = urljoin(mirror.base_url, release_link)
+    try:
+        resp = mirror.session.get(release_url, headers=mirror.headers, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Failed to load release page: {e}")
+        return None
+
+    soup = BeautifulSoup(resp.text, 'html.parser')
+    for apk_link_el in soup.select('a[href*="android-apk-download"], a[href*="android-apkm-download"]'):
+        apk_href = apk_link_el.get('href', '')
+        if '/apk/' in apk_href and '-download/' in apk_href:
+            return apk_href
+    return None
+
+
+def process_app(client, apps_data, app_name, package_name, output_prefix, stable_only=False):
     target = next((a for a in apps_data if a.get('name') == app_name), None)
     mirror, result = get_release_data(package_name)
     if not result:
@@ -277,7 +323,18 @@ def process_roblox(client, apps_data, app_name, package_name, output_prefix):
         print(f"Added missing app entry: {app_name}")
 
     latest_version = release.get('version')
-    if not latest_version or not apks:
+    selected_apk_link = apks[0].get('link') if apks else None
+
+    if stable_only:
+        release_title, stable_release_link = get_latest_stable_release(mirror, app_info.get('link', ''))
+        stable_apk_link = get_first_download_page_from_release(mirror, stable_release_link) if stable_release_link else None
+        if release_title and stable_apk_link:
+            version_channel = release_title.rsplit(' ', 1)[-1]
+            version_value = release_title.split()[-3] if ' - ' in release_title else release.get('version')
+            latest_version = f"{version_value} - {version_channel}" if version_value else release.get('version')
+            selected_apk_link = stable_apk_link
+
+    if not latest_version or not selected_apk_link:
         print(f"Missing release/apk data for {app_name}")
         return False
 
@@ -286,7 +343,7 @@ def process_roblox(client, apps_data, app_name, package_name, output_prefix):
         print(f"{app_name}: already up to date")
         return False
 
-    apk_page_url = urljoin(mirror.base_url, apks[0].get('link', ''))
+    apk_page_url = urljoin(mirror.base_url, selected_apk_link)
     final_url = resolve_apkmirror_download_url(mirror, apk_page_url)
     if not final_url:
         print(f"{app_name}: could not resolve final APKMirror URL")
@@ -334,9 +391,11 @@ def main():
         return
 
     any_update = False
-    if process_roblox(client, apps_data, 'Roblox VN', 'com.roblox.client.vnggames', 'roblox_vng'):
+    if process_app(client, apps_data, 'Roblox VN', 'com.roblox.client.vnggames', 'roblox_vng'):
         any_update = True
-    if process_roblox(client, apps_data, 'Roblox Quốc Tế', 'com.roblox.client', 'roblox_intl'):
+    if process_app(client, apps_data, 'Roblox Quốc Tế', 'com.roblox.client', 'roblox_intl'):
+        any_update = True
+    if process_app(client, apps_data, 'Discord', 'com.discord', 'discord', stable_only=True):
         any_update = True
 
     if any_update:
