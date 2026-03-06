@@ -371,8 +371,13 @@ def process_app(client, apps_data, app_name, package_name, output_prefix, stable
 
     target['url'] = new_url
     target['versionName'] = latest_version
-    if app_info.get('icon_url'):
+
+    # Keep existing iconUrl if already present in apps.json.
+    # Some APKMirror entries (e.g. Discord) may expose generic/removed icons.
+    existing_icon = str(target.get('iconUrl') or '').strip()
+    if not existing_icon and app_info.get('icon_url'):
         target['iconUrl'] = app_info['icon_url']
+
     print(f"{app_name}: updated to {latest_version}")
     return True
 
