@@ -2,6 +2,8 @@ import os
 import json
 import hashlib
 import requests
+import time
+import oss2
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from apksearch import APKMirror
@@ -58,6 +60,82 @@ class VSPhoneClient:
             print("Login error:", e)
             return False
 
+    def get_oss_info(self):
+        url = f"{self.base_url}/oss/getOssInfo"
+        try:
+            resp = requests.get(url, headers=self.get_headers(), timeout=30)
+            data = resp.json()
+            if data.get('code') == 200:
+                return data.get('data')
+            print("OSS info failed:", data)
+        except Exception as e:
+            print(f"OSS info error: {e}")
+        return None
+
+    def get_sts_token(self):
+        url = f"{self.base_url}/oss/getsts"
+        try:
+            resp = requests.get(url, headers=self.get_headers(), timeout=30)
+            data = resp.json()
+            if data.get('code') == 200:
+                return data.get('data')
+            print("STS token failed:", data)
+        except Exception as e:
+            print(f"STS token error: {e}")
+        return None
+
+    def init_cloud_file(self, file_name, file_size, file_md5):
+        url = f"{self.base_url}/cloudFile/init"
+        payload = {
+            "fileOriginName": file_name,
+            "operType": 2,
+            "userId": self.user_id,
+            "fileLength": file_size,
+            "fileMd5": file_md5,
+        }
+        try:
+            resp = requests.post(url, json=payload, headers=self.get_headers(), timeout=30)
+            data = resp.json()
+            if data.get('code') == 200:
+                return data.get('data')
+            print("Init cloud file failed:", data)
+        except Exception as e:
+            print(f"Init cloud file error: {e}")
+        return None
+
+    def finish_cloud_file(self, file_id, object_name, file_name, retries=3):
+        finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
+        finish_payload = {
+            "fileId": file_id,
+            "filePath": object_name,
+            "fileOriginName": file_name,
+        }
+
+        for attempt in range(1, retries + 1):
+            try:
+                finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers(), timeout=30)
+                finish_data = finish_resp.json()
+                if finish_data.get('code') == 200 and finish_data.get('data'):
+                    return finish_data['data']['downloadUrl']
+
+                is_busy = finish_data.get('code') == 500 and 'busy' in str(finish_data.get('msg', '')).lower()
+                if is_busy and attempt < retries:
+                    wait_seconds = attempt * 2
+                    print(f"Finish upload busy (attempt {attempt}/{retries}), retrying in {wait_seconds}s...")
+                    time.sleep(wait_seconds)
+                    continue
+
+                print("Finish upload failed:", finish_data)
+                return None
+            except Exception as e:
+                if attempt < retries:
+                    wait_seconds = attempt * 2
+                    print(f"Finish upload error on attempt {attempt}/{retries}: {e}. Retrying in {wait_seconds}s...")
+                    time.sleep(wait_seconds)
+                    continue
+                print("Finish upload error:", e)
+        return None
+
     def upload_file(self, file_path, file_name):
         if not self.token:
             return None
@@ -90,18 +168,30 @@ class VSPhoneClient:
                 print("File already exists on server.")
                 return check_data['data'][0]['downloadUrl']
 
-            finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
+            file_id = self.init_cloud_file(file_name, file_size, file_md5)
+            if not file_id:
+                return None
+
+            oss_info = self.get_oss_info()
+            sts_token = self.get_sts_token()
+            if not oss_info or not sts_token:
+                return None
+
+            auth = oss2.StsAuth(
+                sts_token['AccessKeyId'],
+                sts_token['AccessKeySecret'],
+                sts_token['SecurityToken'],
+            )
+
+            bucket = oss2.Bucket(auth, oss_info['endpoint'], oss_info['bucket'])
             ext = file_name.split('.')[-1]
-            finish_payload = {
-                "fileId": 0,
-                "filePath": f"userFile/{file_md5}.{ext}",
-                "fileOriginName": file_name
-            }
-            finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers(), timeout=30)
-            finish_data = finish_resp.json()
-            if finish_data.get('code') == 200 and finish_data.get('data'):
-                return finish_data['data']['downloadUrl']
-            print("Finish upload failed:", finish_data)
+            object_name = f"userFile/{file_md5}.{ext}"
+
+            print(f"Uploading to OSS: {object_name}...")
+            bucket.put_object_from_file(object_name, file_path)
+            print("OSS upload complete.")
+
+            return self.finish_cloud_file(file_id, object_name, file_name)
         except Exception as e:
             print("Upload error:", e)
         return None
