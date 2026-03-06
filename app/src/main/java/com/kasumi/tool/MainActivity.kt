@@ -56,13 +56,14 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import kotlinx.coroutines.flow.collect
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -821,12 +822,7 @@ private fun logBg(msg: String) = log(msg)
             if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
             resp.body?.byteStream()?.use { input ->
                 FileOutputStream(outFile).use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } >= 0) {
-                        out.write(buffer, 0, bytesRead)
-                        yield()
-                    }
+                    input.copyToSuspend(out)
                 }
             }
             FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
@@ -841,15 +837,12 @@ private fun logBg(msg: String) = log(msg)
             val outFile = File(dir, "picked_${System.currentTimeMillis()}.apk")
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(outFile).use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } >= 0) {
-                        out.write(buffer, 0, bytesRead)
-                        yield()
-                    }
+                    input.copyToSuspend(out)
                 }
             }
             outFile
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -1219,4 +1212,17 @@ private suspend fun loadScriptsFromLocal() {
             onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
         }
     }
+}
+
+suspend fun InputStream.copyToSuspend(out: java.io.OutputStream, bufferSize: Int = 64 * 1024): Long {
+    var bytesCopied: Long = 0
+    val buffer = ByteArray(bufferSize)
+    var bytes = read(buffer)
+    while (bytes >= 0) {
+        out.write(buffer, 0, bytes)
+        bytesCopied += bytes
+        yield()
+        bytes = read(buffer)
+    }
+    return bytesCopied
 }
