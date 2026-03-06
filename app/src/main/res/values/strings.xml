@@ -9,6 +9,7 @@
     <string name="refresh">Làm mới</string>
     <string name="search_hint">Tìm kiếm ứng dụng…</string>
     <string name="search_scripts_hint">Tìm kiếm script…</string>
+    <string name="clear_search">Xóa tìm kiếm</string>
     <string name="sort">Sắp xếp</string>
     <string name="cached">Đã tải</string>
     <string name="clear_cache">Xóa cache</string>
@@ -18,6 +19,8 @@
     <string name="sort_by_date">Ngày tải</string>
     <string name="stats_format">%d ứng dụng • %s đã cache</string>
     <string name="stats_format_no_cache">%d ứng dụng</string>
+    <string name="no_apps_title">Không tìm thấy ứng dụng</string>
+    <string name="no_apps_subtitle">Hãy thử từ khóa khác hoặc làm mới nguồn.</string>
     <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
     <string name="copy_script">Sao chép</string>
     <string name="local_manual">Cục bộ (Thủ công)</string>
@@ -25,6 +28,9 @@
     <string name="auto_execute_desc">Auto-execute (Tự động chạy)</string>
     <string name="manual_desc">Manual (Chạy thủ công)</string>
     <string name="download">Tải</string>
+    <string name="scripts_count">%d script</string>
+    <string name="no_scripts_title">Không có script phù hợp</string>
+    <string name="no_scripts_subtitle">Thử thay đổi từ khóa tìm kiếm của bạn.</string>
     <string name="cancel">Hủy</string>
     <string name="select_folder">Chọn thư mục</string>
     <string name="saved_to">Đã lưu vào %s</string>
