@@ -3,7 +3,7 @@
 
 ## [1.5.2] - 2026-02-17
 ### ⚡ Hiệu năng
-- **Tối ưu vòng lặp Copy**: Chuyển đổi hàm copy file `copyFromUriIfNeeded` thành vòng lặp bất đồng bộ với bộ đệm lớn (64KB) và `yield()`, khắc phục lỗi chặn luồng (Synchronous Execution in Coroutine) và cải thiện hiệu suất.
+- **Tối ưu vòng lặp Copy**: Chuyển đổi hàm copy file `copyFromUriIfNeeded` và `downloadApk` thành vòng lặp bất đồng bộ với bộ đệm lớn (64KB) và `yield()`, khắc phục lỗi chặn luồng (Synchronous Execution in Coroutine) và cải thiện hiệu suất.
 - **Tối ưu Gson**: Tái sử dụng đối tượng `Gson` dùng chung thay vì cấp phát mới liên tục, giúp cải thiện tốc độ phân tích cú pháp khoảng 8 lần và giảm áp lực lên bộ dọn rác (Garbage Collector).
 - **Tối ưu hóa tìm kiếm & sắp xếp**: Tối ưu hóa bộ lọc và sắp xếp ứng dụng bằng các thuật toán so sánh không phân biệt chữ hoa chữ thường. Giảm thiểu rác bộ nhớ phát sinh, giúp thuật toán nhanh hơn khoảng 3.4 lần so với dùng `.lowercase()`.
 - **Tối ưu FileUtils**: Sử dụng phương pháp xử lý chuỗi trực tiếp thay vì `java.net.URI` để trích xuất đuôi file trong `getCacheFile`, tăng tốc độ xử lý hơn 13 lần, giảm đáng kể overhead khi cập nhật UI.

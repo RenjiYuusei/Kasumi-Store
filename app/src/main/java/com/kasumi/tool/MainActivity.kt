@@ -821,7 +821,12 @@ private fun logBg(msg: String) = log(msg)
             if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
             resp.body?.byteStream()?.use { input ->
                 FileOutputStream(outFile).use { out ->
-                    input.copyTo(out)
+                    val buffer = ByteArray(64 * 1024)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } >= 0) {
+                        out.write(buffer, 0, bytesRead)
+                        yield()
+                    }
                 }
             }
             FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
