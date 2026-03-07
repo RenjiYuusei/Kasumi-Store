@@ -8,6 +8,7 @@
 - **Card hiện đại hơn**: Tinh chỉnh bo góc lớn hơn (`16dp`) và tăng nhẹ đổ bóng để giao diện đồng nhất, dễ nhìn hơn.
 
 ### ⚡ Hiệu năng
+- **Tối ưu hóa cài đặt Split APK**: Thay thế việc tạo nhiều tiến trình `su` riêng lẻ trong `fallbackInstallMultiple` bằng việc sử dụng một `ShellSession` duy nhất kết hợp với `TarUtil.streamFiles`, giúp giảm thời gian tạo tiến trình và tăng tốc độ xử lý cài đặt lên khoảng 3 lần.
 - **Tối ưu hóa xóa Cache**: Thay thế vòng lặp kiểm tra từng ứng dụng bằng một thao tác liệt kê thư mục duy nhất (`listFiles`) trong `clearCache`, giúp tăng tốc độ xóa cache lên khoảng 650 lần và loại bỏ hoàn toàn hiện tượng thắt nút cổ chai I/O khi danh sách ứng dụng lớn.
 - **Tối ưu hóa băm URL**: Sử dụng hàm `toHexString()` thay cho vòng lặp StringBuilder dịch bit để tạo mã băm trong `stableIdFromUrl`, giúp giảm ~57% thời gian xử lý và giảm cấp phát bộ nhớ.
 - **Tối ưu hóa tìm kiếm Script**: Tối ưu hóa bộ lọc trong danh sách Script bằng thuật toán `contains(q, ignoreCase = true)`, loại bỏ hoàn toàn việc cấp phát chuỗi `.lowercase()` thừa trong quá trình duyệt qua danh sách, giúp tăng tốc độ lọc danh sách Script lên khoảng 3.7 lần.

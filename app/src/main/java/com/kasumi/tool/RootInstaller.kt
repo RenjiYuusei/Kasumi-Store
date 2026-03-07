@@ -442,40 +442,42 @@ object RootInstaller {
     }
 
     private fun fallbackInstallMultiple(files: List<File>): Pair<Boolean, String> {
+        val shell = ShellSession()
         return try {
             val tmpDir = "/data/local/tmp/splits"
-            ProcessBuilder("su", "-c", "rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
-                .redirectErrorStream(true)
-                .start()
-                .waitFor()
+            shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
             val paths = mutableListOf<String>()
-            for (f in files) {
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                val remote = "$tmpDir/$safe"
-                var p = ProcessBuilder("su", "-c", "cat > $remote")
-                    .redirectErrorStream(true)
-                    .start()
-                f.inputStream().use { input ->
-                    p.outputStream.use { out ->
-                        input.copyTo(out)
-                        out.flush()
-                    }
-                }
-                p.waitFor()
-                ProcessBuilder("su", "-c", "chmod 644 $remote").start().waitFor()
-                paths.add(remote)
-            }
-            val cmd = listOf("su", "-c", "pm install-multiple -r ${paths.joinToString(" ")}")
-            val p = ProcessBuilder(cmd)
+
+            val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
                 .redirectErrorStream(true)
                 .start()
-            val out = p.inputStream.bufferedReader().readText()
-            val procExit = p.waitFor()
+
+            p.outputStream.use { out ->
+                TarUtil.streamFiles(files, out) { f ->
+                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                    paths.add("$tmpDir/$safe")
+                    safe
+                }
+            }
+            val tarExit = p.waitFor()
+            if (tarExit != 0) {
+                 val errorOutput = p.inputStream.bufferedReader().readText()
+                 shell.exec("rm -rf $tmpDir")
+                 return false to "tar extraction failed (procExit=$tarExit): $errorOutput"
+            }
+
+            shell.exec("chmod 644 $tmpDir/*")
+
+            val cmd = "pm install-multiple -r ${paths.joinToString(" ")}"
+            val (procExit, out) = shell.exec(cmd)
+
             // cleanup
-            ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+            shell.exec("rm -rf $tmpDir")
             (procExit == 0) to out
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
+        } finally {
+            shell.close()
         }
     }
 }
