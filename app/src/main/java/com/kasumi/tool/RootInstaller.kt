@@ -262,9 +262,12 @@ object RootInstaller {
         return if (fb.first) fb else false to "path:${byPath.second}; stream:${byStream.second}; fallback:${fb.second}"
     }
 
-    private fun extractSplitsToTmp(shell: ShellSession, files: List<File>, tmpDir: String): Pair<Boolean, String> {
+    data class ExtractResult(val success: Boolean, val errorMsg: String, val paths: List<Pair<File, String>> = emptyList())
+
+    private fun extractSplitsToTmp(shell: ShellSession, files: List<File>, tmpDir: String): ExtractResult {
         var p: Process? = null
         return try {
+            val paths = mutableListOf<Pair<File, String>>()
             p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
                 .redirectErrorStream(true)
                 .start()
@@ -272,22 +275,27 @@ object RootInstaller {
             p.outputStream.use { out ->
                 TarUtil.streamFiles(files, out) { f ->
                     val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                    val remote = "$tmpDir/$safe"
+                    paths.add(f to remote)
                     safe
                 }
             }
             val errorOutput = p.inputStream.bufferedReader().readText()
             val tarExit = p.waitFor()
             if (tarExit != 0) {
-                 return false to errorOutput
+                 return ExtractResult(false, "tar extraction failed (procExit=$tarExit): $errorOutput")
             }
 
             val (chmodExit, chmodOut) = shell.exec("chmod 644 $tmpDir/*")
             if (chmodExit != 0) {
-                 return false to "chmod failed: $chmodOut"
+                 return ExtractResult(false, "chmod failed: $chmodOut")
             }
-            true to ""
+            ExtractResult(true, "", paths)
         } catch (e: Exception) {
-            false to (e.message ?: "unknown tar extraction error")
+            if (e is InterruptedException || e is java.io.InterruptedIOException) {
+                Thread.currentThread().interrupt()
+            }
+            ExtractResult(false, e.message ?: "unknown tar extraction error")
         } finally {
             p?.destroy()
         }
@@ -299,18 +307,12 @@ object RootInstaller {
             val tmpDir = "/data/local/tmp/splits"
             shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
 
-            val paths = mutableListOf<Pair<File, String>>()
-            for (f in files) {
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                val remote = "$tmpDir/$safe"
-                paths.add(f to remote)
-            }
-
             val extractRes = extractSplitsToTmp(shell, files, tmpDir)
-            if (!extractRes.first) {
+            if (!extractRes.success) {
                  shell.exec("rm -rf $tmpDir")
-                 return false to "tar extraction failed: ${extractRes.second}"
+                 return false to extractRes.errorMsg
             }
+            val paths = extractRes.paths
 
             val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {
@@ -468,19 +470,15 @@ object RootInstaller {
         return try {
             val tmpDir = "/data/local/tmp/splits"
             shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
-            val paths = mutableListOf<String>()
-            for (f in files) {
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                paths.add("$tmpDir/$safe")
-            }
 
             val extractRes = extractSplitsToTmp(shell, files, tmpDir)
-            if (!extractRes.first) {
+            if (!extractRes.success) {
                  shell.exec("rm -rf $tmpDir")
-                 return false to "tar extraction failed: ${extractRes.second}"
+                 return false to extractRes.errorMsg
             }
 
-            val cmd = "pm install-multiple -r ${paths.joinToString(" ")}"
+            val remotePaths = extractRes.paths.map { it.second }
+            val cmd = "pm install-multiple -r ${remotePaths.joinToString(" ")}"
             val (procExit, out) = shell.exec(cmd)
 
             // cleanup
