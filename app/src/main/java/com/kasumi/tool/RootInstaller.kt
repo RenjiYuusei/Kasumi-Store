@@ -262,6 +262,27 @@ object RootInstaller {
         return if (fb.first) fb else false to "path:${byPath.second}; stream:${byStream.second}; fallback:${fb.second}"
     }
 
+    private fun extractSplitsToTmp(shell: ShellSession, files: List<File>, tmpDir: String): Pair<Boolean, String> {
+        val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
+            .redirectErrorStream(true)
+            .start()
+
+        p.outputStream.use { out ->
+            TarUtil.streamFiles(files, out) { f ->
+                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                safe
+            }
+        }
+        val tarExit = p.waitFor()
+        if (tarExit != 0) {
+             val errorOutput = p.inputStream.bufferedReader().readText()
+             return false to errorOutput
+        }
+
+        shell.exec("chmod 644 $tmpDir/*")
+        return true to ""
+    }
+
     private fun installApksByPath(files: List<File>): Pair<Boolean, String> {
         val shell = ShellSession()
         return try {
@@ -269,26 +290,17 @@ object RootInstaller {
             shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
 
             val paths = mutableListOf<Pair<File, String>>()
-
-            val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
-                .redirectErrorStream(true)
-                .start()
-
-            p.outputStream.use { out ->
-                TarUtil.streamFiles(files, out) { f ->
-                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                    val remote = "$tmpDir/$safe"
-                    paths.add(f to remote)
-                    safe
-                }
+            for (f in files) {
+                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                val remote = "$tmpDir/$safe"
+                paths.add(f to remote)
             }
-            val tarExit = p.waitFor()
-            if (tarExit != 0) {
-                 val errorOutput = p.inputStream.bufferedReader().readText()
+
+            val extractRes = extractSplitsToTmp(shell, files, tmpDir)
+            if (!extractRes.first) {
                  shell.exec("rm -rf $tmpDir")
-                 return false to "tar extraction failed (procExit=$tarExit): $errorOutput"
+                 return false to "tar extraction failed: ${extractRes.second}"
             }
-            shell.exec("chmod 644 $tmpDir/*")
 
             val (exitCreate, outCreate) = shell.exec("pm install-create -r")
             if (exitCreate != 0) {
@@ -447,26 +459,16 @@ object RootInstaller {
             val tmpDir = "/data/local/tmp/splits"
             shell.exec("rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
             val paths = mutableListOf<String>()
-
-            val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
-                .redirectErrorStream(true)
-                .start()
-
-            p.outputStream.use { out ->
-                TarUtil.streamFiles(files, out) { f ->
-                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                    paths.add("$tmpDir/$safe")
-                    safe
-                }
+            for (f in files) {
+                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                paths.add("$tmpDir/$safe")
             }
-            val tarExit = p.waitFor()
-            if (tarExit != 0) {
-                 val errorOutput = p.inputStream.bufferedReader().readText()
+
+            val extractRes = extractSplitsToTmp(shell, files, tmpDir)
+            if (!extractRes.first) {
                  shell.exec("rm -rf $tmpDir")
-                 return false to "tar extraction failed (procExit=$tarExit): $errorOutput"
+                 return false to "tar extraction failed: ${extractRes.second}"
             }
-
-            shell.exec("chmod 644 $tmpDir/*")
 
             val cmd = "pm install-multiple -r ${paths.joinToString(" ")}"
             val (procExit, out) = shell.exec(cmd)
