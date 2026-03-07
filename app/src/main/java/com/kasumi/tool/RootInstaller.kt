@@ -263,24 +263,34 @@ object RootInstaller {
     }
 
     private fun extractSplitsToTmp(shell: ShellSession, files: List<File>, tmpDir: String): Pair<Boolean, String> {
-        val p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
-            .redirectErrorStream(true)
-            .start()
+        var p: Process? = null
+        return try {
+            p = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
+                .redirectErrorStream(true)
+                .start()
 
-        p.outputStream.use { out ->
-            TarUtil.streamFiles(files, out) { f ->
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                safe
+            p.outputStream.use { out ->
+                TarUtil.streamFiles(files, out) { f ->
+                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                    safe
+                }
             }
-        }
-        val tarExit = p.waitFor()
-        if (tarExit != 0) {
-             val errorOutput = p.inputStream.bufferedReader().readText()
-             return false to errorOutput
-        }
+            val errorOutput = p.inputStream.bufferedReader().readText()
+            val tarExit = p.waitFor()
+            if (tarExit != 0) {
+                 return false to errorOutput
+            }
 
-        shell.exec("chmod 644 $tmpDir/*")
-        return true to ""
+            val (chmodExit, chmodOut) = shell.exec("chmod 644 $tmpDir/*")
+            if (chmodExit != 0) {
+                 return false to "chmod failed: $chmodOut"
+            }
+            true to ""
+        } catch (e: Exception) {
+            false to (e.message ?: "unknown tar extraction error")
+        } finally {
+            p?.destroy()
+        }
     }
 
     private fun installApksByPath(files: List<File>): Pair<Boolean, String> {
