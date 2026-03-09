@@ -684,10 +684,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                FilledIconButton(
+                IconButton(
                     onClick = { onInstall(item) },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    colors = IconButtonDefaults.iconButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),
                     modifier = Modifier.size(44.dp)
