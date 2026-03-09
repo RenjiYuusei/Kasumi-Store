@@ -751,10 +751,53 @@ private fun logBg(msg: String) = log(msg)
             var u2 = url
             u2 = u2.replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
             u2 = u2.replace("://dropbox.com", "://dl.dropboxusercontent.com")
-            u2 = if (u2.contains("dl=0")) u2.replace("dl=0", "dl=1") else if (u2.contains("dl=")) u2 else u2 + (if (u2.contains("?")) "&dl=1" else "?dl=1")
+            u2 = if (u2.contains("dl=0")) u2.replace("dl=0", "dl=1") else if (u2.contains("dl=")) u2 else u2 + if (u2.contains("?")) "&dl=1" else "?dl=1"
             return u2
         }
         return url
+    }
+
+    private fun isSplitPackage(item: ApkItem, apkFile: File): Boolean {
+        val urlLower = item.url?.lowercase(Locale.ROOT)
+        val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
+        return urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks")
+                || urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk")
+                || urlLower?.contains(".apkm") == true || fileNameLower.endsWith(".apkm")
+    }
+
+    private suspend fun installSplitPackage(apkFile: File, onShowSnackbar: (String) -> Unit) {
+        val (splits, obbInfo) = withContext(Dispatchers.IO) { extractSplitsAndObb(apkFile) }
+        if (splits.isEmpty()) {
+            onShowSnackbar("Không tìm thấy APK bên trong file")
+            return
+        }
+        if (obbInfo != null) {
+            withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
+        }
+
+        if (RootInstaller.isDeviceRooted()) {
+            val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
+            if (ok) {
+                onShowSnackbar("Cài đặt thành công")
+            } else {
+                installSplitsNormally(splits, onShowSnackbar)
+            }
+            return
+        }
+        installSplitsNormally(splits, onShowSnackbar)
+    }
+
+    private suspend fun installSingleApk(apkFile: File, onShowSnackbar: (String) -> Unit) {
+        if (RootInstaller.isDeviceRooted()) {
+            val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
+            if (ok) {
+                onShowSnackbar("Cài đặt thành công")
+            } else {
+                installNormally(apkFile, onShowSnackbar)
+            }
+            return
+        }
+        installNormally(apkFile, onShowSnackbar)
     }
 
     private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
@@ -815,50 +858,12 @@ private fun logBg(msg: String) = log(msg)
                     return@launch
                 }
 
-                val urlLower = item.url?.lowercase(Locale.ROOT)
-                val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
-                val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
-                        || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
-                        || (urlLower?.contains(".apkm") == true || fileNameLower.endsWith(".apkm"))
-
-                if (isSplitPackage) {
-                    // Logic for split APKs/XAPKs
-                     val (splits, obbInfo) = withContext(Dispatchers.IO) { extractSplitsAndObb(apkFile) }
-                     if (splits.isEmpty()) {
-                        onShowSnackbar("Không tìm thấy APK bên trong file")
-                        return@launch
-                    }
-                    if (obbInfo != null) {
-                        withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
-                    }
-                    
-                    val rooted = RootInstaller.isDeviceRooted()
-                     if (rooted) {
-                        val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
-                        val (ok, msg) = resSplit
-                        if (ok) {
-                            onShowSnackbar("Cài đặt thành công")
-                        } else {
-                            installSplitsNormally(splits, onShowSnackbar)
-                        }
-                    } else {
-                        installSplitsNormally(splits, onShowSnackbar)
-                    }
+                if (isSplitPackage(item, apkFile)) {
+                    installSplitPackage(apkFile, onShowSnackbar)
                     return@launch
                 }
 
-                 val rooted = RootInstaller.isDeviceRooted()
-                if (rooted) {
-                    val resApk: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
-                    val (ok, msg) = resApk
-                    if (ok) {
-                        onShowSnackbar("Cài đặt thành công")
-                    } else {
-                        installNormally(apkFile, onShowSnackbar)
-                    }
-                } else {
-                    installNormally(apkFile, onShowSnackbar)
-                }
+                installSingleApk(apkFile, onShowSnackbar)
             } catch (e: Exception) {
                 onShowSnackbar("Lỗi: ${e.message}")
                 e.printStackTrace()
@@ -914,7 +919,9 @@ private fun logBg(msg: String) = log(msg)
                 try {
                     startActivity(intent)
                     onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
-                } catch (e: Exception) { }
+                } catch (ignored: Exception) {
+                    // ignored
+                }
             }
         }
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
@@ -1133,6 +1140,62 @@ private suspend fun loadScriptsFromLocal() {
 
     // Copied from old Main for splitting/OBB
     data class ObbInfo(val packageName: String, val obbFiles: List<File>)
+
+    private fun tryReadPackageNameFromManifest(zipFile: java.util.zip.ZipFile, entry: java.util.zip.ZipEntry): String? {
+        return try {
+            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
+            JSONObject(manifest).optString("package_name")
+        } catch (ignored: Exception) {
+            null
+        }
+    }
+
+    private fun extractApkEntry(
+        zipFile: java.util.zip.ZipFile,
+        entry: java.util.zip.ZipEntry,
+        fileName: String,
+        outDir: File,
+        results: MutableList<File>
+    ) {
+        val input = zipFile.getInputStream(entry)
+        val buf = ByteArray(2)
+        val read = input.read(buf)
+        if (read != 2 || buf[0] != 0x50.toByte() || buf[1] != 0x4B.toByte()) {
+            Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
+            return
+        }
+
+        val outFile = File(outDir, fileName)
+        outFile.parentFile?.mkdirs()
+        zipFile.getInputStream(entry).use { inp ->
+            FileOutputStream(outFile).use { output ->
+                inp.copyTo(output)
+            }
+        }
+        if (outFile.exists() && outFile.length() > 0) {
+            results.add(outFile)
+        }
+    }
+
+    private fun extractObbEntry(
+        zipFile: java.util.zip.ZipFile,
+        entry: java.util.zip.ZipEntry,
+        fileName: String,
+        obbFiles: MutableList<File>
+    ) {
+        val obbDir = File(cacheDir, "obb")
+        obbDir.mkdirs()
+        val outFile = File(obbDir, fileName)
+        zipFile.getInputStream(entry).use { input ->
+            FileOutputStream(outFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+        if (outFile.exists() && outFile.length() > 0) {
+            obbFiles.add(outFile)
+        }
+    }
+
     private fun extractSplitsAndObb(packageFile: File): Pair<List<File>, ObbInfo?> {
         val outDir = File(cacheDir, "splits/${packageFile.nameWithoutExtension}")
         if (outDir.exists()) outDir.deleteRecursively()
@@ -1151,43 +1214,15 @@ private suspend fun loadScriptsFromLocal() {
                     val fileName = entry.name.substringAfterLast('/')
                     
                     if (entryName.endsWith("manifest.json")) {
-                        try {
-                            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
-                            packageName = JSONObject(manifest).optString("package_name")
-                        } catch (e: Exception) {}
+                        packageName = tryReadPackageNameFromManifest(zipFile, entry)
                         continue
                     }
                     if (entryName.endsWith(".apk")) {
-                        // Check for encryption/invalidity by peeking 2 magic bytes: 'PK' (0x50 0x4B)
-                        // APK is a ZIP, so it must start with PK signature.
-                        val input = zipFile.getInputStream(entry)
-                        val buf = ByteArray(2)
-                        val read = input.read(buf)
-                        if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
-                             val outFile = File(outDir, fileName)
-                             outFile.parentFile?.mkdirs()
-                             // Re-open stream or just continue reading?
-                             // ZipFile.getInputStream returns a new stream usually, but let's be safe:
-                             // We already read 2 bytes, need to prepend them or re-open.
-                             // Simpler: re-open.
-                             zipFile.getInputStream(entry).use { inp ->
-                                 FileOutputStream(outFile).use { output ->
-                                     inp.copyTo(output)
-                                 }
-                             }
-                             if (outFile.exists() && outFile.length() > 0) results.add(outFile)
-                        } else {
-                            // Encrypted or invalid APK entry
-                             Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
-                        }
+                        extractApkEntry(zipFile, entry, fileName, outDir, results)
                         continue
                     }
                     if (entryName.endsWith(".obb")) {
-                        val obbDir = File(cacheDir, "obb")
-                        obbDir.mkdirs()
-                        val outFile = File(obbDir, fileName)
-                        zipFile.getInputStream(entry).use { input -> FileOutputStream(outFile).use { output -> input.copyTo(output) } }
-                        if (outFile.exists() && outFile.length() > 0) obbFiles.add(outFile)
+                        extractObbEntry(zipFile, entry, fileName, obbFiles)
                         continue
                     }
                 }
@@ -1249,7 +1284,7 @@ private suspend fun loadScriptsFromLocal() {
                 val pi = android.app.PendingIntent.getBroadcast(
                     this, sessionId,
                     intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0
                 )
                 session.commit(pi.intentSender)
                 onShowSnackbar("Đang tiến hành cài đặt…")
