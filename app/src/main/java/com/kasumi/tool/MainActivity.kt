@@ -684,17 +684,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                IconButton(
-                    onClick = { onInstall(item) },
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.size(44.dp)
-                ) {
+                IconButton(onClick = { onInstall(item) }) {
                     Icon(
                         Icons.Default.Download,
-                        contentDescription = "Download/Install",
-                        modifier = Modifier.size(22.dp)
+                        contentDescription = stringResource(R.string.download),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
