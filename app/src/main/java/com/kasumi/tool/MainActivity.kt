@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
@@ -285,34 +284,10 @@ class MainActivity : ComponentActivity() {
             topBar = {
                 TopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.primary,
-                                                MaterialTheme.colorScheme.tertiary
-                                            )
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "K",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                stringResource(R.string.app_name),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text(
+                            stringResource(R.string.app_name),
+                            fontWeight = FontWeight.Bold
+                        )
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -606,11 +581,7 @@ class MainActivity : ComponentActivity() {
                             enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
                                     slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
                         ) {
-                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
-                                appsList = appsList.filter { x -> x.id != it.id }
-                                lifecycleScope.launch { saveItems() }
-                                onShowSnackbar("Đã xóa ${it.name}")
-                            })
+                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) })
                         }
                     }
                 }
@@ -619,7 +590,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit, onDelete: (ApkItem) -> Unit) {
+    fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit) {
         val context = LocalContext.current
         val isCached = stats?.exists == true
         val fileSize = stats?.size ?: 0L
@@ -713,36 +684,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    FilledIconButton(
-                        onClick = { onInstall(item) },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = "Download/Install",
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    FilledIconButton(
-                        onClick = { onDelete(item) },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                FilledIconButton(
+                    onClick = { onInstall(item) },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "Download/Install",
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
         }
@@ -892,22 +846,13 @@ class MainActivity : ComponentActivity() {
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.SportsEsports,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.secondary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = script.gameName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            text = script.gameName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(14.dp))
