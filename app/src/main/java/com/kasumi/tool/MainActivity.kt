@@ -15,27 +15,41 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -205,46 +219,106 @@ class MainActivity : ComponentActivity() {
             val script = scriptToDownload!!
             AlertDialog(
                 onDismissRequest = { scriptToDownload = null },
-                title = { Text("${script.name} - ${stringResource(R.string.select_folder)}") },
-                text = {
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(24.dp),
+                title = {
                     Column {
-                        TextButton(
+                        Text(
+                            script.name,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            stringResource(R.string.select_folder),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
                             onClick = {
                                 scriptToDownload = null
                                 downloadScript(script, "Autoexecute", { msg ->
                                     lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                                 })
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                         ) {
-                            Text(stringResource(R.string.auto_execute_desc), modifier = Modifier.fillMaxWidth())
+                            Text(
+                                stringResource(R.string.auto_execute_desc),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
-                        TextButton(
+                        OutlinedButton(
                             onClick = {
                                 scriptToDownload = null
                                 downloadScript(script, "Scripts", { msg ->
                                     lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                                 })
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
                         ) {
-                            Text(stringResource(R.string.manual_desc), modifier = Modifier.fillMaxWidth())
+                            Text(
+                                stringResource(R.string.manual_desc),
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 },
                 confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { scriptToDownload = null }) {
-                        Text(stringResource(R.string.cancel))
+                        Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             )
         }
 
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary,
+                                                MaterialTheme.colorScheme.tertiary
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "K",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.app_name),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
                     actions = {
                         if (selectedTab == 0) {
                             IconButton(onClick = { showSortDialog = true }) {
@@ -264,30 +338,72 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        actionColor = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                }
+            },
             bottomBar = {
-                NavigationBar {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    tonalElevation = 0.dp
+                ) {
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Apps, contentDescription = "Apps") },
-                        label = { Text("Ứng dụng") },
+                        icon = {
+                            Icon(
+                                if (selectedTab == 0) Icons.Default.Apps else Icons.Outlined.Apps,
+                                contentDescription = "Apps"
+                            )
+                        },
+                        label = { Text("Ứng dụng", fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0; searchQuery = "" }
+                        onClick = { selectedTab = 0; searchQuery = "" },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Code, contentDescription = "Script") },
-                        label = { Text("Script") },
+                        icon = {
+                            Icon(
+                                if (selectedTab == 1) Icons.Default.Code else Icons.Outlined.Code,
+                                contentDescription = "Script"
+                            )
+                        },
+                        label = { Text("Script", fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1; searchQuery = "" }
+                        onClick = { selectedTab = 1; searchQuery = "" },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {
-                if (isLoading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                AnimatedVisibility(visible = isLoading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 }
 
-                SearchBar(
+                KasumiSearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                     hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
@@ -319,24 +435,48 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun SearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
-        OutlinedTextField(
+    fun KasumiSearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
+        TextField(
             value = query,
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-            .padding(8.dp),
-            placeholder = { Text(hint) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(20.dp)),
+            placeholder = {
+                Text(
+                    hint,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            },
+            leadingIcon = {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.clear_search),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp)
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary,
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+            )
         )
     }
 
@@ -344,9 +484,16 @@ class MainActivity : ComponentActivity() {
     fun SortDialog(onDismiss: () -> Unit, onSortSelected: (SortMode) -> Unit) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text(stringResource(R.string.sort)) },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    stringResource(R.string.sort),
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val options = listOf(
                         SortMode.NAME_ASC to R.string.sort_by_name,
                         SortMode.NAME_DESC to R.string.sort_by_name_desc,
@@ -354,22 +501,40 @@ class MainActivity : ComponentActivity() {
                         SortMode.DATE_DESC to R.string.sort_by_date
                     )
                     options.forEach { (mode, labelRes) ->
+                        val isSelected = sortMode == mode
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                    else Color.Transparent
+                                )
                                 .clickable { onSortSelected(mode) }
-                                .padding(vertical = 12.dp),
+                                .padding(horizontal = 8.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = sortMode == mode, onClick = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(stringResource(labelRes))
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = null,
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = MaterialTheme.colorScheme.primary,
+                                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                stringResource(labelRes),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = onDismiss) { Text("Đóng") }
+                TextButton(onClick = onDismiss) {
+                    Text("Đóng", color = MaterialTheme.colorScheme.primary)
+                }
             }
         )
     }
@@ -395,7 +560,7 @@ class MainActivity : ComponentActivity() {
              Row(
                  modifier = Modifier
                      .fillMaxWidth()
-                     .padding(horizontal = 16.dp, vertical = 4.dp),
+                     .padding(horizontal = 16.dp, vertical = 8.dp),
                  horizontalArrangement = Arrangement.SpaceBetween,
                  verticalAlignment = Alignment.CenterVertically
              ) {
@@ -407,31 +572,46 @@ class MainActivity : ComponentActivity() {
 
                  Text(
                      text = statsText,
-                     style = MaterialTheme.typography.bodySmall,
+                     style = MaterialTheme.typography.labelMedium,
                      color = MaterialTheme.colorScheme.onSurfaceVariant
                  )
                  if (cachedCount > 0) {
-                     TextButton(onClick = { clearCache(onShowSnackbar) }) {
-                         Text(stringResource(R.string.clear_cache))
+                     TextButton(
+                         onClick = { clearCache(onShowSnackbar) },
+                         colors = ButtonDefaults.textButtonColors(
+                             contentColor = MaterialTheme.colorScheme.error
+                         )
+                     ) {
+                         Text(
+                             stringResource(R.string.clear_cache),
+                             style = MaterialTheme.typography.labelMedium
+                         )
                      }
                  }
              }
 
             if (filteredApps.isEmpty()) {
                 EmptyState(
+                    icon = Icons.Default.SearchOff,
                     title = stringResource(R.string.no_apps_title),
                     subtitle = stringResource(R.string.no_apps_subtitle)
                 )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
                 ) {
-                    items(filteredApps, key = { it.id }) { item ->
-                        AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
-                            appsList = appsList.filter { x -> x.id != it.id }
-                            lifecycleScope.launch { saveItems() }
-                            onShowSnackbar("Đã xóa ${it.name}")
-                        })
+                    itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
+                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
+                        ) {
+                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) }, onDelete = {
+                                appsList = appsList.filter { x -> x.id != it.id }
+                                lifecycleScope.launch { saveItems() }
+                                onShowSnackbar("Đã xóa ${it.name}")
+                            })
+                        }
                     }
                 }
             }
@@ -447,9 +627,16 @@ class MainActivity : ComponentActivity() {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (isCached) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            )
         ) {
             Row(
                 modifier = Modifier
@@ -462,19 +649,31 @@ class MainActivity : ComponentActivity() {
                         model = item.iconUrl,
                         contentDescription = null,
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp)),
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp)),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                )
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Icon(
+                            Icons.Default.Apps,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
                 }
 
@@ -484,15 +683,26 @@ class MainActivity : ComponentActivity() {
                     Text(
                         text = item.name,
                         style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     if (isCached) {
-                        Text(
-                            text = "${formatFileSize(fileSize)} • ${stringResource(R.string.cached)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF66BB6A))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${formatFileSize(fileSize)} • ${stringResource(R.string.cached)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                     if (item.versionName != null) {
                         Text(
@@ -503,25 +713,69 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                IconButton(onClick = { onInstall(item) }) {
-                    Icon(Icons.Default.Download, contentDescription = "Download/Install")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    FilledIconButton(
+                        onClick = { onInstall(item) },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = "Download/Install",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    FilledIconButton(
+                        onClick = { onDelete(item) },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
     }
 
     @Composable
-    fun EmptyState(title: String, subtitle: String) {
+    fun EmptyState(
+        icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.SearchOff,
+        title: String,
+        subtitle: String
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(20.dp),
+                .padding(horizontal = 16.dp, vertical = 32.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
@@ -532,7 +786,7 @@ class MainActivity : ComponentActivity() {
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
         }
@@ -561,20 +815,27 @@ class MainActivity : ComponentActivity() {
             )
             if (filteredScripts.isEmpty()) {
                 EmptyState(
+                    icon = Icons.Default.Code,
                     title = stringResource(R.string.no_scripts_title),
                     subtitle = stringResource(R.string.no_scripts_subtitle)
                 )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 80.dp)
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
                 ) {
-                    items(filteredScripts, key = { it.id }) { script ->
-                        ScriptItemRow(
-                            script = script,
-                            onDownload = { onDownloadRequest(script) },
-                            onCopy = { copyScript(it, onShowSnackbar) },
-                            onDelete = { deleteScript(it, onShowSnackbar) }
-                        )
+                    itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
+                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
+                        ) {
+                            ScriptItemRow(
+                                script = script,
+                                onDownload = { onDownloadRequest(script) },
+                                onCopy = { copyScript(it, onShowSnackbar) },
+                                onDelete = { deleteScript(it, onShowSnackbar) }
+                            )
+                        }
                     }
                 }
             }
@@ -583,52 +844,111 @@ class MainActivity : ComponentActivity() {
     
     @Composable
     fun ScriptItemRow(script: ScriptItem, onDownload: (ScriptItem) -> Unit, onCopy: (ScriptItem) -> Unit, onDelete: (ScriptItem) -> Unit) {
+        val isLocal = script.localPath != null
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (isLocal) MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = script.name,
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = script.gameName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.SportsEsports,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = script.gameName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (script.localPath == null) {
+                    if (!isLocal) {
                         OutlinedButton(
                             onClick = { onDownload(script) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                         ) {
                             Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text(stringResource(R.string.download))
                         }
                     }
                     Button(
                         onClick = { onCopy(script) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
                     ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.copy_script))
                     }
-                    if (script.localPath != null) {
-                        IconButton(onClick = { onDelete(script) }) {
-                             Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                    if (isLocal) {
+                        FilledIconButton(
+                            onClick = { onDelete(script) },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(20.dp))
                         }
                     }
                 }
