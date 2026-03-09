@@ -687,7 +687,7 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = { onInstall(item) }) {
                     Icon(
                         Icons.Default.Download,
-                        contentDescription = "Download/Install",
+                        contentDescription = stringResource(R.string.download),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
