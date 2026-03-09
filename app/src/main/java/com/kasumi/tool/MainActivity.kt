@@ -49,7 +49,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -404,7 +403,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                SearchBar(
+                KasumiSearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
                     hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
@@ -436,7 +435,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun SearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
+    fun KasumiSearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
         TextField(
             value = query,
             onValueChange = onQueryChange,
@@ -714,19 +713,36 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                FilledIconButton(
-                    onClick = { onInstall(item) },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = "Download/Install",
-                        modifier = Modifier.size(22.dp)
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    FilledIconButton(
+                        onClick = { onInstall(item) },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ),
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = "Download/Install",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    FilledIconButton(
+                        onClick = { onDelete(item) },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            contentColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
