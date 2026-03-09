@@ -684,14 +684,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Icon(
-                    Icons.Default.Download,
-                    contentDescription = "Download/Install",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clickable { onInstall(item) }
-                )
+                IconButton(onClick = { onInstall(item) }) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = "Download/Install",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
