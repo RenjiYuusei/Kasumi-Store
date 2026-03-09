@@ -1143,8 +1143,10 @@ private suspend fun loadScriptsFromLocal() {
 
     private fun tryReadPackageNameFromManifest(zipFile: java.util.zip.ZipFile, entry: java.util.zip.ZipEntry): String? {
         return try {
-            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
-            JSONObject(manifest).optString("package_name")
+            zipFile.getInputStream(entry).use { input ->
+                val manifest = input.bufferedReader().readText()
+                JSONObject(manifest).optString("package_name")
+            }
         } catch (ignored: Exception) {
             null
         }
@@ -1157,10 +1159,12 @@ private suspend fun loadScriptsFromLocal() {
         outDir: File,
         results: MutableList<File>
     ) {
-        val input = zipFile.getInputStream(entry)
-        val buf = ByteArray(2)
-        val read = input.read(buf)
-        if (read != 2 || buf[0] != 0x50.toByte() || buf[1] != 0x4B.toByte()) {
+        val isValidApk = zipFile.getInputStream(entry).use { input ->
+            val buf = ByteArray(2)
+            val read = input.read(buf)
+            read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()
+        }
+        if (!isValidApk) {
             Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
             return
         }
