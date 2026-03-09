@@ -688,7 +688,7 @@ class MainActivity : ComponentActivity() {
                     Icon(
                         Icons.Default.Download,
                         contentDescription = "Download/Install",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = LocalContentColor.current,
                         modifier = Modifier.size(24.dp)
                     )
                 }
