@@ -684,20 +684,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                FilledIconButton(
-                    onClick = { onInstall(item) },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = "Download/Install",
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Download/Install",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable { onInstall(item) }
+                )
             }
         }
     }
