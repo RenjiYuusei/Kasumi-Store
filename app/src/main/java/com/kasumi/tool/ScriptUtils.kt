@@ -19,13 +19,8 @@ object ScriptUtils {
      */
     fun mergeScripts(onlineScripts: List<ScriptItem>, localScripts: List<ScriptItem>): List<ScriptItem> {
         // OPTIMIZATION: Use Map for O(1) lookup (O(N+M) complexity)
-        val localMap = HashMap<String, ScriptItem>()
-        for (local in localScripts) {
-            // localScripts logic often prioritizes the first found item if duplicates exist
-            if (!localMap.containsKey(local.name)) {
-                localMap[local.name] = local
-            }
-        }
+        // localScripts logic prioritizes the first found item if duplicates exist; asReversed().associateBy achieves this cleanly and efficiently
+        val localMap = localScripts.asReversed().associateBy { it.name }
 
         val mergedList = onlineScripts.map { onlineScript ->
             val match = localMap[onlineScript.name]
