@@ -402,6 +402,8 @@ def main():
         any_update = True
     if process_app(client, apps_data, 'Discord', 'com.discord', 'discord', stable_only=True):
         any_update = True
+    if process_app(client, apps_data, 'ZArchiver', 'ru.zdevs.zarchiver', 'zarchiver'):
+        any_update = True
 
     if any_update:
         with open(APPS_JSON_PATH, 'w', encoding='utf-8') as f:
