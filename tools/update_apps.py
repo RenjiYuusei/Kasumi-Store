@@ -11,8 +11,8 @@ from apksearch import APKMirror
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-VSPHONE_USER = "unhappy6564@lumeika.com"
-VSPHONE_PASS = "450762"
+VSPHONE_USER = "resource9200@buzzcut.ws"
+VSPHONE_PASS = "179309"
 
 
 class VSPhoneClient:
