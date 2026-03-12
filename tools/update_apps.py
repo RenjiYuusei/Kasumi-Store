@@ -3,6 +3,7 @@ import json
 import hashlib
 import requests
 import time
+import re
 import oss2
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
@@ -13,6 +14,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 VSPHONE_USER = "resource9200@buzzcut.ws"
 VSPHONE_PASS = "179309"
+
+RE_DOWNLOAD_KEY = re.compile(r'/download/\?key=')
+RE_APK_MIRROR_DOWNLOAD = re.compile(r'/wp-content/themes/APKMirror/download\.php\?')
 
 
 class VSPhoneClient:
@@ -203,25 +207,19 @@ def resolve_apkmirror_download_url(mirror, apk_download_page_url):
         page_resp.raise_for_status()
         page_soup = BeautifulSoup(page_resp.text, 'html.parser')
 
-        continue_link = None
-        for link in page_soup.find_all('a', href=True):
-            if '/download/?key=' in link['href']:
-                continue_link = urljoin(mirror.base_url, link['href'])
-                break
-        if not continue_link:
+        continue_link_tag = page_soup.find('a', href=RE_DOWNLOAD_KEY)
+        if not continue_link_tag:
             return None
+        continue_link = urljoin(mirror.base_url, continue_link_tag['href'])
 
         continue_resp = mirror.session.get(continue_link, headers=mirror.headers, timeout=30)
         continue_resp.raise_for_status()
         continue_soup = BeautifulSoup(continue_resp.text, 'html.parser')
 
-        direct_link = None
-        for link in continue_soup.find_all('a', href=True):
-            if '/wp-content/themes/APKMirror/download.php?' in link['href']:
-                direct_link = urljoin(mirror.base_url, link['href'])
-                break
-        if not direct_link:
+        direct_link_tag = continue_soup.find('a', href=RE_APK_MIRROR_DOWNLOAD)
+        if not direct_link_tag:
             return None
+        direct_link = urljoin(mirror.base_url, direct_link_tag['href'])
 
         final_resp = mirror.session.get(direct_link, headers=mirror.headers, allow_redirects=False, timeout=30)
         return final_resp.headers.get('Location')
