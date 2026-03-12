@@ -15,9 +15,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VSPHONE_USER = "resource9200@buzzcut.ws"
 VSPHONE_PASS = "179309"
 
-RE_DOWNLOAD_KEY = re.compile(r'/download/\?key=')
-RE_APK_MIRROR_DOWNLOAD = re.compile(r'/wp-content/themes/APKMirror/download\.php\?')
-
 
 class VSPhoneClient:
     def __init__(self):
@@ -200,6 +197,9 @@ class VSPhoneClient:
             print("Upload error:", e)
         return None
 
+
+RE_DOWNLOAD_KEY = re.compile(r'/download/\?key=')
+RE_APK_MIRROR_DOWNLOAD = re.compile(r'/wp-content/themes/APKMirror/download\.php\?')
 
 def resolve_apkmirror_download_url(mirror, apk_download_page_url):
     try:
