@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.4] - 2026-03-12
+### ⚡ Cập nhật thư viện
+- **Nâng cấp Android SDK**: Tăng `compileSdk` và `targetSdk` lên phiên bản 35 để đảm bảo khả năng tương thích với các API mới nhất của Android và Jetpack Compose.
+- **Jetpack Compose**: Cập nhật Compose BOM lên `2025.01.00`, mang đến các thành phần Material 3 mới và cải tiến hiệu năng render.
+- **Thư viện ảnh Coil**: Nâng cấp toàn diện từ Coil 2.x sang Coil 3.0.4. Thay đổi API `AsyncImage` để hỗ trợ đa nền tảng tốt hơn và thêm dependency `coil-network-okhttp`.
+- **Loại bỏ Glide**: Xóa bỏ hoàn toàn dependency Glide không còn sử dụng để giảm kích thước file APK và thời gian build.
+- **Cập nhật khác**: Nâng cấp Gson lên `2.11.0`, các plugin Kotlin/Compose lên `2.1.0` và cập nhật các thư viện AndroidX cốt lõi (`core-ktx`, `activity-ktx`, `lifecycle-runtime-ktx`, `kotlinx-coroutines-core`) lên phiên bản ổn định mới nhất. Giữ nguyên OkHttp ở bản `4.12.0` để đảm bảo tương thích hoàn hảo.
+
 ## [1.5.3] - 2026-03-6
 ### ✨ Cải tiến giao diện
 - **Thanh tìm kiếm**: Thêm nút xóa nhanh (clear) ở cuối ô tìm kiếm để reset từ khóa chỉ với 1 chạm.
