@@ -1471,7 +1471,17 @@ private suspend fun loadScriptsFromLocal() {
             if (!obbDir.exists()) obbDir.mkdirs()
             for (obbFile in obbInfo.obbFiles) {
                 val destFile = File(obbDir, obbFile.name)
-                obbFile.inputStream().use { input -> FileOutputStream(destFile).use { output -> input.copyTo(output) } }
+                FileInputStream(obbFile).use { fis ->
+                    FileOutputStream(destFile).use { fos ->
+                        val src = fis.channel
+                        val dest = fos.channel
+                        var position = 0L
+                        val size = src.size()
+                        while (position < size) {
+                            position += src.transferTo(position, size - position, dest)
+                        }
+                    }
+                }
             }
         } catch (e: Exception) { e.printStackTrace() }
     }
