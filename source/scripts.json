@@ -18,5 +18,10 @@
     "name": "Gravity Hub",
     "gameName": "Blox Fruits",
     "url": "https://raw.githubusercontent.com/Dev-GravityHub/BloxFruit/refs/heads/main/Main.lua"
+  },
+  {
+    "name": "Auto Rejoin",
+    "gameName": "All Game",
+    "url": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/hard/autorejoin.lua"
   }
 ]
