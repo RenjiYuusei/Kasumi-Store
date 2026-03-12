@@ -1,0 +1,10 @@
+--- app/src/main/res/layout/item_apk.xml
++++ app/src/main/res/layout/item_apk.xml
+@@ -99,7 +99,7 @@
+             android:layout_height="40dp"
+             android:background="?attr/selectableItemBackgroundBorderless"
+             android:src="@android:drawable/ic_menu_delete"
+-            android:tint="?attr/colorError"
++            app:tint="?attr/colorError"
+             android:contentDescription="@string/delete" />
+     </LinearLayout>
