@@ -23,5 +23,10 @@
     "name": "Auto Rejoin",
     "gameName": "All Game",
     "url": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/hard/autorejoin.lua"
+  },
+  {
+    "name": "Atlas",
+    "gameName": "Bee Swarm Simulator",
+    "url": "https://raw.githubusercontent.com/Chris12089/atlasbss/main/script.lua"
   }
 ]
