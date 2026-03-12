@@ -8,12 +8,12 @@ import java.io.InputStreamReader
 
 android {
     namespace 'com.kasumi.tool'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId 'com.kasumi.tool'
         minSdk 24
-        targetSdk 34
+        targetSdk 35
         versionCode 10
         versionName "1.5.3"
 
@@ -126,6 +126,7 @@ dependencies {
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'io.coil-kt:coil-compose:2.6.0'
+    implementation 'io.coil-kt.coil3:coil-compose:3.3.0'
+    implementation 'io.coil-kt.coil3:coil-network-okhttp:3.3.0'
     debugImplementation 'androidx.compose.ui:ui-tooling'
 }
