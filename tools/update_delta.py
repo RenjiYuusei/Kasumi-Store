@@ -488,11 +488,9 @@ def resolve_apkmirror_download_url(mirror, apk_download_page_url):
         page_soup = BeautifulSoup(page_resp.text, 'html.parser')
 
         continue_link = None
-        for link in page_soup.find_all('a', href=True):
-            href = link['href']
-            if '/download/?key=' in href:
-                continue_link = urljoin(mirror.base_url, href)
-                break
+        link = page_soup.find('a', href=re.compile(r'/download/\?key='))
+        if link:
+            continue_link = urljoin(mirror.base_url, link['href'])
 
         if not continue_link:
             print(f"Could not find APKMirror continue link from {apk_download_page_url}")
@@ -503,11 +501,9 @@ def resolve_apkmirror_download_url(mirror, apk_download_page_url):
         continue_soup = BeautifulSoup(continue_resp.text, 'html.parser')
 
         direct_link = None
-        for link in continue_soup.find_all('a', href=True):
-            href = link['href']
-            if '/wp-content/themes/APKMirror/download.php?' in href:
-                direct_link = urljoin(mirror.base_url, href)
-                break
+        link = continue_soup.find('a', href=re.compile(r'/wp-content/themes/APKMirror/download\.php\?'))
+        if link:
+            direct_link = urljoin(mirror.base_url, link['href'])
 
         if not direct_link:
             print(f"Could not find APKMirror direct resolver link from {continue_link}")
