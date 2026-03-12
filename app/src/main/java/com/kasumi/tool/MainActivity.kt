@@ -61,7 +61,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.util.AtomicFile
 import androidx.lifecycle.lifecycleScope
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.GsonBuilder
