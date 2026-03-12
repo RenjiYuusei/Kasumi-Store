@@ -184,13 +184,9 @@ def bypass_sub2unlock(url):
         print(f"Scanning {final_url} for MediaFire links...")
         soup = BeautifulSoup(resp.text, 'html.parser')
 
-        mf_links = soup.find_all('a', href=re.compile(r'mediafire\.com'))
-        if mf_links:
-            return mf_links[0]['href']
-
-        for a in soup.find_all('a', href=True):
-            if 'mediafire.com' in a['href']:
-                return a['href']
+        mf_link = soup.find('a', href=re.compile(r'mediafire\.com'))
+        if mf_link:
+            return mf_link['href']
 
         print("Could not find MediaFire link on page.")
         return None
