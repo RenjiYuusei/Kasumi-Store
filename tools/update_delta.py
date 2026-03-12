@@ -136,10 +136,10 @@ def fetch_international_link():
         soup = BeautifulSoup(resp.text, 'html.parser')
 
         # Heuristic: Find first direct .apk link
-        for a in soup.find_all('a', href=True):
-            if '.apk' in a['href']:
-                print(f"Found .apk link: {a['href']}")
-                return a['href']
+        apk_link = soup.find('a', href=re.compile(r'\.apk'))
+        if apk_link:
+            print(f"Found .apk link: {apk_link['href']}")
+            return apk_link['href']
 
         print("Could not find International link on official site.")
         return None
