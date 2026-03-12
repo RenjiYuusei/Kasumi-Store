@@ -15,7 +15,7 @@ android {
         minSdk 24
         targetSdk 35
         versionCode 10
-        versionName "1.5.3"
+        versionName "1.5.4"
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         vectorDrawables {
@@ -117,7 +117,6 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
     
     // Glide for image loading
-    implementation 'com.github.bumptech.glide:glide:4.16.0'
 
     // Compose
     implementation platform('androidx.compose:compose-bom:2025.01.00')
