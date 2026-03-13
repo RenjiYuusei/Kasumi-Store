@@ -180,7 +180,11 @@ class MainActivity : ComponentActivity() {
             loadItems()
             setBusy(true)
             try {
-                refreshPreloadedApps(initial = true)
+                try {
+                    refreshPreloadedApps(initial = true)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 try {
                     loadScriptsFromOnline()
                 } catch (e: Exception) {
