@@ -21,16 +21,13 @@ android {
         vectorDrawables {
             useSupportLibrary true
         }
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
     }
 
     buildFeatures {
         compose true
-    }
-
-    sourceSets {
-        main {
-            assets.srcDirs += ['../source']
-        }
     }
 
     buildTypes {
@@ -55,7 +52,7 @@ android {
 
     packagingOptions {
         resources {
-            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}', '**/kotlin-tooling-metadata.json', '**/DebugProbesKt.bin']
         }
     }
 }
