@@ -393,7 +393,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     PullToRefreshBox(
-                        isRefreshing = isLoading && selectedTab == 0,
+                        isRefreshing = isLoading && selectedTab != 0,
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
