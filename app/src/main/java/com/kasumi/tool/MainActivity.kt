@@ -183,16 +183,19 @@ class MainActivity : ComponentActivity() {
                 try {
                     refreshPreloadedApps(initial = true)
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     e.printStackTrace()
                 }
                 try {
                     loadScriptsFromOnline()
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     e.printStackTrace()
                 }
                 try {
                     loadScriptsFromLocal()
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     e.printStackTrace()
                 }
             } finally {
@@ -415,6 +418,7 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     refreshPreloadedApps()
                                 } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
                                     caughtError = e
                                 } finally {
                                     setBusy(false)
@@ -451,11 +455,13 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     loadScriptsFromOnline()
                                 } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
                                     caughtError = e
                                 }
                                 try {
                                     loadScriptsFromLocal()
                                 } catch (e: Exception) {
+                                    if (e is kotlinx.coroutines.CancellationException) throw e
                                     if (caughtError == null) caughtError = e
                                 } finally {
                                     setBusy(false)
@@ -1037,6 +1043,7 @@ private fun logBg(msg: String) = log(msg)
                         ApkItem.readListFrom(reader)
                     }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     e.printStackTrace()
                     emptyList()
                 }
@@ -1081,6 +1088,7 @@ private fun logBg(msg: String) = log(msg)
                     writer.flush()
                     atomicFile.finishWrite(fos)
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     e.printStackTrace()
                     if (fos != null) {
                         atomicFile.failWrite(fos)
