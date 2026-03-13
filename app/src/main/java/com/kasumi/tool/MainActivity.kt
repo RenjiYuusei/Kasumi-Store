@@ -576,16 +576,19 @@ class MainActivity : ComponentActivity() {
                  }
              }
 
-            if (filteredApps.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.SearchOff,
-                    title = stringResource(R.string.no_apps_title),
-                    subtitle = stringResource(R.string.no_apps_subtitle)
-                )
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
-                ) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (filteredApps.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.SearchOff,
+                            title = stringResource(R.string.no_apps_title),
+                            subtitle = stringResource(R.string.no_apps_subtitle)
+                        )
+                    }
+                } else {
                     itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
                         AnimatedVisibility(
                             visible = true,
@@ -772,16 +775,19 @@ class MainActivity : ComponentActivity() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (filteredScripts.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.Code,
-                    title = stringResource(R.string.no_scripts_title),
-                    subtitle = stringResource(R.string.no_scripts_subtitle)
-                )
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
-                ) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (filteredScripts.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.Code,
+                            title = stringResource(R.string.no_scripts_title),
+                            subtitle = stringResource(R.string.no_scripts_subtitle)
+                        )
+                    }
+                } else {
                     itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
                         AnimatedVisibility(
                             visible = true,
