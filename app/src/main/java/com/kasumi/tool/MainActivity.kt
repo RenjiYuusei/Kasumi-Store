@@ -380,16 +380,16 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
-                                var errorMsg: String? = null
+                                var caughtError: Exception? = null
                                 try {
                                     refreshPreloadedApps()
                                 } catch (e: Exception) {
-                                    errorMsg = e.message
+                                    caughtError = e
                                 } finally {
                                     setBusy(false)
                                 }
-                                if (errorMsg != null) {
-                                    snackbarHostState.showSnackbar("Lỗi: $errorMsg")
+                                if (caughtError != null) {
+                                    snackbarHostState.showSnackbar("Lỗi: ${caughtError.message ?: "Lỗi không xác định"}")
                                 } else {
                                     snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 }
@@ -407,17 +407,17 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
-                                var errorMsg: String? = null
+                                var caughtError: Exception? = null
                                 try {
                                     loadScriptsFromOnline()
                                     loadScriptsFromLocal()
                                 } catch (e: Exception) {
-                                    errorMsg = e.message
+                                    caughtError = e
                                 } finally {
                                     setBusy(false)
                                 }
-                                if (errorMsg != null) {
-                                    snackbarHostState.showSnackbar("Lỗi: $errorMsg")
+                                if (caughtError != null) {
+                                    snackbarHostState.showSnackbar("Lỗi: ${caughtError.message ?: "Lỗi không xác định"}")
                                 } else {
                                     snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 }
