@@ -3,6 +3,7 @@ import re
 import json
 import requests
 import hashlib
+import multiprocessing as mp
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import cloudscraper
@@ -227,8 +228,6 @@ def resolve_official_download_link(page_url):
 
 
 def download_file(url, output_path):
-    print(f"Downloading {url} to {output_path}...")
-
     browser_profiles = [
         {'browser': 'chrome', 'platform': 'android', 'mobile': True},
         {'browser': 'chrome', 'platform': 'windows', 'mobile': False},
@@ -259,9 +258,9 @@ def download_file(url, output_path):
                     for chunk in r.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
+            print(f"Download successful: {output_path}")
             return True
-        except Exception as e:
-            print(f"Download attempt {attempt}/4 failed: {e}")
+        except Exception:
             try:
                 if os.path.exists(output_path):
                     os.remove(output_path)
@@ -270,12 +269,11 @@ def download_file(url, output_path):
             if attempt < 4:
                 continue
 
-    print("Download failed after 4 attempts.")
     return False
 
 
 
-def get_apk_version(apk_path):
+def _read_apk_version_worker(apk_path, queue):
     try:
         apk = APK(apk_path)
         version_name = apk.get_androidversion_name()
@@ -285,36 +283,95 @@ def get_apk_version(apk_path):
         elif isinstance(version_name, str) and version_name.startswith("b'") and version_name.endswith("'"):
             version_name = version_name[2:-1]
 
-        print(f"Extracted version from APK: {version_name}")
-        return version_name
+        queue.put((True, version_name))
     except Exception as e:
-        print(f"Error analyzing APK: {e}")
+        queue.put((False, str(e)))
+
+
+def get_apk_version(apk_path, timeout_seconds=180):
+    queue = mp.Queue()
+    process = mp.Process(target=_read_apk_version_worker, args=(apk_path, queue))
+    process.start()
+    process.join(timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        print(f"Error analyzing APK: timeout after {timeout_seconds}s")
         return None
 
+    if queue.empty():
+        print("Error analyzing APK: no result from parser")
+        return None
 
-def process_app_update(client, apps_data, app_name_keyword, official_page_url, output_name_prefix):
+    ok, payload = queue.get()
+    if not ok:
+        print(f"Error analyzing APK: {payload}")
+        return None
+
+    print(f"Extracted version from APK: {payload}")
+    return payload
+
+
+def guess_version_from_url(apk_link):
+    if not apk_link:
+        return None
+
+    match = re.search(r'([0-9]+(?:\.[0-9]+){1,})', apk_link)
+    if match:
+        version = match.group(1)
+        print(f"Using URL-derived version fallback: {version}")
+        return version
+
+    return None
+
+
+def get_best_effort_version(apk_path, apk_link):
+    apk_version = get_apk_version(apk_path)
+    if apk_version:
+        return apk_version
+
+    return guess_version_from_url(apk_link)
+
+
+
+def prepare_app_download(apps_data, app_name_keyword, official_page_url, output_name_prefix):
     target_app = next((a for a in apps_data if app_name_keyword in a['name']), None)
     if not target_app:
         print(f"App {app_name_keyword} not found in apps.json")
-        return False
+        return None
 
     print(f"Processing {target_app['name']} from official source: {official_page_url}")
     apk_link = resolve_official_download_link(official_page_url)
     if not apk_link:
         print("Could not resolve official APK link.")
-        return False
+        return None
 
     print(f"Resolved official APK link: {apk_link}")
 
     new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new.apk")
     if not download_file(apk_link, new_file_path):
-        return False
+        return None
 
-    apk_version = get_apk_version(new_file_path)
+    print(f"Downloaded {target_app['name']} successfully.")
+
+    return {
+        "target_app": target_app,
+        "apk_link": apk_link,
+        "new_file_path": new_file_path,
+        "output_name_prefix": output_name_prefix,
+    }
+
+
+def process_downloaded_update(client, download_ctx):
+    target_app = download_ctx["target_app"]
+    apk_link = download_ctx["apk_link"]
+    new_file_path = download_ctx["new_file_path"]
+    output_name_prefix = download_ctx["output_name_prefix"]
+
+    apk_version = get_best_effort_version(new_file_path, apk_link)
     if not apk_version:
         print("Failed to get version from new APK. Aborting update.")
-        if os.path.exists(new_file_path):
-            os.remove(new_file_path)
         return False
 
     current_version = target_app.get('versionName')
@@ -325,9 +382,6 @@ def process_app_update(client, apps_data, app_name_keyword, official_page_url, o
 
     print("Uploading/Checking file on VSPhone...")
     new_url = client.upload_file(new_file_path, upload_name)
-
-    if os.path.exists(new_file_path):
-        os.remove(new_file_path)
 
     if not new_url:
         print("Upload failed.")
@@ -357,12 +411,27 @@ def main():
         return
 
     any_update = False
+    downloads = []
+    app_configs = [
+        ("Roblox Quốc Tế (Delta)", DELTA_INTL_OFFICIAL_URL, "delta_intl"),
+        ("Roblox VN (Delta)", DELTA_VNG_OFFICIAL_URL, "delta_vng"),
+    ]
 
-    if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", DELTA_INTL_OFFICIAL_URL, "delta_intl"):
-        any_update = True
+    print("Resolving and downloading all Delta APKs first...")
+    for app_name_keyword, official_page_url, output_name_prefix in app_configs:
+        download_ctx = prepare_app_download(apps_data, app_name_keyword, official_page_url, output_name_prefix)
+        if download_ctx:
+            downloads.append(download_ctx)
 
-    if process_app_update(client, apps_data, "Roblox VN (Delta)", DELTA_VNG_OFFICIAL_URL, "delta_vng"):
-        any_update = True
+    print("Starting APK analysis and upload phase...")
+    for download_ctx in downloads:
+        try:
+            if process_downloaded_update(client, download_ctx):
+                any_update = True
+        finally:
+            new_file_path = download_ctx.get("new_file_path")
+            if new_file_path and os.path.exists(new_file_path):
+                os.remove(new_file_path)
 
     if any_update:
         print("Saving apps.json...")
