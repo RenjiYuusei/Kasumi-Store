@@ -179,10 +179,13 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             loadItems()
             setBusy(true)
-            refreshPreloadedApps(initial = true)
-            loadScriptsFromOnline()
-            loadScriptsFromLocal()
-            setBusy(false)
+            try {
+                refreshPreloadedApps(initial = true)
+                loadScriptsFromOnline()
+                loadScriptsFromLocal()
+            } finally {
+                setBusy(false)
+            }
         }
 
         requestStoragePermission()
@@ -372,7 +375,7 @@ class MainActivity : ComponentActivity() {
 
                 if (selectedTab == 0) {
                     PullToRefreshBox(
-                        isRefreshing = isLoading && selectedTab == 0,
+                        isRefreshing = isLoading,
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
@@ -393,7 +396,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     PullToRefreshBox(
-                        isRefreshing = isLoading && selectedTab != 0,
+                        isRefreshing = isLoading,
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
