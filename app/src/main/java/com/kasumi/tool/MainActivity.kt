@@ -378,11 +378,11 @@ class MainActivity : ComponentActivity() {
                 if (selectedTab == 0) {
                     PullToRefreshBox(
                         modifier = Modifier.weight(1f),
-                        isRefreshing = isRefreshingScripts,
+                        isRefreshing = isRefreshingApps,
                         onRefresh = {
                             if (isLoading) return@PullToRefreshBox
                             lifecycleScope.launch {
-                                isRefreshingScripts = true
+                                isRefreshingApps = true
                                 setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
@@ -391,7 +391,7 @@ class MainActivity : ComponentActivity() {
                                     caughtError = e
                                 } finally {
                                     setBusy(false)
-                                    isRefreshingScripts = false
+                                    isRefreshingApps = false
                                 }
                                 if (caughtError != null) {
                                     snackbarHostState.showSnackbar("Lỗi: ${caughtError.message ?: "Lỗi không xác định"}")
