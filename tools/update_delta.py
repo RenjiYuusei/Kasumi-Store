@@ -1,10 +1,9 @@
 import os
 import re
 import json
-import time
 import requests
 import hashlib
-from urllib.parse import urlparse, parse_qs, urljoin
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import cloudscraper
 from androguard.core.apk import APK
@@ -20,6 +19,10 @@ VSPHONE_PASS = "871985"
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
+
+DELTA_INTL_OFFICIAL_URL = "https://delta.filenetwork.vip/android.html"
+DELTA_VNG_OFFICIAL_URL = "https://gloopup.net/Delta/android_vn/"
+
 
 class VSPhoneClient:
     def __init__(self):
@@ -54,7 +57,7 @@ class VSPhoneClient:
         }
 
         try:
-            resp = requests.post(url, json=payload, headers=self.get_headers())
+            resp = requests.post(url, json=payload, headers=self.get_headers(), timeout=30)
             data = resp.json()
             if data.get('code') == 200 and data.get('data'):
                 self.token = data['data']['token']
@@ -68,304 +71,197 @@ class VSPhoneClient:
             return False
 
     def upload_file(self, file_path, file_name):
-        if not self.token: return None
+        if not self.token:
+            return None
 
         print(f"Preparing upload for {file_name}...")
         file_size = os.path.getsize(file_path)
         with open(file_path, 'rb') as f:
             file_md5 = hashlib.md5(f.read()).hexdigest()
 
-        # Check upload
         check_url = f"{self.base_url}/cloudFile/uploadCheck"
         check_payload = {
             "fileItems": [{
                 "fileLength": file_size,
                 "fileMd5": file_md5,
-                "fileType": 2, # APK/Backup type
+                "fileType": 2,
                 "fileName": file_name
             }],
             "operType": 2
         }
 
         try:
-            check_resp = requests.post(check_url, json=check_payload, headers=self.get_headers())
+            check_resp = requests.post(check_url, json=check_payload, headers=self.get_headers(), timeout=30)
             check_data = check_resp.json()
 
             if check_data.get('code') == 200:
                 if check_data.get('data'):
-                    # Instant upload (already exists)
                     print("File already exists on server.")
                     return check_data['data'][0]['downloadUrl']
-                else:
-                    # Finish upload (simulate actual upload flow)
-                    print("Registering file upload (assuming pre-existence or instant finish)...")
-                    finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
-                    ext = file_name.split('.')[-1]
-                    finish_payload = {
-                        "fileId": 0,
-                        "filePath": f"userFile/{file_md5}.{ext}",
-                        "fileOriginName": file_name
-                    }
-                    finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers())
-                    finish_data = finish_resp.json()
 
-                    if finish_data.get('code') == 200 and finish_data.get('data'):
-                         url = finish_data['data']['downloadUrl']
-                         print(f"Upload registered successfully: {url}")
-                         return url
-                    else:
-                         print(f"Finish upload failed: {finish_data}")
+                print("Registering file upload (assuming pre-existence or instant finish)...")
+                finish_url = f"{self.base_url}/padTask/updateCloudFileFinish"
+                ext = file_name.split('.')[-1]
+                finish_payload = {
+                    "fileId": 0,
+                    "filePath": f"userFile/{file_md5}.{ext}",
+                    "fileOriginName": file_name
+                }
+                finish_resp = requests.post(finish_url, json=finish_payload, headers=self.get_headers(), timeout=30)
+                finish_data = finish_resp.json()
+
+                if finish_data.get('code') == 200 and finish_data.get('data'):
+                    url = finish_data['data']['downloadUrl']
+                    print(f"Upload registered successfully: {url}")
+                    return url
+
+                print(f"Finish upload failed: {finish_data}")
             else:
                 print("Upload check failed:", check_data.get('msg'))
                 print("Full Check Response:", check_data)
         except Exception as e:
             print("Upload error:", e)
+
         return None
 
-def fetch_international_link():
-    url = "https://delta.filenetwork.vip/android.html"
-    print(f"Fetching Delta International from official site...")
-    try:
-        scraper = cloudscraper.create_scraper()
-        resp = scraper.get(url)
-        if resp.status_code == 403:
-            print("International: Cloudflare blocked the request (403).")
-            return None
 
-        soup = BeautifulSoup(resp.text, 'html.parser')
+def _is_apk_url(value):
+    return bool(value and re.search(r'\.apk(?:$|\?)', str(value), re.IGNORECASE))
 
-        # Heuristic: Find first direct .apk link
-        apk_link = soup.find('a', href=re.compile(r'\.apk'))
-        if apk_link:
-            print(f"Found .apk link: {apk_link['href']}")
-            return apk_link['href']
 
-        print("Could not find International link on official site.")
-        return None
-    except Exception as e:
-        print(f"Error fetching International: {e}")
-        return None
+def _extract_apk_url_from_html(html, base_url):
+    soup = BeautifulSoup(html or "", 'html.parser')
 
-def extract_google_url(url):
-    parsed = urlparse(url)
-    qs = parse_qs(parsed.query)
-    if 'url' in qs:
-        return qs['url'][0]
+    canonical = soup.find('link', attrs={'rel': 'canonical'})
+    if canonical and _is_apk_url(canonical.get('href')):
+        return urljoin(base_url, canonical.get('href').strip())
+
+    meta_refresh = soup.find('meta', attrs={'http-equiv': re.compile(r'refresh', re.IGNORECASE)})
+    if meta_refresh and meta_refresh.get('content'):
+        match = re.search(r'url\s*=\s*([^;]+)$', meta_refresh['content'], re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip().strip('"\'')
+            candidate = urljoin(base_url, candidate)
+            if _is_apk_url(candidate):
+                return candidate
+
+    apk_anchor = soup.find('a', href=re.compile(r'\.apk(?:$|\?)', re.IGNORECASE))
+    if apk_anchor and apk_anchor.get('href'):
+        return urljoin(base_url, apk_anchor.get('href').strip())
+
+    # Fallback: raw HTML regex (covers JS strings / inline vars).
+    raw_match = re.search(r'https?://[^\s"\'<>]+\.apk(?:\?[^\s"\'<>]*)?', html or '', re.IGNORECASE)
+    if raw_match:
+        return raw_match.group(0)
+
     return None
 
-def bypass_sub2unlock(url):
-    print(f"Bypassing Sub2Unlock: {url}")
-    session = requests.Session()
-    session.headers.update(DEFAULT_HEADERS)
 
+def _resolve_from_files_api(scraper, page_url):
+    """
+    Delta international official page populates download links via JS from get_files.php.
+    """
     try:
-        resp = session.get(url, allow_redirects=True)
-        final_url = resp.url
-        print(f"Landed on: {final_url}")
+        api_url = urljoin(page_url, 'get_files.php')
+        api_resp = scraper.get(api_url, timeout=30)
+        api_resp.raise_for_status()
+        payload = api_resp.json()
+        latest_apk = payload.get('latest_apk') or []
+        if latest_apk and latest_apk[0].get('name'):
+            return urljoin(page_url, f"file/{latest_apk[0]['name']}")
+    except Exception as e:
+        print(f"Could not resolve via files API for {page_url}: {e}")
+    return None
 
-        target_page_url = final_url
 
-        if "google.com" in final_url:
-            print("Detected Google redirect wrapper...")
-            target_url = extract_google_url(final_url)
-            if target_url:
-                print(f"Extracted target: {target_url}")
-                target_page_url = target_url
-                resp = session.get(target_page_url, allow_redirects=True)
-                final_url = resp.url
-                print(f"Landed on (after Google): {final_url}")
+def resolve_official_download_link(page_url):
+    """
+    Resolve official Delta page URL into final APK URL.
+    Uses Cloudscraper first (important for international source behind Cloudflare),
+    then falls back to requests.
+    """
+    try:
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
+        scraper.headers.update(DEFAULT_HEADERS)
 
-        # Check for MediaFire direct link
-        if "mediafire.com" in final_url:
+        response = scraper.get(page_url, allow_redirects=True, timeout=30)
+        final_url = response.url
+        if _is_apk_url(final_url):
             return final_url
 
-        # Generic scan for MediaFire links on the final page (handles bloggingdaze, dusarisalary, etc.)
-        print(f"Scanning {final_url} for MediaFire links...")
-        soup = BeautifulSoup(resp.text, 'html.parser')
+        apk_from_html = _extract_apk_url_from_html(response.text, final_url)
+        if apk_from_html:
+            return apk_from_html
 
-        mf_link = soup.find('a', href=re.compile(r'mediafire\.com'))
-        if mf_link:
-            return mf_link['href']
-
-        print("Could not find MediaFire link on page.")
-        return None
-
+        apk_from_api = _resolve_from_files_api(scraper, final_url)
+        if apk_from_api:
+            return apk_from_api
     except Exception as e:
-        print(f"Error bypassing sub2unlock: {e}")
-        return None
+        print(f"Cloudscraper resolve failed for {page_url}: {e}")
 
-def fetch_anotepad_content(url):
-    try:
-        resp = requests.get(url, headers=DEFAULT_HEADERS)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, 'html.parser')
-
-        content_div = soup.find('div', class_='plaintext') or                       soup.find('div', class_='richtext') or                       soup.find('div', id='note_content') or                       soup.find('div', class_='note-content')
-
-        if content_div:
-            return soup, str(content_div)
-
-        return soup, ""
-    except Exception as e:
-        print(f"Error fetching Anotepad: {e}")
-        return None, ""
-
-def find_link_in_siblings(element):
-    # Check current element first
-    link = element.find('a', href=re.compile(r'/notes/[\w]+'))
-    if link and 'pntxb676' not in link['href']:
-        return link['href']
-
-    # Check next siblings
-    curr = element
-    for _ in range(5): # Look ahead 5 siblings
-        curr = curr.find_next_sibling()
-        if not curr: break
-
-        link = curr.find('a', href=re.compile(r'/notes/[\w]+'))
-        if link and 'pntxb676' not in link['href']:
-            return link['href']
-
-    return None
-
-def parse_anotepad_links(root_url):
-    print(f"Parsing Anotepad root: {root_url}")
-    soup, content_html = fetch_anotepad_content(root_url)
-    if not content_html:
-        return None, None, None, None
-
-    intl_sub_url = None
-    intl_version_override = None
-    vng_sub_url = None
-    vng_version_override = None
-
-    content_soup = BeautifulSoup(content_html, 'html.parser')
-
-    # Find International (Original Search Logic)
-    for div in content_soup.find_all('div'):
-        text = div.get_text().strip().lower()
-        if not text: continue
-
-        if ("delta" in text or "deltax" in text) and ("quốc tế" in text or "quoc te" in text or "international" in text):
-             if not intl_sub_url:
-                link = find_link_in_siblings(div)
-                if link:
-                    print(f"Found candidate for International: {link}")
-                    intl_sub_url = urljoin("https://vi.anotepad.com", link)
-                    intl_version_override = text
-
-    # Find VNG (Positional Logic - 3rd Link)
-    try:
-        # Find all valid note links
-        note_links = content_soup.find_all('a', href=re.compile(r'/notes/[\w]+'))
-        # Exclude self reference if any (though regex handles it usually)
-        note_links = [l for l in note_links if 'pntxb676' not in l['href']]
-
-        print(f"DEBUG: Found {len(note_links)} note links.")
-        for i, l in enumerate(note_links):
-             # Try to get previous text for context
-             curr = l.previous_element
-             text_found = ""
-             steps = 0
-             while curr and steps < 20:
-                 if isinstance(curr, str) and curr.strip():
-                     text_found = curr.strip()
-                 curr = curr.previous_element
-                 steps += 1
-             print(f"DEBUG: Link {i}: {l.get('href')} - Context: {text_found[:50]}...")
-
-
-        if len(note_links) >= 3:
-            # 3rd link (Index 2)
-            target_link = note_links[2]
-            vng_sub_url = urljoin("https://vi.anotepad.com", target_link['href'])
-            print(f"Found positional VNG link (3rd): {vng_sub_url}")
-
-            # Extract Version Override by traversing backwards
-            collected_text = []
-            curr = target_link.previous_element
-            steps = 0
-            while curr and steps < 500: # Limit steps to avoid infinite loop
-                if curr.name == 'a' and re.search(r'/notes/', curr.get('href', '')):
-                    break # Stop at previous link
-
-                if isinstance(curr, str):
-                    text = curr.strip()
-                    if text:
-                        collected_text.insert(0, text)
-
-                curr = curr.previous_element
-                steps += 1
-
-            full_text = " ".join(collected_text)
-            print(f"Extracted context text: {full_text[:100]}...")
-
-            # Use raw text as a "trigger" check to force update
-            vng_version_override = full_text
-        else:
-            print(f"Not enough note links for positional VNG extraction. Found {len(note_links)} links.")
-
-    except Exception as e:
-        print(f"Error in positional VNG extraction: {e}")
-
-    return intl_sub_url, vng_sub_url, vng_version_override, intl_version_override
-
-def resolve_sub2unlock_from_note(note_url):
-    if not note_url: return None
-    print(f"Resolving Sub2Unlock from: {note_url}")
-    _, content = fetch_anotepad_content(note_url)
-    match = re.search(r'https?://sub2unlock\.io/[\w]+', content)
-    if match:
-        return match.group(0)
-    return None
-
-def get_mediafire_direct_link(url):
     try:
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
-        resp = session.get(url)
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        link = soup.find('a', {'aria-label': 'Download file'})
-        if link:
-            return link.get('href')
-        link = soup.find('a', class_='input popsok')
-        if link:
-            return link.get('href')
-        return url
-    except:
-        return url
+        response = session.get(page_url, allow_redirects=True, timeout=30)
+        final_url = response.url
+        if _is_apk_url(final_url):
+            return final_url
+
+        apk_from_html = _extract_apk_url_from_html(response.text, final_url)
+        if apk_from_html:
+            return apk_from_html
+
+        # Final fallback for JS-driven official page.
+        api_url = urljoin(final_url, 'get_files.php')
+        api_resp = session.get(api_url, timeout=30)
+        api_resp.raise_for_status()
+        payload = api_resp.json()
+        latest_apk = payload.get('latest_apk') or []
+        if latest_apk and latest_apk[0].get('name'):
+            return urljoin(final_url, f"file/{latest_apk[0]['name']}")
+
+        return None
+    except Exception as e:
+        print(f"Error resolving official link from {page_url}: {e}")
+        return None
+
 
 def download_file(url, output_path):
     print(f"Downloading {url} to {output_path}...")
-
-    if "mediafire.com" in url:
-        direct_url = get_mediafire_direct_link(url)
-        if direct_url != url:
-            print(f"Resolved MediaFire direct link: {direct_url}")
-            url = direct_url
-
     try:
-        scraper = cloudscraper.create_scraper()
-        with scraper.get(url, stream=True) as r:
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
+        scraper.headers.update(DEFAULT_HEADERS)
+
+        request_headers = {}
+        # Delta international file URLs may require same-session cookies + referer from official page.
+        if 'delta.filenetwork.vip/file/' in url:
+            try:
+                scraper.get(DELTA_INTL_OFFICIAL_URL, allow_redirects=True, timeout=30)
+            except Exception as warm_err:
+                print(f"Warning: preflight international page failed: {warm_err}")
+            request_headers['Referer'] = DELTA_INTL_OFFICIAL_URL
+
+        with scraper.get(url, stream=True, timeout=120, headers=request_headers or None, allow_redirects=True) as r:
             r.raise_for_status()
             with open(output_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    if chunk:
+                        f.write(chunk)
         return True
     except Exception as e:
         print(f"Download failed: {e}")
         return False
+
 
 def get_apk_version(apk_path):
     try:
         apk = APK(apk_path)
         version_name = apk.get_androidversion_name()
 
-        # Handle bytes or string encoded bytes (e.g., "b'2.706'")
         if isinstance(version_name, bytes):
             version_name = version_name.decode('utf-8', errors='ignore')
         elif isinstance(version_name, str) and version_name.startswith("b'") and version_name.endswith("'"):
-             version_name = version_name[2:-1]
+            version_name = version_name[2:-1]
 
         print(f"Extracted version from APK: {version_name}")
         return version_name
@@ -373,112 +269,57 @@ def get_apk_version(apk_path):
         print(f"Error analyzing APK: {e}")
         return None
 
-def process_app_update(client, apps_data, app_name_keyword, source_link, output_name_prefix, override_version_trigger=None):
+
+def process_app_update(client, apps_data, app_name_keyword, official_page_url, output_name_prefix):
     target_app = next((a for a in apps_data if app_name_keyword in a['name']), None)
     if not target_app:
         print(f"App {app_name_keyword} not found in apps.json")
         return False
 
-    print(f"Processing {target_app['name']}...")
-
-    sub2unlock_url = resolve_sub2unlock_from_note(source_link)
-    if not sub2unlock_url:
-        print(f"No sub2unlock link found for {app_name_keyword}")
+    print(f"Processing {target_app['name']} from official source: {official_page_url}")
+    apk_link = resolve_official_download_link(official_page_url)
+    if not apk_link:
+        print("Could not resolve official APK link.")
         return False
 
-    mf_link = bypass_sub2unlock(sub2unlock_url)
-    if not mf_link:
-        print("Bypass failed.")
-        return False
+    print(f"Resolved official APK link: {apk_link}")
 
-    print(f"MediaFire Link: {mf_link}")
-
-    updated = False
-    # Download new file
     new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new.apk")
-    if not download_file(mf_link, new_file_path):
+    if not download_file(apk_link, new_file_path):
         return False
 
-    # Get Version from APK
     apk_version = get_apk_version(new_file_path)
     if not apk_version:
         print("Failed to get version from new APK. Aborting update.")
-        if os.path.exists(new_file_path): os.remove(new_file_path)
+        if os.path.exists(new_file_path):
+            os.remove(new_file_path)
         return False
 
     current_version = target_app.get('versionName')
     print(f"Current Version: {current_version}, New APK Version: {apk_version}")
 
-    # Manual Env Override (if any)
-    env_override = os.environ.get("VNG_VERSION_OVERRIDE")
-
-    # Trigger Text Logic
-    trigger_version = None
-    if override_version_trigger:
-        print(f"Analyzing override trigger: '{override_version_trigger}'")
-        # Try to find "Fix XXX" pattern first
-        match_fix = re.search(r'Fix\s*(\d+)', override_version_trigger, re.IGNORECASE)
-        if match_fix:
-             fix_num = match_fix.group(1)
-             print(f"Found Fix number: {fix_num}")
-             if apk_version:
-                 parts = apk_version.split('.')
-                 if len(parts) >= 2:
-                     trigger_version = f"{parts[0]}.{parts[1]}.{fix_num}"
-                 else:
-                     trigger_version = f"{apk_version}.{fix_num}"
-
-        # Look for version strings in text (e.g. 2.706)
-        if not trigger_version:
-            match_full = re.search(r'(\d+\.\d+(?:\.\d+)?)', override_version_trigger)
-            if match_full:
-                trigger_version = match_full.group(1)
-
-
-    new_version_to_save = apk_version # Default to APK
-
-    if env_override and output_name_prefix == "delta_vng":
-        print(f"Manual Version Override found in Env: {env_override}")
-        new_version_to_save = env_override
-    elif trigger_version:
-        # Determine if this is a "real" fix override
-        # Check for explicit "Fix <number>" pattern
-        has_explicit_fix = bool(re.search(r"Fix\s*\d+", override_version_trigger, re.IGNORECASE))
-
-        if has_explicit_fix:
-             print(f"Explicit Fix Override found: {trigger_version}")
-             new_version_to_save = trigger_version
-        elif apk_version and len(str(apk_version)) >= len(str(trigger_version)) and str(apk_version).startswith(str(trigger_version)):
-             print(f"Preferring detailed APK version ({apk_version}) over short trigger ({trigger_version})")
-             new_version_to_save = apk_version
-        else:
-             print(f"Version Override found in Trigger Text: {trigger_version}")
-             new_version_to_save = trigger_version
-
-    print("Uploading/Checking file on VSPhone...")
-
-    # Upload and check URL
-    # Include version in filename to be safe
-    # Ensure version string is clean for filename
     clean_version = "".join(c for c in str(apk_version) if c.isalnum() or c in ".-_")
     upload_name = f"{output_name_prefix}_{clean_version}.apk"
 
+    print("Uploading/Checking file on VSPhone...")
     new_url = client.upload_file(new_file_path, upload_name)
 
-    if new_url:
-        # Update if URL changes (new content) OR if version string changes
-        if new_url != target_app.get('url') or new_version_to_save != current_version:
-             target_app['url'] = new_url
-             target_app['versionName'] = new_version_to_save
-             updated = True
-             print(f"Updated {target_app['name']} to version {new_version_to_save} @ {new_url}")
-        else:
-             print(f"File content identical. URL: {new_url} == {target_app.get('url')} AND Version: {new_version_to_save} == {current_version}")
-    else:
-        print("Upload failed.")
+    if os.path.exists(new_file_path):
+        os.remove(new_file_path)
 
-    if os.path.exists(new_file_path): os.remove(new_file_path)
-    return updated
+    if not new_url:
+        print("Upload failed.")
+        return False
+
+    if new_url == target_app.get('url') and apk_version == current_version:
+        print("File content and version unchanged.")
+        return False
+
+    target_app['url'] = new_url
+    target_app['versionName'] = apk_version
+    print(f"Updated {target_app['name']} to version {apk_version} @ {new_url}")
+    return True
+
 
 def main():
     if not os.path.exists(APPS_JSON_PATH):
@@ -494,39 +335,12 @@ def main():
         return
 
     any_update = False
-    anotepad_root = "https://vi.anotepad.com/notes/pntxb676"
 
-    # Unpack safely (do not abort whole run if Anotepad is down)
-    intl_note = None
-    vng_note = None
-    vng_version_trigger = None
-    intl_version_trigger = None
-    try:
-        res = parse_anotepad_links(anotepad_root)
-        if res and len(res) >= 4:
-            intl_note, vng_note, vng_version_trigger, intl_version_trigger = res
-        else:
-            print("Failed to parse Anotepad links. Skipping Delta update sources for this run.")
-    except Exception as e:
-        print(f"Anotepad parsing failed: {e}. Skipping Delta update sources for this run.")
+    if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", DELTA_INTL_OFFICIAL_URL, "delta_intl"):
+        any_update = True
 
-    # 1. Update International
-    # Use Anotepad for International if found
-    if intl_note:
-        print("Using Anotepad source for International.")
-        if process_app_update(client, apps_data, "Roblox Quốc Tế (Delta)", intl_note, "delta_intl", override_version_trigger=intl_version_trigger):
-            any_update = True
-    else:
-        print("Could not find International source.")
-
-    # 2. Update VNG
-    if vng_note:
-        # Pass the trigger to force check, but logic inside will prioritize APK version for saving
-        if process_app_update(client, apps_data, "Roblox VN (Delta)", vng_note, "delta_vng", override_version_trigger=vng_version_trigger):
-            any_update = True
-    else:
-        print("Could not find VNG note link in root.")
-
+    if process_app_update(client, apps_data, "Roblox VN (Delta)", DELTA_VNG_OFFICIAL_URL, "delta_vng"):
+        any_update = True
 
     if any_update:
         print("Saving apps.json...")
@@ -534,6 +348,7 @@ def main():
             json.dump(apps_data, f, indent=2, ensure_ascii=False)
     else:
         print("No updates made.")
+
 
 if __name__ == "__main__":
     main()
