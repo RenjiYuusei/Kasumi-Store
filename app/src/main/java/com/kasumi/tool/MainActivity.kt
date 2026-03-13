@@ -38,14 +38,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,7 +115,8 @@ class MainActivity : ComponentActivity() {
     // Store original online scripts separately to preserve metadata
     private var onlineScriptsList = listOf<ScriptItem>()
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
-    private var isLoading by mutableStateOf(false)
+    private var activeTasksCount by mutableIntStateOf(0)
+    private val isLoading: Boolean get() = activeTasksCount > 0
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
     private var statsVersion by mutableIntStateOf(0)
@@ -932,7 +931,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setBusy(busy: Boolean) {
-        isLoading = busy
+        if (busy) activeTasksCount++ else activeTasksCount = (activeTasksCount - 1).coerceAtLeast(0)
     }
 
     private fun log(msg: String) {
