@@ -370,7 +370,7 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
 
 
-                if (isGlobalLoading && !isRefreshingApps && !isRefreshingScripts) {
+                AnimatedVisibility(visible = isGlobalLoading && !isRefreshingApps && !isRefreshingScripts) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary,
@@ -391,6 +391,7 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             if (isGlobalLoading) {
                                 lifecycleScope.launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
                                     snackbarHostState.showSnackbar("Vui lòng chờ tác vụ hiện tại hoàn thành")
                                 }
                                 return@PullToRefreshBox
@@ -426,6 +427,7 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             if (isGlobalLoading) {
                                 lifecycleScope.launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
                                     snackbarHostState.showSnackbar("Vui lòng chờ tác vụ hiện tại hoàn thành")
                                 }
                                 return@PullToRefreshBox
