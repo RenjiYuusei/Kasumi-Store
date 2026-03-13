@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
     private var onlineScriptsList = listOf<ScriptItem>()
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var activeTasksCount by mutableIntStateOf(0)
-    private val isLoading: Boolean by derivedStateOf { activeTasksCount > 0 }
+    private val isLoading: Boolean get() = activeTasksCount > 0
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
     private var statsVersion by mutableIntStateOf(0)
@@ -211,6 +211,7 @@ class MainActivity : ComponentActivity() {
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
         var isRefreshingApps by remember { mutableStateOf(false) }
         var isRefreshingScripts by remember { mutableStateOf(false) }
+        val isGlobalLoading by remember { derivedStateOf { isLoading } }
 
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -369,6 +370,14 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
 
 
+                if (isGlobalLoading && !isRefreshingApps && !isRefreshingScripts) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+
                 KasumiSearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
@@ -380,7 +389,12 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f),
                         isRefreshing = isRefreshingApps,
                         onRefresh = {
-                            if (isLoading) return@PullToRefreshBox
+                            if (isGlobalLoading) {
+                                lifecycleScope.launch {
+                                    snackbarHostState.showSnackbar("Vui lòng chờ tác vụ hiện tại hoàn thành")
+                                }
+                                return@PullToRefreshBox
+                            }
                             lifecycleScope.launch {
                                 isRefreshingApps = true
                                 setBusy(true)
@@ -410,7 +424,12 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f),
                         isRefreshing = isRefreshingScripts,
                         onRefresh = {
-                            if (isLoading) return@PullToRefreshBox
+                            if (isGlobalLoading) {
+                                lifecycleScope.launch {
+                                    snackbarHostState.showSnackbar("Vui lòng chờ tác vụ hiện tại hoàn thành")
+                                }
+                                return@PullToRefreshBox
+                            }
                             lifecycleScope.launch {
                                 isRefreshingScripts = true
                                 setBusy(true)
