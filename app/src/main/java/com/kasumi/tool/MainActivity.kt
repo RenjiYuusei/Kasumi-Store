@@ -379,13 +379,18 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
+                                var errorMsg: String? = null
                                 try {
                                     refreshPreloadedApps()
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 } catch (e: Exception) {
-                                    snackbarHostState.showSnackbar("Lỗi: ${e.message}")
+                                    errorMsg = e.message
                                 } finally {
                                     setBusy(false)
+                                }
+                                if (errorMsg != null) {
+                                    snackbarHostState.showSnackbar("Lỗi: $errorMsg")
+                                } else {
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 }
                             }
                         }
@@ -400,14 +405,19 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
+                                var errorMsg: String? = null
                                 try {
                                     loadScriptsFromOnline()
                                     loadScriptsFromLocal()
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 } catch (e: Exception) {
-                                    snackbarHostState.showSnackbar("Lỗi: ${e.message}")
+                                    errorMsg = e.message
                                 } finally {
                                     setBusy(false)
+                                }
+                                if (errorMsg != null) {
+                                    snackbarHostState.showSnackbar("Lỗi: $errorMsg")
+                                } else {
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 }
                             }
                         }
