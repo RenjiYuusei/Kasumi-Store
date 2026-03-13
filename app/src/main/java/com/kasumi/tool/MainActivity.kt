@@ -190,7 +190,11 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                loadScriptsFromLocal()
+                try {
+                    loadScriptsFromLocal()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             } finally {
                 setBusy(false)
             }
