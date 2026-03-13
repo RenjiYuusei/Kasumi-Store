@@ -3,6 +3,7 @@ import re
 import json
 import requests
 import hashlib
+import multiprocessing as mp
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 import cloudscraper
@@ -275,7 +276,7 @@ def download_file(url, output_path):
 
 
 
-def get_apk_version(apk_path):
+def _read_apk_version_worker(apk_path, queue):
     try:
         apk = APK(apk_path)
         version_name = apk.get_androidversion_name()
@@ -285,11 +286,56 @@ def get_apk_version(apk_path):
         elif isinstance(version_name, str) and version_name.startswith("b'") and version_name.endswith("'"):
             version_name = version_name[2:-1]
 
-        print(f"Extracted version from APK: {version_name}")
-        return version_name
+        queue.put((True, version_name))
     except Exception as e:
-        print(f"Error analyzing APK: {e}")
+        queue.put((False, str(e)))
+
+
+def get_apk_version(apk_path, timeout_seconds=180):
+    queue = mp.Queue()
+    process = mp.Process(target=_read_apk_version_worker, args=(apk_path, queue))
+    process.start()
+    process.join(timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        print(f"Error analyzing APK: timeout after {timeout_seconds}s")
         return None
+
+    if queue.empty():
+        print("Error analyzing APK: no result from parser")
+        return None
+
+    ok, payload = queue.get()
+    if not ok:
+        print(f"Error analyzing APK: {payload}")
+        return None
+
+    print(f"Extracted version from APK: {payload}")
+    return payload
+
+
+def guess_version_from_url(apk_link):
+    if not apk_link:
+        return None
+
+    match = re.search(r'([0-9]+(?:\.[0-9]+){1,})', apk_link)
+    if match:
+        version = match.group(1)
+        print(f"Using URL-derived version fallback: {version}")
+        return version
+
+    return None
+
+
+def get_best_effort_version(apk_path, apk_link):
+    apk_version = get_apk_version(apk_path)
+    if apk_version:
+        return apk_version
+
+    return guess_version_from_url(apk_link)
+
 
 
 def process_app_update(client, apps_data, app_name_keyword, official_page_url, output_name_prefix):
@@ -310,7 +356,7 @@ def process_app_update(client, apps_data, app_name_keyword, official_page_url, o
     if not download_file(apk_link, new_file_path):
         return False
 
-    apk_version = get_apk_version(new_file_path)
+    apk_version = get_best_effort_version(new_file_path, apk_link)
     if not apk_version:
         print("Failed to get version from new APK. Aborting update.")
         if os.path.exists(new_file_path):
