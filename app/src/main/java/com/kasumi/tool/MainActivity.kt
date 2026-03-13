@@ -376,9 +376,14 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
-                                refreshPreloadedApps()
-                                setBusy(false)
-                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                try {
+                                    refreshPreloadedApps()
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Lỗi: ${e.message}")
+                                } finally {
+                                    setBusy(false)
+                                }
                             }
                         }
                     ) {
@@ -392,10 +397,15 @@ class MainActivity : ComponentActivity() {
                         onRefresh = {
                             lifecycleScope.launch {
                                 setBusy(true)
-                                loadScriptsFromOnline()
-                                loadScriptsFromLocal()
-                                setBusy(false)
-                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                try {
+                                    loadScriptsFromOnline()
+                                    loadScriptsFromLocal()
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Lỗi: ${e.message}")
+                                } finally {
+                                    setBusy(false)
+                                }
                             }
                         }
                     ) {
