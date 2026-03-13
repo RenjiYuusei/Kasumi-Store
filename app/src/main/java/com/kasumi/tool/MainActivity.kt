@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -299,16 +301,7 @@ class MainActivity : ComponentActivity() {
                             IconButton(onClick = { showSortDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Sort")
                             }
-                            IconButton(onClick = {
-                                lifecycleScope.launch {
-                                    setBusy(true)
-                                    refreshPreloadedApps()
-                                    setBusy(false)
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
-                                }
-                            }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                            }
+
                         }
                     }
                 )
@@ -370,13 +363,7 @@ class MainActivity : ComponentActivity() {
             }
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {
-                AnimatedVisibility(visible = isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
+
 
                 KasumiSearchBar(
                     query = searchQuery,
@@ -385,15 +372,40 @@ class MainActivity : ComponentActivity() {
                 )
 
                 if (selectedTab == 0) {
-                    AppsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
+                    PullToRefreshBox(
+                        isRefreshing = isLoading,
+                        onRefresh = {
+                            lifecycleScope.launch {
+                                setBusy(true)
+                                refreshPreloadedApps()
+                                setBusy(false)
+                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                            }
+                        }
+                    ) {
+                        AppsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        })
+                    }
                 } else {
-                    ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    }, onDownloadRequest = { script ->
-                        scriptToDownload = script
-                    })
+                    PullToRefreshBox(
+                        isRefreshing = isLoading,
+                        onRefresh = {
+                            lifecycleScope.launch {
+                                setBusy(true)
+                                loadScriptsFromOnline()
+                                loadScriptsFromLocal()
+                                setBusy(false)
+                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                            }
+                        }
+                    ) {
+                        ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }, onDownloadRequest = { script ->
+                            scriptToDownload = script
+                        })
+                    }
                 }
             }
 
