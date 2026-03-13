@@ -209,6 +209,8 @@ class MainActivity : ComponentActivity() {
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
+        var isRefreshingApps by remember { mutableStateOf(false) }
+        var isRefreshingScripts by remember { mutableStateOf(false) }
 
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -364,7 +366,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         ) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
+            Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
 
 
                 KasumiSearchBar(
@@ -376,9 +378,11 @@ class MainActivity : ComponentActivity() {
                 if (selectedTab == 0) {
                     PullToRefreshBox(
                         modifier = Modifier.weight(1f),
-                        isRefreshing = isLoading,
+                        isRefreshing = isRefreshingApps,
                         onRefresh = {
+                            if (isLoading) return@PullToRefreshBox
                             lifecycleScope.launch {
+                                isRefreshingApps = true
                                 setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
@@ -387,6 +391,7 @@ class MainActivity : ComponentActivity() {
                                     caughtError = e
                                 } finally {
                                     setBusy(false)
+                                    isRefreshingApps = false
                                 }
                                 if (caughtError != null) {
                                     snackbarHostState.showSnackbar("Lỗi: ${caughtError.message ?: "Lỗi không xác định"}")
@@ -403,9 +408,11 @@ class MainActivity : ComponentActivity() {
                 } else {
                     PullToRefreshBox(
                         modifier = Modifier.weight(1f),
-                        isRefreshing = isLoading,
+                        isRefreshing = isRefreshingApps,
                         onRefresh = {
+                            if (isLoading) return@PullToRefreshBox
                             lifecycleScope.launch {
+                                isRefreshingApps = true
                                 setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
@@ -415,6 +422,7 @@ class MainActivity : ComponentActivity() {
                                     caughtError = e
                                 } finally {
                                     setBusy(false)
+                                    isRefreshingApps = false
                                 }
                                 if (caughtError != null) {
                                     snackbarHostState.showSnackbar("Lỗi: ${caughtError.message ?: "Lỗi không xác định"}")
