@@ -181,7 +181,11 @@ class MainActivity : ComponentActivity() {
             setBusy(true)
             try {
                 refreshPreloadedApps(initial = true)
-                loadScriptsFromOnline()
+                try {
+                    loadScriptsFromOnline()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 loadScriptsFromLocal()
             } finally {
                 setBusy(false)
@@ -396,8 +400,8 @@ class MainActivity : ComponentActivity() {
                                 }
                                 return@PullToRefreshBox
                             }
+                            isRefreshingApps = true
                             lifecycleScope.launch {
-                                isRefreshingApps = true
                                 setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
@@ -432,15 +436,19 @@ class MainActivity : ComponentActivity() {
                                 }
                                 return@PullToRefreshBox
                             }
+                            isRefreshingScripts = true
                             lifecycleScope.launch {
-                                isRefreshingScripts = true
                                 setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
                                     loadScriptsFromOnline()
-                                    loadScriptsFromLocal()
                                 } catch (e: Exception) {
                                     caughtError = e
+                                }
+                                try {
+                                    loadScriptsFromLocal()
+                                } catch (e: Exception) {
+                                    if (caughtError == null) caughtError = e
                                 } finally {
                                     setBusy(false)
                                     isRefreshingScripts = false
