@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
     private var onlineScriptsList = listOf<ScriptItem>()
     private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var activeTasksCount by mutableIntStateOf(0)
-    private val isLoading: Boolean get() = activeTasksCount > 0
+    private val isLoading: Boolean by derivedStateOf { activeTasksCount > 0 }
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
     private var statsVersion by mutableIntStateOf(0)
@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(24.dp),
                 title = {
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Column {
                         Text(
                             script.name,
                             fontWeight = FontWeight.Bold,
