@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(24.dp),
                 title = {
-                    Column {
+                    Column(modifier = Modifier.fillMaxSize()) {
                         Text(
                             script.name,
                             fontWeight = FontWeight.Bold,
@@ -567,7 +567,7 @@ class MainActivity : ComponentActivity() {
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
-        Column {
+        Column(modifier = Modifier.fillMaxSize()) {
              Row(
                  modifier = Modifier
                      .fillMaxWidth()
@@ -603,7 +603,7 @@ class MainActivity : ComponentActivity() {
 
             LazyColumn(
                 contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.weight(1f)
             ) {
                 if (filteredApps.isEmpty()) {
                     item {
@@ -793,7 +793,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        Column {
+        Column(modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.scripts_count, filteredScripts.size),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -802,7 +802,7 @@ class MainActivity : ComponentActivity() {
             )
             LazyColumn(
                 contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.weight(1f)
             ) {
                 if (filteredScripts.isEmpty()) {
                     item {
