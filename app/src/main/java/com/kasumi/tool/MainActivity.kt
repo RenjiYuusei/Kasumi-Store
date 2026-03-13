@@ -409,8 +409,8 @@ class MainActivity : ComponentActivity() {
                                 return@PullToRefreshBox
                             }
                             isRefreshingApps = true
+                            setBusy(true)
                             lifecycleScope.launch {
-                                setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
                                     refreshPreloadedApps()
@@ -445,8 +445,8 @@ class MainActivity : ComponentActivity() {
                                 return@PullToRefreshBox
                             }
                             isRefreshingScripts = true
+                            setBusy(true)
                             lifecycleScope.launch {
-                                setBusy(true)
                                 var caughtError: Exception? = null
                                 try {
                                     loadScriptsFromOnline()
