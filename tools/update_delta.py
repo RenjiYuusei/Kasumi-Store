@@ -125,41 +125,100 @@ class VSPhoneClient:
         return None
 
 
+def _is_apk_url(value):
+    return bool(value and re.search(r'\.apk(?:$|\?)', str(value), re.IGNORECASE))
+
+
+def _extract_apk_url_from_html(html, base_url):
+    soup = BeautifulSoup(html or "", 'html.parser')
+
+    canonical = soup.find('link', attrs={'rel': 'canonical'})
+    if canonical and _is_apk_url(canonical.get('href')):
+        return urljoin(base_url, canonical.get('href').strip())
+
+    meta_refresh = soup.find('meta', attrs={'http-equiv': re.compile(r'refresh', re.IGNORECASE)})
+    if meta_refresh and meta_refresh.get('content'):
+        match = re.search(r'url\s*=\s*([^;]+)$', meta_refresh['content'], re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip().strip('"\'')
+            candidate = urljoin(base_url, candidate)
+            if _is_apk_url(candidate):
+                return candidate
+
+    apk_anchor = soup.find('a', href=re.compile(r'\.apk(?:$|\?)', re.IGNORECASE))
+    if apk_anchor and apk_anchor.get('href'):
+        return urljoin(base_url, apk_anchor.get('href').strip())
+
+    # Fallback: raw HTML regex (covers JS strings / inline vars).
+    raw_match = re.search(r'https?://[^\s"\'<>]+\.apk(?:\?[^\s"\'<>]*)?', html or '', re.IGNORECASE)
+    if raw_match:
+        return raw_match.group(0)
+
+    return None
+
+
+def _resolve_from_files_api(scraper, page_url):
+    """
+    Delta international official page populates download links via JS from get_files.php.
+    """
+    try:
+        api_url = urljoin(page_url, 'get_files.php')
+        api_resp = scraper.get(api_url, timeout=30)
+        api_resp.raise_for_status()
+        payload = api_resp.json()
+        latest_apk = payload.get('latest_apk') or []
+        if latest_apk and latest_apk[0].get('name'):
+            return urljoin(page_url, f"file/{latest_apk[0]['name']}")
+    except Exception as e:
+        print(f"Could not resolve via files API for {page_url}: {e}")
+    return None
+
+
 def resolve_official_download_link(page_url):
     """
     Resolve official Delta page URL into final APK URL.
-    Supports HTTP redirects and HTML redirects (canonical/meta refresh/apk anchor).
+    Uses Cloudscraper first (important for international source behind Cloudflare),
+    then falls back to requests.
     """
-    session = requests.Session()
-    session.headers.update(DEFAULT_HEADERS)
-
     try:
-        response = session.get(page_url, allow_redirects=True, timeout=30)
-        final_url = response.url
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
+        scraper.headers.update(DEFAULT_HEADERS)
 
-        if re.search(r'\.apk(?:$|\?)', final_url, re.IGNORECASE):
+        response = scraper.get(page_url, allow_redirects=True, timeout=30)
+        final_url = response.url
+        if _is_apk_url(final_url):
             return final_url
 
-        soup = BeautifulSoup(response.text or "", 'html.parser')
+        apk_from_html = _extract_apk_url_from_html(response.text, final_url)
+        if apk_from_html:
+            return apk_from_html
 
-        canonical = soup.find('link', attrs={'rel': 'canonical'})
-        if canonical and canonical.get('href'):
-            canonical_url = canonical.get('href').strip()
-            if re.search(r'\.apk(?:$|\?)', canonical_url, re.IGNORECASE):
-                return canonical_url
+        apk_from_api = _resolve_from_files_api(scraper, final_url)
+        if apk_from_api:
+            return apk_from_api
+    except Exception as e:
+        print(f"Cloudscraper resolve failed for {page_url}: {e}")
 
-        meta_refresh = soup.find('meta', attrs={'http-equiv': re.compile(r'refresh', re.IGNORECASE)})
-        if meta_refresh and meta_refresh.get('content'):
-            match = re.search(r'url\s*=\s*(.+)$', meta_refresh['content'], re.IGNORECASE)
-            if match:
-                refresh_url = match.group(1).strip().strip('"\'')
-                refresh_url = urljoin(response.url, refresh_url)
-                if re.search(r'\.apk(?:$|\?)', refresh_url, re.IGNORECASE):
-                    return refresh_url
+    try:
+        session = requests.Session()
+        session.headers.update(DEFAULT_HEADERS)
+        response = session.get(page_url, allow_redirects=True, timeout=30)
+        final_url = response.url
+        if _is_apk_url(final_url):
+            return final_url
 
-        apk_anchor = soup.find('a', href=re.compile(r'\.apk(?:$|\?)', re.IGNORECASE))
-        if apk_anchor and apk_anchor.get('href'):
-            return urljoin(response.url, apk_anchor.get('href').strip())
+        apk_from_html = _extract_apk_url_from_html(response.text, final_url)
+        if apk_from_html:
+            return apk_from_html
+
+        # Final fallback for JS-driven official page.
+        api_url = urljoin(final_url, 'get_files.php')
+        api_resp = session.get(api_url, timeout=30)
+        api_resp.raise_for_status()
+        payload = api_resp.json()
+        latest_apk = payload.get('latest_apk') or []
+        if latest_apk and latest_apk[0].get('name'):
+            return urljoin(final_url, f"file/{latest_apk[0]['name']}")
 
         return None
     except Exception as e:
@@ -170,8 +229,19 @@ def resolve_official_download_link(page_url):
 def download_file(url, output_path):
     print(f"Downloading {url} to {output_path}...")
     try:
-        scraper = cloudscraper.create_scraper()
-        with scraper.get(url, stream=True, timeout=60) as r:
+        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
+        scraper.headers.update(DEFAULT_HEADERS)
+
+        request_headers = {}
+        # Delta international file URLs may require same-session cookies + referer from official page.
+        if 'delta.filenetwork.vip/file/' in url:
+            try:
+                scraper.get(DELTA_INTL_OFFICIAL_URL, allow_redirects=True, timeout=30)
+            except Exception as warm_err:
+                print(f"Warning: preflight international page failed: {warm_err}")
+            request_headers['Referer'] = DELTA_INTL_OFFICIAL_URL
+
+        with scraper.get(url, stream=True, timeout=120, headers=request_headers or None, allow_redirects=True) as r:
             r.raise_for_status()
             with open(output_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
