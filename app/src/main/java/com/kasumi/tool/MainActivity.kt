@@ -375,6 +375,7 @@ class MainActivity : ComponentActivity() {
 
                 if (selectedTab == 0) {
                     PullToRefreshBox(
+                        modifier = Modifier.weight(1f),
                         isRefreshing = isLoading,
                         onRefresh = {
                             lifecycleScope.launch {
@@ -401,6 +402,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     PullToRefreshBox(
+                        modifier = Modifier.weight(1f),
                         isRefreshing = isLoading,
                         onRefresh = {
                             lifecycleScope.launch {
