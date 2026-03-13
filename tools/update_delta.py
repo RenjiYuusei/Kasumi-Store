@@ -357,6 +357,7 @@ def prepare_app_download(apps_data, app_name_keyword, official_page_url, output_
 
     new_file_path = os.path.join(BASE_DIR, f"{output_name_prefix}_new.apk")
     if not download_file(apk_link, new_file_path):
+        print(f"Download failed for {target_app['name']}")
         return None
 
     print(f"Downloaded {target_app['name']} successfully.")
