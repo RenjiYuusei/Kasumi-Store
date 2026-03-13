@@ -17,7 +17,7 @@ VSPHONE_USER = "shallow9210@whitehousecalculator.com"
 VSPHONE_PASS = "871985"
 
 DEFAULT_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
 }
 
 DELTA_INTL_OFFICIAL_URL = "https://delta.filenetwork.vip/android.html"
@@ -228,29 +228,51 @@ def resolve_official_download_link(page_url):
 
 def download_file(url, output_path):
     print(f"Downloading {url} to {output_path}...")
-    try:
-        scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'mobile': True})
-        scraper.headers.update(DEFAULT_HEADERS)
 
-        request_headers = {}
-        # Delta international file URLs may require same-session cookies + referer from official page.
-        if 'delta.filenetwork.vip/file/' in url:
-            try:
+    browser_profiles = [
+        {'browser': 'chrome', 'platform': 'android', 'mobile': True},
+        {'browser': 'chrome', 'platform': 'windows', 'mobile': False},
+    ]
+
+    # Retries + browser profile rotation help with intermittent anti-bot 403 on CI runners.
+    for attempt in range(1, 5):
+        try:
+            browser_profile = browser_profiles[(attempt - 1) % len(browser_profiles)]
+            scraper = cloudscraper.create_scraper(browser=browser_profile)
+            scraper.headers.update(DEFAULT_HEADERS)
+            request_headers = {
+                'Accept': '*/*',
+            }
+
+            # Delta international file URLs may require same-session cookies + referer from official page.
+            if 'delta.filenetwork.vip/file/' in url:
+                request_headers['Referer'] = DELTA_INTL_OFFICIAL_URL
+                # Warm up both page + files API to establish Cloudflare/session cookies.
                 scraper.get(DELTA_INTL_OFFICIAL_URL, allow_redirects=True, timeout=30)
-            except Exception as warm_err:
-                print(f"Warning: preflight international page failed: {warm_err}")
-            request_headers['Referer'] = DELTA_INTL_OFFICIAL_URL
+                scraper.get(urljoin(DELTA_INTL_OFFICIAL_URL, 'get_files.php'), timeout=30)
 
-        with scraper.get(url, stream=True, timeout=120, headers=request_headers or None, allow_redirects=True) as r:
-            r.raise_for_status()
-            with open(output_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-        return True
-    except Exception as e:
-        print(f"Download failed: {e}")
-        return False
+            with scraper.get(url, stream=True, timeout=120, headers=request_headers, allow_redirects=True) as r:
+                if r.status_code == 403:
+                    raise requests.HTTPError(f"403 Forbidden for url: {url}")
+                r.raise_for_status()
+                with open(output_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+            return True
+        except Exception as e:
+            print(f"Download attempt {attempt}/4 failed: {e}")
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
+            if attempt < 4:
+                continue
+
+    print("Download failed after 4 attempts.")
+    return False
+
 
 
 def get_apk_version(apk_path):
