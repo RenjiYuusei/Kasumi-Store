@@ -45,7 +45,6 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -206,6 +205,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
@@ -377,7 +377,7 @@ class MainActivity : ComponentActivity() {
             }
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-                AnimatedVisibility(visible = isLoading) {
+                AnimatedVisibility(visible = isLoading && !isRefreshing) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary,
@@ -392,10 +392,10 @@ class MainActivity : ComponentActivity() {
                 )
 
                 PullToRefreshBox(
-                    isRefreshing = isLoading,
+                    isRefreshing = isRefreshing,
                     onRefresh = {
                         lifecycleScope.launch {
-                            setBusy(true)
+                            isRefreshing = true
                             try {
                                 if (selectedTab == 0) {
                                     refreshPreloadedApps()
@@ -403,10 +403,12 @@ class MainActivity : ComponentActivity() {
                                     loadScriptsFromOnline()
                                     loadScriptsFromLocal()
                                 }
+                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Lỗi làm mới: ${e.message}")
                             } finally {
-                                setBusy(false)
+                                isRefreshing = false
                             }
-                            snackbarHostState.showSnackbar("Đã làm mới nguồn")
                         }
                     },
                     modifier = Modifier.weight(1f)
