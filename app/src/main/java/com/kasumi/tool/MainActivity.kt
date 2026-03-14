@@ -62,6 +62,8 @@ import androidx.core.content.FileProvider
 import androidx.core.util.AtomicFile
 import androidx.lifecycle.lifecycleScope
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.gson.GsonBuilder
@@ -617,7 +619,10 @@ class MainActivity : ComponentActivity() {
             ) {
                 if (item.iconUrl != null) {
                     AsyncImage(
-                        model = item.iconUrl,
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(item.iconUrl)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = null,
                         modifier = Modifier
                             .size(52.dp)
