@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -204,6 +205,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
+        var isRefreshingApps by remember { mutableStateOf(false) }
+        var isRefreshingScripts by remember { mutableStateOf(false) }
+        val isRefreshing = if (selectedTab == 0) isRefreshingApps else isRefreshingScripts
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
@@ -301,14 +305,26 @@ class MainActivity : ComponentActivity() {
                             IconButton(onClick = { showSortDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Sort")
                             }
-                            IconButton(onClick = {
-                                lifecycleScope.launch {
-                                    setBusy(true)
-                                    refreshPreloadedApps()
-                                    setBusy(false)
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                            IconButton(
+                                enabled = !isRefreshingApps && !isLoading,
+                                onClick = {
+                                    lifecycleScope.launch {
+                                        setBusy(true)
+                                        try {
+                                            val success = refreshPreloadedApps()
+                                            if (success) {
+                                                snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                            } else {
+                                                snackbarHostState.showSnackbar("Lỗi kết nối mạng")
+                                            }
+                                        } catch (e: Exception) {
+                                            snackbarHostState.showSnackbar("Lỗi làm mới: ${e.message}")
+                                        } finally {
+                                            setBusy(false)
+                                        }
+                                    }
                                 }
-                            }) {
+                            ) {
                                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                             }
                         }
@@ -371,8 +387,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         ) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
-                AnimatedVisibility(visible = isLoading) {
+            Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                AnimatedVisibility(visible = isLoading && !isRefreshing) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.primary,
@@ -386,16 +402,59 @@ class MainActivity : ComponentActivity() {
                     hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
                 )
 
-                if (selectedTab == 0) {
-                    AppsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                } else {
-                    ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    }, onDownloadRequest = { script ->
-                        scriptToDownload = script
-                    })
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        if (isLoading) return@PullToRefreshBox
+
+                        if (selectedTab == 0) {
+                            isRefreshingApps = true
+                        } else {
+                            isRefreshingScripts = true
+                        }
+
+                        lifecycleScope.launch {
+                            try {
+                                val success = if (selectedTab == 0) {
+                                    refreshPreloadedApps()
+                                } else {
+                                    val s1 = loadScriptsFromOnline()
+                                    loadScriptsFromLocal()
+                                    s1
+                                }
+                                if (success == true) {
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                } else if (success == false) {
+                                    snackbarHostState.showSnackbar("Lỗi kết nối mạng")
+                                } else {
+                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                                }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("Lỗi làm mới: ${e.message}")
+                            } finally {
+                                if (selectedTab == 0) {
+                                    isRefreshingApps = false
+                                } else {
+                                    isRefreshingScripts = false
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (selectedTab == 0) {
+                        AppsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        })
+                    } else {
+                        ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }, onDownloadRequest = { script ->
+                            scriptToDownload = script
+                        })
+                    }
                 }
             }
 
@@ -991,7 +1050,7 @@ private fun logBg(msg: String) = log(msg)
 
     private suspend fun saveItems() {
         saveMutex.withLock {
-            withContext(Dispatchers.IO) {
+            return withContext(Dispatchers.IO) {
                 val atomicFile = AtomicFile(File(filesDir, "items.json"))
                 var fos: FileOutputStream? = null
                 try {
@@ -1038,7 +1097,7 @@ private fun logBg(msg: String) = log(msg)
         }
     }
 
-    private suspend fun refreshPreloadedApps(initial: Boolean = false) {
+    private suspend fun refreshPreloadedApps(initial: Boolean = false): Boolean {
         val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
         if (preloaded != null) {
             val newItems = preloaded.map { p ->
@@ -1057,7 +1116,9 @@ private fun logBg(msg: String) = log(msg)
             }
             appsList = newItems
             saveItems()
+            return true
         }
+        return false
     }
 
     private fun onInstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
@@ -1241,13 +1302,13 @@ private fun logBg(msg: String) = log(msg)
 
     // --- Scripts Logic ---
 
-    private suspend fun loadScriptsFromOnline() {
-        withContext(Dispatchers.IO) {
+    private suspend fun loadScriptsFromOnline(): Boolean {
+        return withContext(Dispatchers.IO) {
             try {
                 val req = Request.Builder().url(DEFAULT_SCRIPTS_URL).header("User-Agent", "CloudPhoneTool/1.0").build()
                 client.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) return@withContext
-                    val stream = resp.body?.byteStream() ?: return@withContext
+                    if (!resp.isSuccessful) return@withContext false
+                    val stream = resp.body?.byteStream() ?: return@withContext false
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
                         com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
@@ -1281,6 +1342,7 @@ private fun logBg(msg: String) = log(msg)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        return@withContext false
                     }
 
                     withContext(Dispatchers.Main) {
@@ -1288,9 +1350,11 @@ private fun logBg(msg: String) = log(msg)
                         // Initial merge (will be refined by loadScriptsFromLocal)
                         scriptsList = newScripts
                     }
+                    true
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                false
             }
         }
     }
