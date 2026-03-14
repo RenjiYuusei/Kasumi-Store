@@ -618,11 +618,14 @@ class MainActivity : ComponentActivity() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (item.iconUrl != null) {
+                    val context = LocalContext.current
                     AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(item.iconUrl)
-                            .crossfade(true)
-                            .build(),
+                        model = remember(item.iconUrl) {
+                            ImageRequest.Builder(context)
+                                .data(item.iconUrl)
+                                .crossfade(true)
+                                .build()
+                        },
                         contentDescription = null,
                         modifier = Modifier
                             .size(52.dp)
