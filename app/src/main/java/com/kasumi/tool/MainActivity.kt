@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -304,8 +306,11 @@ class MainActivity : ComponentActivity() {
                             IconButton(onClick = {
                                 lifecycleScope.launch {
                                     setBusy(true)
-                                    refreshPreloadedApps()
-                                    setBusy(false)
+                                    try {
+                                        refreshPreloadedApps()
+                                    } finally {
+                                        setBusy(false)
+                                    }
                                     snackbarHostState.showSnackbar("Đã làm mới nguồn")
                                 }
                             }) {
@@ -371,7 +376,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         ) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
+            Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
                 AnimatedVisibility(visible = isLoading) {
                     LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
@@ -386,16 +391,37 @@ class MainActivity : ComponentActivity() {
                     hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
                 )
 
-                if (selectedTab == 0) {
-                    AppsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                } else {
-                    ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    }, onDownloadRequest = { script ->
-                        scriptToDownload = script
-                    })
+                PullToRefreshBox(
+                    isRefreshing = isLoading,
+                    onRefresh = {
+                        lifecycleScope.launch {
+                            setBusy(true)
+                            try {
+                                if (selectedTab == 0) {
+                                    refreshPreloadedApps()
+                                } else {
+                                    loadScriptsFromOnline()
+                                    loadScriptsFromLocal()
+                                }
+                            } finally {
+                                setBusy(false)
+                            }
+                            snackbarHostState.showSnackbar("Đã làm mới nguồn")
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (selectedTab == 0) {
+                        AppsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        })
+                    } else {
+                        ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
+                            lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }, onDownloadRequest = { script ->
+                            scriptToDownload = script
+                        })
+                    }
                 }
             }
 
