@@ -1228,7 +1228,7 @@ private fun logBg(msg: String) = log(msg)
             appsList = appsList.toList()
 
             val sizeStr = formatFileSize(size)
-            onShowSnackbar("Đã xóa cache: $count tệp ($sizeStr)")
+            onShowSnackbar(getString(R.string.cache_cleared, count, sizeStr))
          }
     }
 
