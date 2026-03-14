@@ -17,11 +17,11 @@
     <string name="sort_by_name_desc">Tên Z-A</string>
     <string name="sort_by_size">Kích thước</string>
     <string name="sort_by_date">Ngày tải</string>
-    <string name="stats_format">%d ứng dụng • %s đã cache</string>
+    <string name="stats_format">%1$d ứng dụng • %2$s đã cache</string>
     <string name="stats_format_no_cache">%d ứng dụng</string>
     <string name="no_apps_title">Không tìm thấy ứng dụng</string>
     <string name="no_apps_subtitle">Hãy thử từ khóa khác hoặc làm mới nguồn.</string>
-    <string name="cache_cleared">Đã xóa %d tệp cache (%s)</string>
+    <string name="cache_cleared">Đã xóa %1$d tệp cache (%2$s)</string>
     <string name="copy_script">Sao chép</string>
     <string name="local_manual">Cục bộ (Thủ công)</string>
     <string name="local_auto">Cục bộ (Tự động)</string>
