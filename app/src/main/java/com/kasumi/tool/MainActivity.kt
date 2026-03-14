@@ -618,7 +618,6 @@ class MainActivity : ComponentActivity() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (item.iconUrl != null) {
-                    val context = LocalContext.current
                     AsyncImage(
                         model = remember(item.iconUrl) {
                             ImageRequest.Builder(context)
