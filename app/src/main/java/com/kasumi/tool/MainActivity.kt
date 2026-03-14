@@ -205,7 +205,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
-    var isRefreshing by remember { mutableStateOf(false) }
+        var isRefreshing by remember { mutableStateOf(false) }
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
@@ -303,7 +303,9 @@ class MainActivity : ComponentActivity() {
                             IconButton(onClick = { showSortDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Sort")
                             }
-                            IconButton(onClick = {
+                            IconButton(
+                                enabled = !isRefreshing && !isLoading,
+                                onClick = {
                                 lifecycleScope.launch {
                                     setBusy(true)
                                     try {
