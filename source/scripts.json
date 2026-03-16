@@ -22,7 +22,7 @@
   {
     "name": "Auto Rejoin",
     "gameName": "All Game",
-    "url": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/refs/heads/main/source/autorejoin.lua"
+    "url": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/autorejoin.lua"
   },
   {
     "name": "Atlas Hub",
