@@ -1,5 +1,12 @@
 # Keep rules placeholder. Add rules if needed.
 
+# Tăng cường làm rối (obfuscation) cho class/dex ở bản release.
+# Lưu ý: R8/ProGuard chỉ làm khó reverse-engineering, KHÔNG phải mã hóa tuyệt đối.
+-allowaccessmodification
+-adaptclassstrings
+-repackageclasses ''
+-dontusemixedcaseclassnames
+
 # Giữ thông tin generic và annotation cho Gson/Retrofit/OkHttp
 -keepattributes Signature
 -keepattributes *Annotation*
