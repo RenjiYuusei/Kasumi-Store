@@ -560,10 +560,8 @@ class MainActivity : ComponentActivity() {
                  }
              }
 
-            val pullRefreshState = rememberPullToRefreshState()
             PullToRefreshBox(
                 modifier = Modifier.fillMaxSize(),
-                state = pullRefreshState,
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
@@ -788,10 +786,8 @@ class MainActivity : ComponentActivity() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            val pullRefreshState = rememberPullToRefreshState()
             PullToRefreshBox(
                 modifier = Modifier.fillMaxSize(),
-                state = pullRefreshState,
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
