@@ -560,7 +560,7 @@ class MainActivity : ComponentActivity() {
              }
 
             PullToRefreshBox(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
@@ -786,7 +786,7 @@ class MainActivity : ComponentActivity() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             PullToRefreshBox(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
