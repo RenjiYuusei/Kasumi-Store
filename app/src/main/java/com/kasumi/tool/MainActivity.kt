@@ -804,7 +804,7 @@ class MainActivity : ComponentActivity() {
                             refreshPreloadedApps() // Ignore result for scripts screen, just fetch
                             val onlineSuccess = loadScriptsFromOnline()
                             loadScriptsFromLocal()
-                            if (onlineSuccess == true) {
+                            if (onlineSuccess) {
                                 onShowSnackbar("Đã làm mới nguồn script")
                             } else {
                                 onShowSnackbar("Không thể tải nguồn script mới nhất")
@@ -1360,7 +1360,6 @@ private fun logBg(msg: String) = log(msg)
                 e.printStackTrace()
                 false
             }
-            false
         }
     }
 
