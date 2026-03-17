@@ -507,7 +507,7 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-@OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
         var isRefreshing by remember { mutableStateOf(false) }
@@ -570,8 +570,11 @@ class MainActivity : ComponentActivity() {
                 onRefresh = {
                     isRefreshing = true
                     lifecycleScope.launch {
-                        refreshPreloadedApps()
-                        isRefreshing = false
+                        try {
+                            refreshPreloadedApps()
+                        } finally {
+                            isRefreshing = false
+                        }
                         onShowSnackbar("Đã làm mới nguồn")
                     }
                 }
@@ -793,8 +796,13 @@ class MainActivity : ComponentActivity() {
                 onRefresh = {
                     isRefreshing = true
                     lifecycleScope.launch {
-                        refreshPreloadedApps() // Dùng chung refresh resource
-                        isRefreshing = false
+                        try {
+                            refreshPreloadedApps() // Dùng chung refresh resource
+                            loadScriptsFromOnline()
+                            loadScriptsFromLocal()
+                        } finally {
+                            isRefreshing = false
+                        }
                         onShowSnackbar("Đã làm mới nguồn")
                     }
                 }
