@@ -560,7 +560,7 @@ class MainActivity : ComponentActivity() {
              }
 
             PullToRefreshBox(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
@@ -795,7 +795,7 @@ class MainActivity : ComponentActivity() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             PullToRefreshBox(
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
@@ -1345,6 +1345,7 @@ private fun logBg(msg: String) = log(msg)
                         throw e
                     } catch (e: Exception) {
                         e.printStackTrace()
+                        return@withContext false
                     }
 
                     withContext(Dispatchers.Main) {
