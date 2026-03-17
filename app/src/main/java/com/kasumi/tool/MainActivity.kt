@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -301,16 +302,6 @@ class MainActivity : ComponentActivity() {
                             IconButton(onClick = { showSortDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Sort")
                             }
-                            IconButton(onClick = {
-                                lifecycleScope.launch {
-                                    setBusy(true)
-                                    refreshPreloadedApps()
-                                    setBusy(false)
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
-                                }
-                            }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                            }
                         }
                     }
                 )
@@ -516,8 +507,10 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+        var isRefreshing by remember { mutableStateOf(false) }
         val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
             snapshotFlow {
                 Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
@@ -567,23 +560,43 @@ class MainActivity : ComponentActivity() {
                  }
              }
 
-            if (filteredApps.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.SearchOff,
-                    title = stringResource(R.string.no_apps_title),
-                    subtitle = stringResource(R.string.no_apps_subtitle)
-                )
-            } else {
+            val pullRefreshState = rememberPullToRefreshState()
+            PullToRefreshBox(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                state = pullRefreshState,
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    lifecycleScope.launch {
+                        refreshPreloadedApps()
+                        isRefreshing = false
+                        onShowSnackbar("Đã làm mới nguồn")
+                    }
+                }
+            ) {
                 LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
                 ) {
-                    itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
-                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
-                        ) {
-                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) })
+                    if (filteredApps.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.SearchOff,
+                                title = stringResource(R.string.no_apps_title),
+                                subtitle = stringResource(R.string.no_apps_subtitle)
+                            )
+                        }
+                    } else {
+                        itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
+                                        slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
+                            ) {
+                                AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) })
+                            }
                         }
                     }
                 }
@@ -747,8 +760,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
+        var isRefreshing by remember { mutableStateOf(false) }
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim()
              if (q.isEmpty()) {
@@ -768,28 +783,48 @@ class MainActivity : ComponentActivity() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (filteredScripts.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.Code,
-                    title = stringResource(R.string.no_scripts_title),
-                    subtitle = stringResource(R.string.no_scripts_subtitle)
-                )
-            } else {
+            val pullRefreshState = rememberPullToRefreshState()
+            PullToRefreshBox(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                state = pullRefreshState,
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    lifecycleScope.launch {
+                        refreshPreloadedApps() // Dùng chung refresh resource
+                        isRefreshing = false
+                        onShowSnackbar("Đã làm mới nguồn")
+                    }
+                }
+            ) {
                 LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
                 ) {
-                    itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
-                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
-                        ) {
-                            ScriptItemRow(
-                                script = script,
-                                onDownload = { onDownloadRequest(script) },
-                                onCopy = { copyScript(it, onShowSnackbar) },
-                                onDelete = { deleteScript(it, onShowSnackbar) }
+                    if (filteredScripts.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.Code,
+                                title = stringResource(R.string.no_scripts_title),
+                                subtitle = stringResource(R.string.no_scripts_subtitle)
                             )
+                        }
+                    } else {
+                        itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
+                                        slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
+                            ) {
+                                ScriptItemRow(
+                                    script = script,
+                                    onDownload = { onDownloadRequest(script) },
+                                    onCopy = { copyScript(it, onShowSnackbar) },
+                                    onDelete = { deleteScript(it, onShowSnackbar) }
+                                )
+                            }
                         }
                     }
                 }
