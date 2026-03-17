@@ -566,8 +566,12 @@ class MainActivity : ComponentActivity() {
                     isRefreshing = true
                     lifecycleScope.launch {
                         try {
-                            refreshPreloadedApps()
-                            onShowSnackbar("Đã làm mới nguồn")
+                            val success = refreshPreloadedApps()
+                            if (success) {
+                                onShowSnackbar("Đã làm mới nguồn")
+                            } else {
+                                onShowSnackbar("Không thể kết nối để làm mới ứng dụng")
+                            }
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -584,11 +588,16 @@ class MainActivity : ComponentActivity() {
                 ) {
                     if (filteredApps.isEmpty()) {
                         item {
-                            EmptyState(
-                                icon = Icons.Default.SearchOff,
-                                title = stringResource(R.string.no_apps_title),
-                                subtitle = stringResource(R.string.no_apps_subtitle)
-                            )
+                            Box(
+                                modifier = Modifier.fillParentMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyState(
+                                    icon = Icons.Default.SearchOff,
+                                    title = stringResource(R.string.no_apps_title),
+                                    subtitle = stringResource(R.string.no_apps_subtitle)
+                                )
+                            }
                         }
                     } else {
                         itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
@@ -792,10 +801,14 @@ class MainActivity : ComponentActivity() {
                     isRefreshing = true
                     lifecycleScope.launch {
                         try {
-                            refreshPreloadedApps() // Dùng chung refresh resource
-                            loadScriptsFromOnline()
+                            refreshPreloadedApps() // Ignore result for scripts screen, just fetch
+                            val onlineSuccess = loadScriptsFromOnline()
                             loadScriptsFromLocal()
-                            onShowSnackbar("Đã làm mới nguồn")
+                            if (onlineSuccess == true) {
+                                onShowSnackbar("Đã làm mới nguồn script")
+                            } else {
+                                onShowSnackbar("Không thể tải nguồn script mới nhất")
+                            }
                         } catch (e: kotlinx.coroutines.CancellationException) {
                             throw e
                         } catch (e: Exception) {
@@ -812,11 +825,16 @@ class MainActivity : ComponentActivity() {
                 ) {
                     if (filteredScripts.isEmpty()) {
                         item {
-                            EmptyState(
-                                icon = Icons.Default.Code,
-                                title = stringResource(R.string.no_scripts_title),
-                                subtitle = stringResource(R.string.no_scripts_subtitle)
-                            )
+                            Box(
+                                modifier = Modifier.fillParentMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EmptyState(
+                                    icon = Icons.Default.Code,
+                                    title = stringResource(R.string.no_scripts_title),
+                                    subtitle = stringResource(R.string.no_scripts_subtitle)
+                                )
+                            }
                         }
                     } else {
                         itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
@@ -1080,7 +1098,7 @@ private fun logBg(msg: String) = log(msg)
         }
     }
 
-    private suspend fun refreshPreloadedApps(initial: Boolean = false) {
+    private suspend fun refreshPreloadedApps(initial: Boolean = false): Boolean {
         val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
         if (preloaded != null) {
             val newItems = preloaded.map { p ->
@@ -1099,7 +1117,9 @@ private fun logBg(msg: String) = log(msg)
             }
             appsList = newItems
             saveItems()
+            return true
         }
+        return false
     }
 
     private fun onInstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
@@ -1283,13 +1303,13 @@ private fun logBg(msg: String) = log(msg)
 
     // --- Scripts Logic ---
 
-    private suspend fun loadScriptsFromOnline() {
-        withContext(Dispatchers.IO) {
+    private suspend fun loadScriptsFromOnline(): Boolean {
+        return withContext(Dispatchers.IO) {
             try {
                 val req = Request.Builder().url(DEFAULT_SCRIPTS_URL).header("User-Agent", "CloudPhoneTool/1.0").build()
                 client.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) return@withContext
-                    val stream = resp.body?.byteStream() ?: return@withContext
+                    if (!resp.isSuccessful) return@withContext false
+                    val stream = resp.body?.byteStream() ?: return@withContext false
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
                         com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
@@ -1332,12 +1352,15 @@ private fun logBg(msg: String) = log(msg)
                         // Initial merge (will be refined by loadScriptsFromLocal)
                         scriptsList = newScripts
                     }
+                    true
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
+                false
             }
+            false
         }
     }
 
