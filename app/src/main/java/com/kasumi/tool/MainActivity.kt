@@ -572,10 +572,12 @@ class MainActivity : ComponentActivity() {
                     lifecycleScope.launch {
                         try {
                             refreshPreloadedApps()
+                            onShowSnackbar("Đã làm mới nguồn")
+                        } catch (e: Exception) {
+                            onShowSnackbar("Làm mới thất bại: ${e.message}")
                         } finally {
                             isRefreshing = false
                         }
-                        onShowSnackbar("Đã làm mới nguồn")
                     }
                 }
             ) {
@@ -800,10 +802,12 @@ class MainActivity : ComponentActivity() {
                             refreshPreloadedApps() // Dùng chung refresh resource
                             loadScriptsFromOnline()
                             loadScriptsFromLocal()
+                            onShowSnackbar("Đã làm mới nguồn")
+                        } catch (e: Exception) {
+                            onShowSnackbar("Làm mới thất bại: ${e.message}")
                         } finally {
                             isRefreshing = false
                         }
-                        onShowSnackbar("Đã làm mới nguồn")
                     }
                 }
             ) {
