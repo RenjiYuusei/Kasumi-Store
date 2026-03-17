@@ -562,9 +562,7 @@ class MainActivity : ComponentActivity() {
 
             val pullRefreshState = rememberPullToRefreshState()
             PullToRefreshBox(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 state = pullRefreshState,
                 isRefreshing = isRefreshing,
                 onRefresh = {
@@ -573,8 +571,10 @@ class MainActivity : ComponentActivity() {
                         try {
                             refreshPreloadedApps()
                             onShowSnackbar("Đã làm mới nguồn")
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
-                            onShowSnackbar("Làm mới thất bại: ${e.message}")
+                            onShowSnackbar("Làm mới thất bại: ${e.message ?: "Lỗi không xác định"}")
                         } finally {
                             isRefreshing = false
                         }
@@ -790,9 +790,7 @@ class MainActivity : ComponentActivity() {
             )
             val pullRefreshState = rememberPullToRefreshState()
             PullToRefreshBox(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 state = pullRefreshState,
                 isRefreshing = isRefreshing,
                 onRefresh = {
@@ -803,8 +801,10 @@ class MainActivity : ComponentActivity() {
                             loadScriptsFromOnline()
                             loadScriptsFromLocal()
                             onShowSnackbar("Đã làm mới nguồn")
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
-                            onShowSnackbar("Làm mới thất bại: ${e.message}")
+                            onShowSnackbar("Làm mới thất bại: ${e.message ?: "Lỗi không xác định"}")
                         } finally {
                             isRefreshing = false
                         }
