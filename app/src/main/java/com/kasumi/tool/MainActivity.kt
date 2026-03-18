@@ -560,7 +560,7 @@ class MainActivity : ComponentActivity() {
              }
 
             PullToRefreshBox(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
@@ -795,13 +795,12 @@ class MainActivity : ComponentActivity() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             PullToRefreshBox(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
                     lifecycleScope.launch {
                         try {
-                            refreshPreloadedApps() // Ignore result for scripts screen, just fetch
                             val onlineSuccess = loadScriptsFromOnline()
                             loadScriptsFromLocal()
                             if (onlineSuccess) {
