@@ -598,6 +598,7 @@ class MainActivity : ComponentActivity() {
         val fileSize = stats?.size ?: 0L
         
         Card(
+            onClick = { onInstall(item) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
@@ -605,6 +606,7 @@ class MainActivity : ComponentActivity() {
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             border = BorderStroke(
                 width = 1.dp,
                 color = if (isCached) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
@@ -808,6 +810,7 @@ class MainActivity : ComponentActivity() {
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             border = BorderStroke(
                 width = 1.dp,
                 color = if (isLocal) MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
