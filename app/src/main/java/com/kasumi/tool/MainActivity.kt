@@ -606,12 +606,7 @@ class MainActivity : ComponentActivity() {
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (isCached) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -693,7 +688,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                IconButton(onClick = { onInstall(item) }) {
+                Box(
+                    modifier = Modifier.padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         Icons.Default.Download,
                         contentDescription = stringResource(R.string.download),
@@ -810,12 +808,7 @@ class MainActivity : ComponentActivity() {
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (isLocal) MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
