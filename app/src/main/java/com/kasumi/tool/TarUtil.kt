@@ -76,7 +76,7 @@ object TarUtil {
             header[i] = ((tempSum % 8) + '0'.code).toByte()
             tempSum /= 8
         }
-        assert(tempSum == 0L) { "tempSum should be 0 after writing 6 octal digits, but was $tempSum" }
+        check(tempSum == 0L) { "tempSum should be 0 after writing 6 octal digits, but was $tempSum" }
 
         out.write(header)
 
