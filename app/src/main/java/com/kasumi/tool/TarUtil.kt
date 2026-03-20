@@ -64,12 +64,17 @@ object TarUtil {
         writeString(header, 263, 2, "00")
 
         // Calculate checksum
-        for (i in 0 until 8) header[148 + i] = ' '.code.toByte()
-        var sum = 0L
-        for (b in header) sum += (b.toInt() and 0xFF)
+        var sum = 256 // 8 * 32 (8 spaces)
+        for (i in 0 until 148) sum += (header[i].toInt() and 0xFF)
+        for (i in 156 until 512) sum += (header[i].toInt() and 0xFF)
 
-        val sumOctal = String.format("%06o", sum) + "\u0000 "
-        writeString(header, 148, 8, sumOctal)
+        header[155] = ' '.code.toByte()
+        header[154] = 0.toByte()
+        var tempSum = sum
+        for (i in 153 downTo 148) {
+            header[i] = ((tempSum % 8) + '0'.code).toByte()
+            tempSum /= 8
+        }
 
         out.write(header)
 
