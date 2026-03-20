@@ -64,13 +64,14 @@ object TarUtil {
         writeString(header, 263, 2, "00")
 
         // Calculate checksum
-        var sum = 256 // 8 * 32 (8 spaces)
+        var sum = 256L // 8 * 32 (8 spaces)
         for (i in 0 until 148) sum += (header[i].toInt() and 0xFF)
         for (i in 156 until 512) sum += (header[i].toInt() and 0xFF)
 
         header[155] = ' '.code.toByte()
-        header[154] = 0.toByte()
+        // header[154] is already 0 (\0) from ByteArray initialization
         var tempSum = sum
+        check(tempSum < 0x40000) { "TAR checksum $tempSum exceeds 6-digit octal range" }
         for (i in 153 downTo 148) {
             header[i] = ((tempSum % 8) + '0'.code).toByte()
             tempSum /= 8
