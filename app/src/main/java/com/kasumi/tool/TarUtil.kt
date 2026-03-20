@@ -63,8 +63,8 @@ object TarUtil {
         // Version (263, 2) - 00
         writeString(header, 263, 2, "00")
 
-        // Calculate checksum
-        var sum = 256L // 8 * 32 (8 spaces)
+        // Coi 8 byte tại vị trí 148–155 (checksum field) đều là dấu cách (8 × 32 = 256L); các vòng lặp dưới chỉ duyệt 0..147 và 156..511
+        var sum = 256L
         for (i in 0 until 148) sum += (header[i].toInt() and 0xFF)
         for (i in 156 until 512) sum += (header[i].toInt() and 0xFF)
 
