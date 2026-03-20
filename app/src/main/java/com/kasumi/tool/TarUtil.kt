@@ -63,13 +63,20 @@ object TarUtil {
         // Version (263, 2) - 00
         writeString(header, 263, 2, "00")
 
-        // Calculate checksum
-        for (i in 0 until 8) header[148 + i] = ' '.code.toByte()
-        var sum = 0L
-        for (b in header) sum += (b.toInt() and 0xFF)
+        // Coi 8 byte tại vị trí 148–155 (checksum field) đều là dấu cách (8 × 32 = 256L); các vòng lặp dưới chỉ duyệt 0..147 và 156..511
+        var sum = 256L
+        for (i in 0 until 148) sum += (header[i].toInt() and 0xFF)
+        for (i in 156 until 512) sum += (header[i].toInt() and 0xFF)
 
-        val sumOctal = String.format("%06o", sum) + "\u0000 "
-        writeString(header, 148, 8, sumOctal)
+        header[155] = ' '.code.toByte()
+        // header[154] is already 0 (\0) from ByteArray initialization
+        var tempSum = sum
+        check(tempSum < 0x40000) { "TAR checksum $tempSum exceeds 6-digit octal range" }
+        for (i in 153 downTo 148) {
+            header[i] = ((tempSum % 8) + '0'.code).toByte()
+            tempSum /= 8
+        }
+        check(tempSum == 0L) { "tempSum should be 0 after writing 6 octal digits, but was $tempSum" }
 
         out.write(header)
 
