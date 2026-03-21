@@ -1506,46 +1506,60 @@ private suspend fun loadScriptsFromLocal() {
     }
 
     private fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
-         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:$packageName")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
-                    return
-                }
-            }
-            val installer = packageManager.packageInstaller
-            val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            val sessionId = installer.createSession(params)
-            val session = installer.openSession(sessionId)
+        lifecycleScope.launch {
             try {
-                for (f in files) {
-                    FileInputStream(f).use { input ->
-                        session.openWrite(f.name, 0, f.length()).use { out ->
-                            input.copyTo(out)
-                            session.fsync(out)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (!packageManager.canRequestPackageInstalls()) {
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:$packageName")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
+                        onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
+                        return@launch
+                    }
+                }
+                val installer = packageManager.packageInstaller
+                val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+                val sessionId = installer.createSession(params)
+                val session = installer.openSession(sessionId)
+                try {
+                    withContext(Dispatchers.IO) {
+                        coroutineScope {
+                            files.map { f ->
+                                async {
+                                    FileInputStream(f).use { input ->
+                                        session.openWrite(f.name, 0, f.length()).use { out ->
+                                            val srcChannel = input.channel
+                                            val destChannel = java.nio.channels.Channels.newChannel(out)
+                                            var position = 0L
+                                            val size = srcChannel.size()
+                                            while (position < size) {
+                                                position += srcChannel.transferTo(position, size - position, destChannel)
+                                            }
+                                            session.fsync(out)
+                                        }
+                                    }
+                                }
+                            }.awaitAll()
                         }
                     }
+                    val intent = Intent("$packageName.INSTALL_COMMIT").apply {
+                        setPackage(packageName)
+                    }
+                    val pi = android.app.PendingIntent.getBroadcast(
+                        this@MainActivity, sessionId,
+                        intent,
+                        android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+                    )
+                    session.commit(pi.intentSender)
+                    onShowSnackbar("Đang tiến hành cài đặt…")
+                } finally {
+                    session.close()
                 }
-                val intent = Intent("$packageName.INSTALL_COMMIT").apply {
-                     setPackage(packageName)
-                }
-                val pi = android.app.PendingIntent.getBroadcast(
-                    this, sessionId,
-                    intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
-                )
-                session.commit(pi.intentSender)
-                onShowSnackbar("Đang tiến hành cài đặt…")
-            } finally {
-                session.close()
+            } catch (e: Exception) {
+                onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
             }
-        } catch (e: Exception) {
-            onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
         }
     }
 }
