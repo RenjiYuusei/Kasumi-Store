@@ -1229,7 +1229,8 @@ private fun logBg(msg: String) = log(msg)
                         }
                     }?.awaitAll() ?: emptyList()
                 }
-                results.forEach { (c, s) -> count += c; size += s }
+                count += results.sumOf { it.first }
+                size += results.sumOf { it.second }
             }
              if (splitsDir.exists()) splitsDir.deleteRecursively()
              if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
