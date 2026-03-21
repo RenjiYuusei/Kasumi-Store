@@ -76,9 +76,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collect
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -1218,14 +1219,17 @@ private fun logBg(msg: String) = log(msg)
 
             // Clean up all cached apk files
             if (apkCacheDir.exists()) {
-                apkCacheDir.listFiles()?.map { file ->
-                    async(Dispatchers.IO) {
-                        if (file.isFile) {
-                            val len = file.length()
-                            if (file.delete()) 1 to len else 0 to 0L
-                        } else 0 to 0L
-                    }
-                }?.awaitAll()?.forEach { (c, s) -> count += c; size += s }
+                val results = coroutineScope {
+                    apkCacheDir.listFiles()?.map { file ->
+                        async {
+                            if (file.isFile) {
+                                val len = file.length()
+                                if (file.delete()) 1 to len else 0 to 0L
+                            } else 0 to 0L
+                        }
+                    }?.awaitAll() ?: emptyList()
+                }
+                results.forEach { (c, s) -> count += c; size += s }
             }
              if (splitsDir.exists()) splitsDir.deleteRecursively()
              if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
