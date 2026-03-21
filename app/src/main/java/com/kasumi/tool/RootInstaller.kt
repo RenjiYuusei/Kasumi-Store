@@ -331,22 +331,32 @@ object RootInstaller {
             val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
                 ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
             if (sessionId.isNullOrBlank()) return false to outCreate
-            for (f in files) {
+            val cmdBuilder = StringBuilder()
+            val filesList = files.toList()
+            for (i in filesList.indices) {
+                if (i > 0) cmdBuilder.append(" && ")
+                val f = filesList[i]
                 val size = f.length()
                 val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                p = ProcessBuilder("su", "-c", "pm install-write -S $size $sessionId $safeName -")
-                    .redirectErrorStream(true)
-                    .start()
-                f.inputStream().use { input ->
-                    p.outputStream.use { out ->
+                cmdBuilder.append("pm install-write -S $size $sessionId $safeName -")
+            }
+
+            p = ProcessBuilder("su", "-c", cmdBuilder.toString())
+                .redirectErrorStream(true)
+                .start()
+
+            p.outputStream.use { out ->
+                for (f in filesList) {
+                    f.inputStream().use { input ->
                         input.copyTo(out)
-                        out.flush()
                     }
                 }
-                val exitW = p.waitFor()
-                val outW = p.inputStream.bufferedReader().readText()
-                if (exitW != 0) return false to outW
+                out.flush()
             }
+
+            val exitW = p.waitFor()
+            val outW = p.inputStream.bufferedReader().readText()
+            if (exitW != 0) return false to outW
             p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
                 .redirectErrorStream(true)
                 .start()
