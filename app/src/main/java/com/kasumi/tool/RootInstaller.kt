@@ -368,7 +368,7 @@ object RootInstaller {
             val exitW = p.waitFor()
 
             if (exitW != 0) return false to outW
-            if (writeError != null) throw writeError
+            if (writeError != null) return false to "write error: ${writeError.message}; pm: $outW"
             p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
                 .redirectErrorStream(true)
                 .start()
