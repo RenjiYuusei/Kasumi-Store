@@ -331,22 +331,44 @@ object RootInstaller {
             val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
                 ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
             if (sessionId.isNullOrBlank()) return false to outCreate
-            for (f in files) {
+
+            // Giả định quan trọng: pm install-write -S <size> đọc chính xác <size> byte
+            // từ stdin mà không buffer lố sang dữ liệu của file tiếp theo. Hành vi này
+            // ổn định trên AOSP nhưng có thể lỗi trên một số ROM tùy chỉnh cũ.
+            val cmdBuilder = StringBuilder()
+            for (i in files.indices) {
+                if (i > 0) cmdBuilder.append(" && ")
+                val f = files[i]
                 val size = f.length()
                 val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
-                p = ProcessBuilder("su", "-c", "pm install-write -S $size $sessionId $safeName -")
-                    .redirectErrorStream(true)
-                    .start()
-                f.inputStream().use { input ->
-                    p.outputStream.use { out ->
-                        input.copyTo(out)
-                        out.flush()
-                    }
-                }
-                val exitW = p.waitFor()
-                val outW = p.inputStream.bufferedReader().readText()
-                if (exitW != 0) return false to outW
+                cmdBuilder.append("pm install-write -S $size $sessionId $safeName -")
             }
+
+            p = ProcessBuilder("su", "-c", cmdBuilder.toString())
+                .redirectErrorStream(true)
+                .start()
+
+            var writeError: Exception? = null
+            try {
+                p.outputStream.use { out ->
+                    for (f in files) {
+                        f.inputStream().use { input ->
+                            input.copyTo(out)
+                        }
+                    }
+                    out.flush()
+                }
+            } catch (e: Exception) {
+                // Có thể bị Broken pipe nếu pm install-write dừng sớm (vd lỗi apk).
+                // Không throw ngay để đọc nốt thông báo lỗi từ pm.
+                writeError = e
+            }
+
+            val outW = p.inputStream.bufferedReader().readText()
+            val exitW = p.waitFor()
+
+            if (exitW != 0) return false to outW
+            if (writeError != null) return false to "write error: ${writeError.message}; pm: $outW"
             p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
                 .redirectErrorStream(true)
                 .start()
