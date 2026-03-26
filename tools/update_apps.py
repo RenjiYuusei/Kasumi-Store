@@ -12,8 +12,8 @@ from apksearch import APKMirror
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-VSPHONE_USER = "resource9200@buzzcut.ws"
-VSPHONE_PASS = "179309"
+VSPHONE_USER = "fmphe56zcx@sharebot.net"
+VSPHONE_PASS = "383196"
 
 RE_DOWNLOAD_KEY = re.compile(r'/download/\?key=')
 RE_APK_MIRROR_DOWNLOAD = re.compile(r'/wp-content/themes/APKMirror/download\.php\?')
