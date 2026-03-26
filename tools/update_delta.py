@@ -15,8 +15,8 @@ APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # VSPhone Credentials (Hardcoded)
-VSPHONE_USER = "shallow9210@whitehousecalculator.com"
-VSPHONE_PASS = "871985"
+VSPHONE_USER = "mvtgtzlqvx@sharebot.net"
+VSPHONE_PASS = "543379"
 
 DEFAULT_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
