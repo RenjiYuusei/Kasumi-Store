@@ -2,6 +2,8 @@ package com.kasumi.tool
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import android.os.Build
 import java.io.File
 import java.nio.file.Files
@@ -44,9 +46,9 @@ object FileStatsHelper {
             val apksDir = FileUtils.getApkCacheDir(cacheDir)
             val existingFiles = apksDir.listFiles()?.associateBy { it.name } ?: emptyMap()
 
-            newItems.associate { item ->
-                getFileStatsFromListing(item, existingFiles, cacheDir)
-            }
+            newItems.map { item ->
+                async { getFileStatsFromListing(item, existingFiles, cacheDir) }
+            }.awaitAll().toMap()
         }
 
         // Apply updates on Main thread
@@ -104,9 +106,9 @@ object FileStatsHelper {
             val apksDir = FileUtils.getApkCacheDir(cacheDir)
             val existingFiles = apksDir.listFiles()?.associateBy { it.name } ?: emptyMap()
 
-            appsList.associate { item ->
-                getFileStatsFromListing(item, existingFiles, cacheDir)
-            }
+            appsList.map { item ->
+                async { getFileStatsFromListing(item, existingFiles, cacheDir) }
+            }.awaitAll().toMap()
         }
 
         // Clear and update on Main thread
