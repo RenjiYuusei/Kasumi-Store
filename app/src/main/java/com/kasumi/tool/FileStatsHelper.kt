@@ -29,11 +29,19 @@ object FileStatsHelper {
                 val file = FileUtils.getCacheFile(item, cacheDir)
                 val listedFile = existingFiles[file.name]
                 if (listedFile != null) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
-                        item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
-                    } else {
-                        item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
+                            item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                        } else {
+                            if (listedFile.exists()) {
+                                item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                            } else {
+                                item.id to FileStats(false, 0L, 0L)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        item.id to FileStats(false, 0L, 0L)
                     }
                 } else {
                     item.id to FileStats(false, 0L, 0L)
@@ -91,11 +99,19 @@ object FileStatsHelper {
                 val file = FileUtils.getCacheFile(item, cacheDir)
                 val listedFile = existingFiles[file.name]
                 if (listedFile != null) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
-                        item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
-                    } else {
-                        item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
+                            item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                        } else {
+                            if (listedFile.exists()) {
+                                item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                            } else {
+                                item.id to FileStats(false, 0L, 0L)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        item.id to FileStats(false, 0L, 0L)
                     }
                 } else {
                     item.id to FileStats(false, 0L, 0L)
