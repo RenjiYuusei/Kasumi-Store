@@ -5,7 +5,19 @@ import java.io.BufferedWriter
 import java.io.BufferedReader
 
 object RootInstaller {
-    private val SAFE_FILENAME_REGEX = Regex("[^A-Za-z0-9._-]")
+    private fun sanitizeFilename(name: String): String {
+        val sb = StringBuilder(name.length)
+        for (c in name) {
+            if ((c in 'A'..'Z') || (c in 'a'..'z') || (c in '0'..'9') ||
+                c == '.' || c == '_' || c == '-') {
+                sb.append(c)
+            } else {
+                sb.append('_')
+            }
+        }
+        return sb.toString()
+    }
+
     private val SESSION_ID_REGEX_1 = Regex("\\[(\\d+)\\]")
     private val SESSION_ID_REGEX_2 = Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE)
 
@@ -27,7 +39,7 @@ object RootInstaller {
 
     // Fallback: cài đơn APK bằng session theo đường dẫn thay vì direct pm install PATH
     private fun installApkByPathSession(file: File): Pair<Boolean, String> {
-        val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
+        val safeName = sanitizeFilename(file.name)
         val tmpPath = "/data/local/tmp/$safeName"
         val shell = ShellSession()
         return try {
@@ -61,8 +73,7 @@ object RootInstaller {
                     return false to outCreate
                 }
 
-            val baseName = file.name.replace(SAFE_FILENAME_REGEX, "_")
-            val (exitWrite, outWrite) = shell.exec("pm install-write $sessionId $baseName $tmpPath")
+            val (exitWrite, outWrite) = shell.exec("pm install-write $sessionId $safeName $tmpPath")
             if (exitWrite != 0) {
                 shell.exec("rm -f $tmpPath")
                 return false to outWrite
@@ -276,7 +287,7 @@ object RootInstaller {
 
             p.outputStream.use { out ->
                 TarUtil.streamFiles(files, out) { f ->
-                    val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                    val safe = sanitizeFilename(f.name)
                     val remote = "$tmpDir/$safe"
                     paths.add(f to remote)
                     safe
@@ -302,7 +313,7 @@ object RootInstaller {
                 return false to outCreate
             }
             for ((f, remote) in paths) {
-                val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                val safeName = remote.substringAfterLast('/')
                 val (exitW, outW) = shell.exec("pm install-write $sessionId $safeName $remote")
                 if (exitW != 0) {
                     shell.exec("rm -rf $tmpDir")
@@ -340,7 +351,7 @@ object RootInstaller {
                 if (i > 0) cmdBuilder.append(" && ")
                 val f = files[i]
                 val size = f.length()
-                val safeName = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                val safeName = sanitizeFilename(f.name)
                 cmdBuilder.append("pm install-write -S $size $sessionId $safeName -")
             }
 
@@ -421,7 +432,7 @@ object RootInstaller {
     }
 
     private fun copyToTmpAndInstall(file: File): Pair<Boolean, String> {
-        val safeName = file.name.replace(SAFE_FILENAME_REGEX, "_")
+        val safeName = sanitizeFilename(file.name)
         val tmpPath = "/data/local/tmp/$safeName"
         val shell = ShellSession()
         return try {
@@ -472,7 +483,7 @@ object RootInstaller {
                 .waitFor()
             val paths = mutableListOf<String>()
             for (f in files) {
-                val safe = f.name.replace(SAFE_FILENAME_REGEX, "_")
+                val safe = sanitizeFilename(f.name)
                 val remote = "$tmpDir/$safe"
                 var p = ProcessBuilder("su", "-c", "cat > $remote")
                     .redirectErrorStream(true)
