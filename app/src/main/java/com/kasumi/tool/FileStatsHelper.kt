@@ -72,16 +72,19 @@ object FileStatsHelper {
         // Compute on IO thread
         val stats = withContext(Dispatchers.IO) {
             val file = FileUtils.getCacheFile(item, cacheDir)
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val attrs = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
-                    FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
-                } else {
-                    if (file.exists()) FileStats(true, file.length(), file.lastModified())
-                    else FileStats(false, 0L, 0L)
-                }
-            } catch (e: Exception) {
+            if (!file.exists()) {
                 FileStats(false, 0L, 0L)
+            } else {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val attrs = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
+                        FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                    } else {
+                        FileStats(true, file.length(), file.lastModified())
+                    }
+                } catch (e: Exception) {
+                    FileStats(false, 0L, 0L)
+                }
             }
         }
 
