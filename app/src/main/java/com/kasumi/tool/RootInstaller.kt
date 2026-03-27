@@ -50,9 +50,13 @@ object RootInstaller {
             val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
+            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    input.copyTo(out)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } >= 0) {
+                        out.write(buffer, 0, bytesRead)
+                    }
                     out.flush()
                 }
             }
@@ -361,10 +365,14 @@ object RootInstaller {
 
             var writeError: Exception? = null
             try {
+                val buffer = ByteArray(65536)
                 p.outputStream.use { out ->
                     for (f in files) {
                         f.inputStream().use { input ->
-                            input.copyTo(out)
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } >= 0) {
+                                out.write(buffer, 0, bytesRead)
+                            }
                         }
                     }
                     out.flush()
@@ -417,9 +425,13 @@ object RootInstaller {
             val p = ProcessBuilder("su", "-c", "pm install -r -S $size")
                 .redirectErrorStream(true)
                 .start()
+            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    input.copyTo(out)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } >= 0) {
+                        out.write(buffer, 0, bytesRead)
+                    }
                     out.flush()
                 }
             }
@@ -443,9 +455,13 @@ object RootInstaller {
             val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
+            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
                 p.outputStream.use { out ->
-                    input.copyTo(out)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } >= 0) {
+                        out.write(buffer, 0, bytesRead)
+                    }
                     out.flush()
                 }
             }
@@ -482,6 +498,7 @@ object RootInstaller {
                 .start()
                 .waitFor()
             val paths = mutableListOf<String>()
+            val buffer = ByteArray(65536)
             for (f in files) {
                 val safe = sanitizeFilename(f.name)
                 val remote = "$tmpDir/$safe"
@@ -490,7 +507,10 @@ object RootInstaller {
                     .start()
                 f.inputStream().use { input ->
                     p.outputStream.use { out ->
-                        input.copyTo(out)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } >= 0) {
+                            out.write(buffer, 0, bytesRead)
+                        }
                         out.flush()
                     }
                 }
