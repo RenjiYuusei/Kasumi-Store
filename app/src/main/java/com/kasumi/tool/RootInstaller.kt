@@ -51,23 +51,14 @@ object RootInstaller {
                 .redirectErrorStream(true)
                 .start()
             val buffer = ByteArray(65536)
-
             file.inputStream().use { input ->
-
                 p.outputStream.use { out ->
-
                     var bytesRead: Int
-
                     while (input.read(buffer).also { bytesRead = it } >= 0) {
-
                         out.write(buffer, 0, bytesRead)
-
                     }
-
                     out.flush()
-
                 }
-
             }
             p.waitFor()
 
@@ -375,27 +366,16 @@ object RootInstaller {
             var writeError: Exception? = null
             try {
                 val buffer = ByteArray(65536)
-
                 p.outputStream.use { out ->
-
                     for (f in files) {
-
                         f.inputStream().use { input ->
-
                             var bytesRead: Int
-
                             while (input.read(buffer).also { bytesRead = it } >= 0) {
-
                                 out.write(buffer, 0, bytesRead)
-
                             }
-
                         }
-
                     }
-
                     out.flush()
-
                 }
             } catch (e: Exception) {
                 // Có thể bị Broken pipe nếu pm install-write dừng sớm (vd lỗi apk).
@@ -446,23 +426,14 @@ object RootInstaller {
                 .redirectErrorStream(true)
                 .start()
             val buffer = ByteArray(65536)
-
             file.inputStream().use { input ->
-
                 p.outputStream.use { out ->
-
                     var bytesRead: Int
-
                     while (input.read(buffer).also { bytesRead = it } >= 0) {
-
                         out.write(buffer, 0, bytesRead)
-
                     }
-
                     out.flush()
-
                 }
-
             }
             val procExit = p.waitFor()
             val output = p.inputStream.bufferedReader().readText()
@@ -485,23 +456,14 @@ object RootInstaller {
                 .redirectErrorStream(true)
                 .start()
             val buffer = ByteArray(65536)
-
             file.inputStream().use { input ->
-
                 p.outputStream.use { out ->
-
                     var bytesRead: Int
-
                     while (input.read(buffer).also { bytesRead = it } >= 0) {
-
                         out.write(buffer, 0, bytesRead)
-
                     }
-
                     out.flush()
-
                 }
-
             }
             p.waitFor()
 
@@ -536,30 +498,21 @@ object RootInstaller {
                 .start()
                 .waitFor()
             val paths = mutableListOf<String>()
+            val buffer = ByteArray(65536)
             for (f in files) {
                 val safe = sanitizeFilename(f.name)
                 val remote = "$tmpDir/$safe"
                 var p = ProcessBuilder("su", "-c", "cat > $remote")
                     .redirectErrorStream(true)
                     .start()
-                val buffer = ByteArray(65536)
-
                 f.inputStream().use { input ->
-
                     p.outputStream.use { out ->
-
                         var bytesRead: Int
-
                         while (input.read(buffer).also { bytesRead = it } >= 0) {
-
                             out.write(buffer, 0, bytesRead)
-
                         }
-
                         out.flush()
-
                     }
-
                 }
                 p.waitFor()
                 ProcessBuilder("su", "-c", "chmod 644 $remote").start().waitFor()
