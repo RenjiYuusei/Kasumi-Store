@@ -19,7 +19,7 @@ object FileStatsHelper {
 
         // Compute stats for new items on IO thread
         val newStats = withContext(Dispatchers.IO) {
-            val apksDir = File(cacheDir, "apks")
+            val apksDir = FileUtils.getApkCacheDir(cacheDir)
             val existingFiles = apksDir.listFiles()?.associateBy { it.name } ?: emptyMap()
 
             newItems.associate { item ->
@@ -76,7 +76,7 @@ object FileStatsHelper {
     ) {
         // Compute ALL stats on IO thread
         val allStats = withContext(Dispatchers.IO) {
-            val apksDir = File(cacheDir, "apks")
+            val apksDir = FileUtils.getApkCacheDir(cacheDir)
             val existingFiles = apksDir.listFiles()?.associateBy { it.name } ?: emptyMap()
 
             appsList.associate { item ->
