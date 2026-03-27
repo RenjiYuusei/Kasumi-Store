@@ -2,7 +2,10 @@ package com.kasumi.tool
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.os.Build
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.BasicFileAttributes
 
 object FileStatsHelper {
 
@@ -26,7 +29,12 @@ object FileStatsHelper {
                 val file = FileUtils.getCacheFile(item, cacheDir)
                 val listedFile = existingFiles[file.name]
                 if (listedFile != null) {
-                    item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
+                        item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                    } else {
+                        item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    }
                 } else {
                     item.id to FileStats(false, 0L, 0L)
                 }
@@ -83,7 +91,12 @@ object FileStatsHelper {
                 val file = FileUtils.getCacheFile(item, cacheDir)
                 val listedFile = existingFiles[file.name]
                 if (listedFile != null) {
-                    item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
+                        item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                    } else {
+                        item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                    }
                 } else {
                     item.id to FileStats(false, 0L, 0L)
                 }
