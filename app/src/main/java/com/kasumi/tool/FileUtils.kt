@@ -6,8 +6,12 @@ import java.security.MessageDigest
 import java.util.Locale
 
 object FileUtils {
+    fun getApkCacheDir(contextCacheDir: File): File {
+        return File(contextCacheDir, "apks")
+    }
+
     fun getCacheFile(item: ApkItem, contextCacheDir: File): File {
-        val dir = File(contextCacheDir, "apks")
+        val dir = getApkCacheDir(contextCacheDir)
 
         val ext = try {
             val urlStr = item.url
