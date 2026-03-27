@@ -312,7 +312,7 @@ object RootInstaller {
                 shell.exec("rm -rf $tmpDir")
                 return false to outCreate
             }
-            for ((f, remote) in paths) {
+            for ((_, remote) in paths) {
                 val safeName = remote.substringAfterLast('/')
                 val (exitW, outW) = shell.exec("pm install-write $sessionId $safeName $remote")
                 if (exitW != 0) {
