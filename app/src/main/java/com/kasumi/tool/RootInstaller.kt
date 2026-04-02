@@ -498,25 +498,20 @@ object RootInstaller {
                 .start()
                 .waitFor()
             val paths = mutableListOf<String>()
-            val buffer = ByteArray(65536)
-            for (f in files) {
-                val safe = sanitizeFilename(f.name)
-                val remote = "$tmpDir/$safe"
-                var p = ProcessBuilder("su", "-c", "cat > $remote")
-                    .redirectErrorStream(true)
-                    .start()
-                f.inputStream().use { input ->
-                    p.outputStream.use { out ->
-                        var bytesRead: Int
-                        while (input.read(buffer).also { bytesRead = it } >= 0) {
-                            out.write(buffer, 0, bytesRead)
-                        }
-                        out.flush()
-                    }
+            val pExt = ProcessBuilder("su", "-c", "tar -C $tmpDir -xf -")
+                .redirectErrorStream(true)
+                .start()
+            pExt.outputStream.use { out ->
+                TarUtil.streamFiles(files, out) { f ->
+                    val safe = sanitizeFilename(f.name)
+                    val remote = "$tmpDir/$safe"
+                    paths.add(remote)
+                    safe
                 }
-                p.waitFor()
-                ProcessBuilder("su", "-c", "chmod 644 $remote").start().waitFor()
-                paths.add(remote)
+            }
+            pExt.waitFor()
+            if (paths.isNotEmpty()) {
+                ProcessBuilder("su", "-c", "chmod 644 $tmpDir/*").start().waitFor()
             }
             val cmd = listOf("su", "-c", "pm install-multiple -r ${paths.joinToString(" ")}")
             val p = ProcessBuilder(cmd)
