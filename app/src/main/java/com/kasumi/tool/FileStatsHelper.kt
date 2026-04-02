@@ -4,7 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import android.os.Build
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.BasicFileAttributes
 
 object FileStatsHelper {
     private fun getFileStatsFromListing(
@@ -14,11 +17,21 @@ object FileStatsHelper {
     ): Pair<String, FileStats> {
         val file = FileUtils.getCacheFile(item, cacheDir)
         val listedFile = existingFiles[file.name] ?: return item.id to FileStats(false, 0L, 0L)
-        val lastMod = listedFile.lastModified()
-        return if (lastMod == 0L) {
+
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
+                item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+            } else {
+                val lastMod = listedFile.lastModified()
+                if (lastMod == 0L) {
+                    item.id to FileStats(false, 0L, 0L)
+                } else {
+                    item.id to FileStats(true, listedFile.length(), lastMod)
+                }
+            }
+        } catch (e: Exception) {
             item.id to FileStats(false, 0L, 0L)
-        } else {
-            item.id to FileStats(true, listedFile.length(), lastMod)
         }
     }
 
@@ -66,12 +79,20 @@ object FileStatsHelper {
         // Compute on IO thread
         val stats = withContext(Dispatchers.IO) {
             val file = FileUtils.getCacheFile(item, cacheDir)
-            val len = file.length()
-            val lastMod = file.lastModified()
-            if (lastMod == 0L) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val attrs = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
+                    FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                } else {
+                    val lastMod = file.lastModified()
+                    if (lastMod == 0L) {
+                        FileStats(false, 0L, 0L)
+                    } else {
+                        FileStats(true, file.length(), lastMod)
+                    }
+                }
+            } catch (e: Exception) {
                 FileStats(false, 0L, 0L)
-            } else {
-                FileStats(true, len, lastMod)
             }
         }
 
