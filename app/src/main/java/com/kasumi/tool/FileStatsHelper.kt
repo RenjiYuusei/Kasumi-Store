@@ -14,7 +14,12 @@ object FileStatsHelper {
     ): Pair<String, FileStats> {
         val file = FileUtils.getCacheFile(item, cacheDir)
         val listedFile = existingFiles[file.name] ?: return item.id to FileStats(false, 0L, 0L)
-        return item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+        val lastMod = listedFile.lastModified()
+        return if (lastMod == 0L) {
+            item.id to FileStats(false, 0L, 0L)
+        } else {
+            item.id to FileStats(true, listedFile.length(), lastMod)
+        }
     }
 
     suspend fun updateFileStats(
@@ -62,12 +67,11 @@ object FileStatsHelper {
         val stats = withContext(Dispatchers.IO) {
             val file = FileUtils.getCacheFile(item, cacheDir)
             val len = file.length()
-            if (len > 0L) {
-                FileStats(true, len, file.lastModified())
-            } else if (file.exists()) {
-                FileStats(true, 0L, file.lastModified())
-            } else {
+            val lastMod = file.lastModified()
+            if (lastMod == 0L) {
                 FileStats(false, 0L, 0L)
+            } else {
+                FileStats(true, len, lastMod)
             }
         }
 
