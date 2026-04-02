@@ -17,18 +17,23 @@ object FileStatsHelper {
     ): Pair<String, FileStats> {
         val file = FileUtils.getCacheFile(item, cacheDir)
         val listedFile = existingFiles[file.name] ?: return item.id to FileStats(false, 0L, 0L)
+
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val attrs = Files.readAttributes(listedFile.toPath(), BasicFileAttributes::class.java)
                 item.id to FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
             } else {
-                item.id to FileStats(true, listedFile.length(), listedFile.lastModified())
+                val lastMod = listedFile.lastModified()
+                if (lastMod == 0L) {
+                    item.id to FileStats(false, 0L, 0L)
+                } else {
+                    item.id to FileStats(true, listedFile.length(), lastMod)
+                }
             }
         } catch (e: Exception) {
             item.id to FileStats(false, 0L, 0L)
         }
     }
-
 
     suspend fun updateFileStats(
         appsList: List<ApkItem>,
@@ -74,19 +79,20 @@ object FileStatsHelper {
         // Compute on IO thread
         val stats = withContext(Dispatchers.IO) {
             val file = FileUtils.getCacheFile(item, cacheDir)
-            if (!file.exists()) {
-                FileStats(false, 0L, 0L)
-            } else {
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val attrs = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
-                        FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val attrs = Files.readAttributes(file.toPath(), BasicFileAttributes::class.java)
+                    FileStats(true, attrs.size(), attrs.lastModifiedTime().toMillis())
+                } else {
+                    val lastMod = file.lastModified()
+                    if (lastMod == 0L) {
+                        FileStats(false, 0L, 0L)
                     } else {
-                        FileStats(true, file.length(), file.lastModified())
+                        FileStats(true, file.length(), lastMod)
                     }
-                } catch (e: Exception) {
-                    FileStats(false, 0L, 0L)
                 }
+            } catch (e: Exception) {
+                FileStats(false, 0L, 0L)
             }
         }
 
