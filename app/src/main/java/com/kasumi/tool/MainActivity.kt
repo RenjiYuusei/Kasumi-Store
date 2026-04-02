@@ -19,6 +19,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -47,6 +50,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -170,6 +178,7 @@ class MainActivity : ComponentActivity() {
      *
      * @param savedInstanceState If non-null, contains the activity's previously saved state.
      */
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -211,6 +220,7 @@ class MainActivity : ComponentActivity() {
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
+        val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
         val snackbarHostState = remember { SnackbarHostState() }
 
         // Compute file stats in background to avoid I/O in UI
@@ -285,9 +295,11 @@ class MainActivity : ComponentActivity() {
         }
 
         Scaffold(
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
+                LargeTopAppBar(
+                    scrollBehavior = scrollBehavior,
                     title = {
                         Text(
                             stringResource(R.string.app_name),
@@ -337,9 +349,15 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavigationBarItem(
                         icon = {
+                            val scale by animateFloatAsState(
+                                targetValue = if (selectedTab == 0) 1.2f else 1.0f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                                label = "scale"
+                            )
                             Icon(
                                 if (selectedTab == 0) Icons.Default.Apps else Icons.Outlined.Apps,
-                                contentDescription = "Apps"
+                                contentDescription = "Apps",
+                                modifier = Modifier.scale(scale)
                             )
                         },
                         label = { Text("Ứng dụng", fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
@@ -355,9 +373,15 @@ class MainActivity : ComponentActivity() {
                     )
                     NavigationBarItem(
                         icon = {
+                            val scale by animateFloatAsState(
+                                targetValue = if (selectedTab == 1) 1.2f else 1.0f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                                label = "scale"
+                            )
                             Icon(
                                 if (selectedTab == 1) Icons.Default.Code else Icons.Outlined.Code,
-                                contentDescription = "Script"
+                                contentDescription = "Script",
+                                modifier = Modifier.scale(scale)
                             )
                         },
                         label = { Text("Script", fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
@@ -437,7 +461,11 @@ class MainActivity : ComponentActivity() {
                 )
             },
             trailingIcon = {
-                if (query.isNotEmpty()) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = query.isNotEmpty(),
+                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
+                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
+                ) {
                     IconButton(onClick = { onQueryChange("") }) {
                         Icon(
                             Icons.Default.Close,
@@ -604,6 +632,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
+            onClick = { onInstall(item) },
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -807,6 +836,7 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 6.dp),
+            onClick = { if(isLocal) onCopy(script) else onDownload(script) },
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
