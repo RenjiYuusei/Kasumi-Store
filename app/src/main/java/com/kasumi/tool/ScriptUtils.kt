@@ -32,7 +32,7 @@ object ScriptUtils {
         }
 
         // Efficiently identify used paths to filter unmatched locals
-        val usedLocalPaths = mergedList.mapNotNull { it.localPath }.toHashSet()
+        val usedLocalPaths = mergedList.mapNotNullTo(HashSet()) { it.localPath }
 
         val unmatchedLocals = localScripts.filter { local ->
             local.localPath != null && !usedLocalPaths.contains(local.localPath)
