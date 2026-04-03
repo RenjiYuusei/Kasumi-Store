@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5.5] - 2026-04-03
+### 🐛 Sửa lỗi
+- **Làm mới Script**: Khắc phục lỗi vuốt để làm mới (pull-to-refresh) ở tab Scripts không cập nhật danh sách script. Đã sửa để hệ thống tự động tải lại cả script từ server và script cục bộ thay vì tải lại danh sách ứng dụng.
+
 ## [1.5.4] - 2026-03-12
 ### ⚡ Cập nhật thư viện
 - **Nâng cấp Android SDK**: Tăng `compileSdk` và `targetSdk` lên phiên bản 35 để đảm bảo khả năng tương thích với các API mới nhất của Android và Jetpack Compose.

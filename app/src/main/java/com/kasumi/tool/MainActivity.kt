@@ -562,9 +562,10 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     setBusy(true)
-                    refreshPreloadedApps()
+                    loadScriptsFromOnline()
+                    loadScriptsFromLocal()
                     setBusy(false)
-                    onShowSnackbar("Đã làm mới nguồn")
+                    onShowSnackbar("Đã làm mới script")
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -808,9 +809,10 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     setBusy(true)
-                    refreshPreloadedApps()
+                    loadScriptsFromOnline()
+                    loadScriptsFromLocal()
                     setBusy(false)
-                    onShowSnackbar("Đã làm mới nguồn")
+                    onShowSnackbar("Đã làm mới script")
                 }
             },
             modifier = Modifier.fillMaxSize()
