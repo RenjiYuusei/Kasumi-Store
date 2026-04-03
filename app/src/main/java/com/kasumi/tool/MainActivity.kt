@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -106,6 +108,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
 
     private val saveMutex = Mutex()
@@ -314,16 +317,6 @@ class MainActivity : ComponentActivity() {
                         if (selectedTab == 0) {
                             IconButton(onClick = { showSortDialog = true }) {
                                 Icon(Icons.Default.FilterList, contentDescription = "Sort")
-                            }
-                            IconButton(onClick = {
-                                lifecycleScope.launch {
-                                    setBusy(true)
-                                    refreshPreloadedApps()
-                                    setBusy(false)
-                                    snackbarHostState.showSnackbar("Đã làm mới nguồn")
-                                }
-                            }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                             }
                         }
                     }
@@ -545,9 +538,9 @@ class MainActivity : ComponentActivity() {
             }
         )
     }
-
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
+        val scope = rememberCoroutineScope()
         val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
             snapshotFlow {
                 Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
@@ -563,50 +556,67 @@ class MainActivity : ComponentActivity() {
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
-        Column {
-             Row(
-                 modifier = Modifier
-                     .fillMaxWidth()
-                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                 horizontalArrangement = Arrangement.SpaceBetween,
-                 verticalAlignment = Alignment.CenterVertically
-             ) {
-                 val statsText = if (cachedCount > 0) {
-                     stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})")
-                 } else {
-                     stringResource(R.string.stats_format_no_cache, filteredApps.size)
-                 }
+        @OptIn(ExperimentalMaterial3Api::class)
+        PullToRefreshBox(
+            isRefreshing = isLoading,
+            onRefresh = {
+                scope.launch {
+                    setBusy(true)
+                    refreshPreloadedApps()
+                    setBusy(false)
+                    onShowSnackbar("Đã làm mới nguồn")
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val statsText = if (cachedCount > 0) {
+                            stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})")
+                        } else {
+                            stringResource(R.string.stats_format_no_cache, filteredApps.size)
+                        }
 
-                 Text(
-                     text = statsText,
-                     style = MaterialTheme.typography.labelMedium,
-                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                 )
-                 if (cachedCount > 0) {
-                     TextButton(
-                         onClick = { clearCache(onShowSnackbar) },
-                         colors = ButtonDefaults.textButtonColors(
-                             contentColor = MaterialTheme.colorScheme.error
-                         )
-                     ) {
-                         Text(
-                             stringResource(R.string.clear_cache),
-                             style = MaterialTheme.typography.labelMedium
-                         )
-                     }
-                 }
-             }
+                        Text(
+                            text = statsText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (cachedCount > 0) {
+                            TextButton(
+                                onClick = { clearCache(onShowSnackbar) },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text(
+                                    stringResource(R.string.clear_cache),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        }
+                    }
+                }
 
-            if (filteredApps.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.SearchOff,
-                    title = stringResource(R.string.no_apps_title),
-                    subtitle = stringResource(R.string.no_apps_subtitle)
-                )
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
-                ) {
+                if (filteredApps.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.SearchOff,
+                            title = stringResource(R.string.no_apps_title),
+                            subtitle = stringResource(R.string.no_apps_subtitle)
+                        )
+                    }
+                } else {
                     itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
                         AnimatedVisibility(
                             visible = true,
@@ -777,9 +787,9 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
     @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
+        val scope = rememberCoroutineScope()
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim()
              if (q.isEmpty()) {
@@ -792,23 +802,41 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        Column {
-            Text(
-                text = stringResource(R.string.scripts_count, filteredScripts.size),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (filteredScripts.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Default.Code,
-                    title = stringResource(R.string.no_scripts_title),
-                    subtitle = stringResource(R.string.no_scripts_subtitle)
-                )
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
-                ) {
+        @OptIn(ExperimentalMaterial3Api::class)
+        PullToRefreshBox(
+            isRefreshing = isLoading,
+            onRefresh = {
+                scope.launch {
+                    setBusy(true)
+                    refreshPreloadedApps()
+                    setBusy(false)
+                    onShowSnackbar("Đã làm mới nguồn")
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.scripts_count, filteredScripts.size),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (filteredScripts.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.Code,
+                            title = stringResource(R.string.no_scripts_title),
+                            subtitle = stringResource(R.string.no_scripts_subtitle)
+                        )
+                    }
+                } else {
                     itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
                         AnimatedVisibility(
                             visible = true,
@@ -827,7 +855,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
+
     @Composable
     fun ScriptItemRow(script: ScriptItem, onDownload: (ScriptItem) -> Unit, onCopy: (ScriptItem) -> Unit, onDelete: (ScriptItem) -> Unit) {
         val isLocal = script.localPath != null
