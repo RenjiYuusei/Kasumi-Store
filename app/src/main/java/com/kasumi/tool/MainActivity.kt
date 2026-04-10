@@ -563,9 +563,12 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     isRefreshing = true
-                    refreshPreloadedApps()
-                    isRefreshing = false
-                    onShowSnackbar("Đã làm mới nguồn")
+                    try {
+                        refreshPreloadedApps()
+                        onShowSnackbar("Đã làm mới nguồn")
+                    } finally {
+                        isRefreshing = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -810,10 +813,13 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     isRefreshing = true
-                    loadScriptsFromOnline()
-                    loadScriptsFromLocal()
-                    isRefreshing = false
-                    onShowSnackbar("Đã làm mới script")
+                    try {
+                        loadScriptsFromOnline()
+                        loadScriptsFromLocal()
+                        onShowSnackbar("Đã làm mới script")
+                    } finally {
+                        isRefreshing = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
