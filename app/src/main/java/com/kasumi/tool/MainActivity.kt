@@ -569,12 +569,10 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     isRefreshing = true
-                    setBusy(true)
                     try {
                         refreshPreloadedApps()
                         onShowSnackbar("Đã làm mới nguồn")
                     } finally {
-                        setBusy(false)
                         isRefreshing = false
                     }
                 }
@@ -822,13 +820,11 @@ class MainActivity : ComponentActivity() {
             onRefresh = {
                 scope.launch {
                     isRefreshing = true
-                    setBusy(true)
                     try {
                         loadScriptsFromOnline()
                         loadScriptsFromLocal()
                         onShowSnackbar("Đã làm mới script")
                     } finally {
-                        setBusy(false)
                         isRefreshing = false
                     }
                 }
