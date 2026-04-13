@@ -546,6 +546,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
         val scope = rememberCoroutineScope()
+        var isRefreshing by remember { mutableStateOf(false) }
         val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
             snapshotFlow {
                 Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
@@ -800,6 +801,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val scope = rememberCoroutineScope()
+        var isRefreshing by remember { mutableStateOf(false) }
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim()
              if (q.isEmpty()) {
