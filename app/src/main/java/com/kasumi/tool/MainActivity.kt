@@ -563,15 +563,22 @@ class MainActivity : ComponentActivity() {
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
+        var isRefreshing by remember { mutableStateOf(false) }
+
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isLoading,
+            isRefreshing = isRefreshing,
             onRefresh = {
                 scope.launch {
+                    isRefreshing = true
                     setBusy(true)
-                    refreshPreloadedApps()
-                    setBusy(false)
-                    onShowSnackbar("Đã làm mới nguồn")
+                    try {
+                        refreshPreloadedApps()
+                        onShowSnackbar("Đã làm mới nguồn")
+                    } finally {
+                        setBusy(false)
+                        isRefreshing = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
@@ -809,16 +816,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        var isRefreshing by remember { mutableStateOf(false) }
+
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isLoading,
+            isRefreshing = isRefreshing,
             onRefresh = {
                 scope.launch {
+                    isRefreshing = true
                     setBusy(true)
-                    loadScriptsFromOnline()
-                    loadScriptsFromLocal()
-                    setBusy(false)
-                    onShowSnackbar("Đã làm mới script")
+                    try {
+                        loadScriptsFromOnline()
+                        loadScriptsFromLocal()
+                        onShowSnackbar("Đã làm mới script")
+                    } finally {
+                        setBusy(false)
+                        isRefreshing = false
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize()
