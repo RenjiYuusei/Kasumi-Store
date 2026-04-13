@@ -111,6 +111,12 @@ import org.json.JSONObject
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
 
+    private data class RemoteScript(
+        val name: String? = null,
+        val gameName: String? = null,
+        val url: String? = null
+    )
+
     private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -1321,33 +1327,20 @@ private fun logBg(msg: String) = log(msg)
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
                         com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
-                            reader.beginArray()
-                            while (reader.hasNext()) {
-                                reader.beginObject()
-                                var name = ""
-                                var gameName = ""
-                                var url = ""
-                                while (reader.hasNext()) {
-                                    when (reader.nextName()) {
-                                        "name" -> name = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        "gameName" -> gameName = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        "url" -> url = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        else -> reader.skipValue()
-                                    }
-                                }
-                                reader.endObject()
-                                if (url.isNotBlank()) {
+                            val remoteScripts: Array<RemoteScript>? = gson.fromJson(reader, Array<RemoteScript>::class.java)
+                            remoteScripts?.forEach { remote ->
+                                val url = remote.url
+                                if (!url.isNullOrBlank()) {
                                     newScripts.add(
                                         ScriptItem(
                                             id = FileUtils.stableIdFromUrl(url),
-                                            name = name,
-                                            gameName = gameName,
+                                            name = remote.name ?: "",
+                                            gameName = remote.gameName ?: "",
                                             url = url
                                         )
                                     )
                                 }
                             }
-                            reader.endArray()
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
