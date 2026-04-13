@@ -75,10 +75,9 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import com.google.gson.TypeAdapter
 import com.google.gson.reflect.TypeToken
-import com.google.gson.stream.JsonReader
-import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
 import java.io.BufferedReader
@@ -110,6 +109,12 @@ import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
+
+    private data class RemoteScript(
+        @SerializedName("name")     val name: String? = null,
+        @SerializedName("gameName") val gameName: String? = null,
+        @SerializedName("url")      val url: String? = null
+    )
 
     private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
@@ -557,17 +562,19 @@ class MainActivity : ComponentActivity() {
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
+        var pullRefreshing by remember { mutableStateOf(false) }
+
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isRefreshing,
+            isRefreshing = pullRefreshing,
             onRefresh = {
                 scope.launch {
-                    isRefreshing = true
+                    pullRefreshing = true
                     try {
                         refreshPreloadedApps()
                         onShowSnackbar("Đã làm mới nguồn")
                     } finally {
-                        isRefreshing = false
+                        pullRefreshing = false
                     }
                 }
             },
@@ -807,18 +814,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        var pullRefreshing by remember { mutableStateOf(false) }
+
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isRefreshing,
+            isRefreshing = pullRefreshing,
             onRefresh = {
                 scope.launch {
-                    isRefreshing = true
+                    pullRefreshing = true
                     try {
                         loadScriptsFromOnline()
                         loadScriptsFromLocal()
                         onShowSnackbar("Đã làm mới script")
                     } finally {
-                        isRefreshing = false
+                        pullRefreshing = false
                     }
                 }
             },
@@ -1328,34 +1337,21 @@ private fun logBg(msg: String) = log(msg)
                     val stream = resp.body?.byteStream() ?: return@withContext
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
-                        com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
-                            reader.beginArray()
-                            while (reader.hasNext()) {
-                                reader.beginObject()
-                                var name = ""
-                                var gameName = ""
-                                var url = ""
-                                while (reader.hasNext()) {
-                                    when (reader.nextName()) {
-                                        "name" -> name = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        "gameName" -> gameName = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        "url" -> url = if (reader.peek() == com.google.gson.stream.JsonToken.NULL) { reader.nextNull(); "" } else { reader.nextString() }
-                                        else -> reader.skipValue()
-                                    }
-                                }
-                                reader.endObject()
-                                if (url.isNotBlank()) {
+                        java.io.InputStreamReader(stream, Charsets.UTF_8).use { reader ->
+                            val remoteScripts: Array<RemoteScript>? = gson.fromJson(reader, Array<RemoteScript>::class.java)
+                            remoteScripts?.forEach { remote ->
+                                val url = remote.url
+                                if (!url.isNullOrBlank()) {
                                     newScripts.add(
                                         ScriptItem(
                                             id = FileUtils.stableIdFromUrl(url),
-                                            name = name,
-                                            gameName = gameName,
+                                            name = remote.name ?: "",
+                                            gameName = remote.gameName ?: "",
                                             url = url
                                         )
                                     )
                                 }
                             }
-                            reader.endArray()
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
