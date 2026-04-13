@@ -75,6 +75,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import com.google.gson.TypeAdapter
 import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
@@ -112,9 +113,9 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
 
     private data class RemoteScript(
-        val name: String? = null,
-        val gameName: String? = null,
-        val url: String? = null
+        @SerializedName("name")     val name: String? = null,
+        @SerializedName("gameName") val gameName: String? = null,
+        @SerializedName("url")      val url: String? = null
     )
 
     private val saveMutex = Mutex()
@@ -1326,7 +1327,7 @@ private fun logBg(msg: String) = log(msg)
                     val stream = resp.body?.byteStream() ?: return@withContext
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
-                        com.google.gson.stream.JsonReader(java.io.InputStreamReader(stream)).use { reader ->
+                        java.io.InputStreamReader(stream).use { reader ->
                             val remoteScripts: Array<RemoteScript>? = gson.fromJson(reader, Array<RemoteScript>::class.java)
                             remoteScripts?.forEach { remote ->
                                 val url = remote.url
