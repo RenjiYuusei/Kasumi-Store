@@ -561,19 +561,19 @@ class MainActivity : ComponentActivity() {
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
 
-        var isRefreshing by remember { mutableStateOf(false) }
+        var pullRefreshing by remember { mutableStateOf(false) }
 
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isRefreshing,
+            isRefreshing = pullRefreshing,
             onRefresh = {
                 scope.launch {
-                    isRefreshing = true
+                    pullRefreshing = true
                     try {
                         refreshPreloadedApps()
                         onShowSnackbar("Đã làm mới nguồn")
                     } finally {
-                        isRefreshing = false
+                        pullRefreshing = false
                     }
                 }
             },
@@ -812,20 +812,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        var isRefreshing by remember { mutableStateOf(false) }
+        var pullRefreshing by remember { mutableStateOf(false) }
 
         @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
-            isRefreshing = isRefreshing,
+            isRefreshing = pullRefreshing,
             onRefresh = {
                 scope.launch {
-                    isRefreshing = true
+                    pullRefreshing = true
                     try {
                         loadScriptsFromOnline()
                         loadScriptsFromLocal()
                         onShowSnackbar("Đã làm mới script")
                     } finally {
-                        isRefreshing = false
+                        pullRefreshing = false
                     }
                 }
             },
@@ -1335,7 +1335,7 @@ private fun logBg(msg: String) = log(msg)
                     val stream = resp.body?.byteStream() ?: return@withContext
                     val newScripts = mutableListOf<ScriptItem>()
                     try {
-                        java.io.InputStreamReader(stream).use { reader ->
+                        java.io.InputStreamReader(stream, Charsets.UTF_8).use { reader ->
                             val remoteScripts: Array<RemoteScript>? = gson.fromJson(reader, Array<RemoteScript>::class.java)
                             remoteScripts?.forEach { remote ->
                                 val url = remote.url
