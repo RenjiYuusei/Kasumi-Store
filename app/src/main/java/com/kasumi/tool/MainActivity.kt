@@ -1385,18 +1385,18 @@ private suspend fun loadScriptsFromLocal() {
             val newLocals = mutableListOf<ScriptItem>()
             val autoExecuteDir = File(getDeltaDir(), "Autoexecute")
             val scriptsDir = File(getDeltaDir(), "Scripts")
-             if (autoExecuteDir.exists()) {
-                autoExecuteDir.listFiles()?.forEach {
-                    if (it.isFile) {
-                        newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_auto), null, it.absolutePath))
-                    }
+
+            val autoString = context.getString(R.string.local_auto)
+            autoExecuteDir.listFiles()?.forEach {
+                if (it.isFile) {
+                    newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, autoString, null, it.absolutePath))
                 }
             }
-             if (scriptsDir.exists()) {
-                scriptsDir.listFiles()?.forEach {
-                    if (it.isFile) {
-                        newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, context.getString(R.string.local_manual), null, it.absolutePath))
-                    }
+
+            val manualString = context.getString(R.string.local_manual)
+            scriptsDir.listFiles()?.forEach {
+                if (it.isFile) {
+                    newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, manualString, null, it.absolutePath))
                 }
             }
             withContext(Dispatchers.Main) {
