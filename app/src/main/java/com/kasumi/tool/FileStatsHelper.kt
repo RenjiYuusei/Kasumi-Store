@@ -56,15 +56,11 @@ object FileStatsHelper {
             }.awaitAll().toMap()
         }
 
-        // Compute stale keys before switching to Main thread
-        val staleKeys = currentKeys - neededIds
-
         // Apply updates on Main thread
         withContext(Dispatchers.Main.immediate) {
             // Remove stale entries
-            for (key in staleKeys) {
-                currentStats.remove(key)
-            }
+            currentStats.keys.retainAll(neededIds)
+
             // Add new computed entries
             currentStats.putAll(newStats)
         }
