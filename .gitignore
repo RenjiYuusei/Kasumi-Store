@@ -47,3 +47,4 @@ tools/web-editor/dist/
 # Python
 __pycache__/
 *.pyc
+pr_body.txt
