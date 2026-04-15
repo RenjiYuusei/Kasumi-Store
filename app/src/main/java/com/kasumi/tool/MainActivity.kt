@@ -1500,25 +1500,21 @@ private suspend fun loadScriptsFromLocal() {
                     if (entryName.endsWith(".apk")) {
                         // Check for encryption/invalidity by peeking 2 magic bytes: 'PK' (0x50 0x4B)
                         // APK is a ZIP, so it must start with PK signature.
-                        val input = zipFile.getInputStream(entry)
-                        val buf = ByteArray(2)
-                        val read = input.read(buf)
-                        if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
-                             val outFile = File(outDir, fileName)
-                             outFile.parentFile?.mkdirs()
-                             // Re-open stream or just continue reading?
-                             // ZipFile.getInputStream returns a new stream usually, but let's be safe:
-                             // We already read 2 bytes, need to prepend them or re-open.
-                             // Simpler: re-open.
-                             zipFile.getInputStream(entry).use { inp ->
-                                 FileOutputStream(outFile).use { output ->
-                                     inp.copyTo(output)
+                        zipFile.getInputStream(entry).use { input ->
+                            val buf = ByteArray(2)
+                            val read = input.read(buf)
+                            if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
+                                 val outFile = File(outDir, fileName)
+                                 outFile.parentFile?.mkdirs()
+                                 outFile.outputStream().buffered(65536).use { output ->
+                                     output.write(buf)
+                                     input.copyTo(output, 65536)
                                  }
-                             }
-                             if (outFile.exists() && outFile.length() > 0) results.add(outFile)
-                        } else {
-                            // Encrypted or invalid APK entry
-                             Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
+                                 if (outFile.exists() && outFile.length() > 0) results.add(outFile)
+                            } else {
+                                // Encrypted or invalid APK entry
+                                 Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
+                            }
                         }
                         continue
                     }
