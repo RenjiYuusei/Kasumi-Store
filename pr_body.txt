@@ -1,5 +1,0 @@
-💡 **What:** Optimized APK extraction from compressed zip archives by reusing the input stream, manually writing the parsed 2-byte magic header, and wrapping the output in a 64KB `BufferedOutputStream` while setting the `copyTo` buffer size to 64KB.
-
-🎯 **Why:** Previously, the logic opened the stream to check the `PK` magic bytes, and then completely re-opened the zip stream. For deflated zip streams, this caused an unnecessary `Inflater` re-initialization and secondary local file header parse, leading to double work. The `copyTo` operation also defaulted to an 8KB buffer size on unbuffered output.
-
-📊 **Measured Improvement:** The benchmark run comparing the old vs new implementations shows a **~12% performance improvement** (12185 ms -> 10731 ms locally for 300 iterations of 10-entry deflated zip unzipping) in CPU stream copy time due to the elimination of the redundant Inflater re-creation and the increased buffer batching.

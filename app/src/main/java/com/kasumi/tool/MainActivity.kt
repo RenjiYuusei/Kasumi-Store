@@ -1506,11 +1506,16 @@ private suspend fun loadScriptsFromLocal() {
                             if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
                                  val outFile = File(outDir, fileName)
                                  outFile.parentFile?.mkdirs()
-                                 outFile.outputStream().buffered(65536).use { output ->
-                                     output.write(buf)
-                                     input.copyTo(output, 65536)
+                                 try {
+                                     outFile.outputStream().buffered(65536).use { output ->
+                                         output.write(buf, 0, read)
+                                         input.copyTo(output, 65536)
+                                     }
+                                     if (outFile.exists() && outFile.length() > 0) results.add(outFile)
+                                 } catch (e: Exception) {
+                                     outFile.delete()
+                                     Log.e("Kasumi", "Failed to extract APK: $fileName", e)
                                  }
-                                 if (outFile.exists() && outFile.length() > 0) results.add(outFile)
                             } else {
                                 // Encrypted or invalid APK entry
                                  Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
