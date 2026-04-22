@@ -318,7 +318,7 @@ object RootInstaller {
             }
             val writeCmd = paths.joinToString(" && ") { (_, remote) ->
                 val safeName = remote.substringAfterLast('/')
-                "pm install-write $sessionId $safeName $remote"
+                "echo '>>> $safeName' && pm install-write $sessionId $safeName $remote"
             }
             val (exitW, outW) = shell.exec(writeCmd)
             if (exitW != 0) {
