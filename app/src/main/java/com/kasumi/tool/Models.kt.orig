@@ -15,9 +15,9 @@ data class FileStats(val exists: Boolean, val size: Long, val lastModified: Long
 
 data class AppUpdateInfo(
     val versionCode: Long,
-    val versionName: String?,
+    val versionName: String,
     val changelog: String?,
-    val downloadUrl: String?
+    val downloadUrl: String
 )
 
 data class ApkItem(

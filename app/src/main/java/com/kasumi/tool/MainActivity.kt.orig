@@ -331,22 +331,17 @@ class MainActivity : ComponentActivity() {
                             isUpdatingApp = true
                             lifecycleScope.launch(Dispatchers.IO) {
                                 try {
-                                    val url = updateInfo!!.downloadUrl
-                                    if (url.isNullOrBlank()) throw Exception("Không có URL tải xuống")
-                                    val req = Request.Builder().url(url).build()
+                                    val req = Request.Builder().url(updateInfo!!.downloadUrl).build()
                                     client.newCall(req).execute().use { resp ->
                                         if (resp.isSuccessful) {
                                             val outFile = java.io.File(cacheDir, "update.apk")
-                                            val body = resp.body ?: throw Exception("Response body rỗng")
-                                            body.byteStream().use { input ->
+                                            resp.body?.byteStream()?.use { input ->
                                                 java.io.FileOutputStream(outFile).use { out -> input.copyTo(out) }
-                                            }
-                                            if (!outFile.exists() || outFile.length() == 0L) {
-                                                throw Exception("File tải về bị lỗi/rỗng")
                                             }
                                             withContext(Dispatchers.Main) {
                                                 installNormally(outFile) { msg -> lifecycleScope.launch { snackbarHostState.showSnackbar(msg) } }
                                                 isUpdatingApp = false
+                                                updateInfo = null
                                             }
                                         } else throw Exception("HTTP ${resp.code}")
                                     }
@@ -713,7 +708,7 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         val isCached = stats?.exists == true
         val fileSize = stats?.size ?: 0L
-        
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1262,7 +1257,7 @@ private fun logBg(msg: String) = log(msg)
                     if (obbInfo != null) {
                         withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
                     }
-                    
+
                     val rooted = RootInstaller.isDeviceRooted()
                      if (rooted) {
                         val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
@@ -1567,7 +1562,7 @@ private suspend fun loadScriptsFromLocal() {
         val results = mutableListOf<File>()
         val obbFiles = mutableListOf<File>()
         var packageName: String? = null
-        
+
         try {
             java.util.zip.ZipFile(packageFile).use { zipFile ->
                 val entries = zipFile.entries()
@@ -1576,7 +1571,7 @@ private suspend fun loadScriptsFromLocal() {
                     if (entry.isDirectory) continue
                     val entryName = entry.name.lowercase()
                     val fileName = entry.name.substringAfterLast('/')
-                    
+
                     if (entryName.endsWith("manifest.json")) {
                         try {
                             val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
@@ -1621,7 +1616,7 @@ private suspend fun loadScriptsFromLocal() {
                 }
             }
         } catch (e: Exception) { e.printStackTrace() }
-        
+
         val sortedApks = results.sortedWith(compareBy(
             { !it.name.startsWith("base.") && !it.name.contains("com.") },
             { it.name.startsWith("config.") || it.name.startsWith("split_") },
@@ -1630,7 +1625,7 @@ private suspend fun loadScriptsFromLocal() {
         val obbInfo = if (obbFiles.isNotEmpty() && packageName != null) ObbInfo(packageName, obbFiles) else null
         return sortedApks to obbInfo
     }
-    
+
     private fun installObbFiles(obbInfo: ObbInfo) {
          try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
