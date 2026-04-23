@@ -17,7 +17,8 @@ data class AppUpdateInfo(
     val versionCode: Long,
     val versionName: String?,
     val changelog: String?,
-    val downloadUrl: String?
+    val downloadUrl: String?,
+    val sha256: String? = null
 )
 
 data class ApkItem(

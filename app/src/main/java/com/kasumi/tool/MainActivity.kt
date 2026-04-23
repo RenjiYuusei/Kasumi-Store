@@ -308,12 +308,13 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        if (updateInfo != null) {
+        val currentUpdateInfo = updateInfo
+        if (currentUpdateInfo != null) {
             AlertDialog(
                 onDismissRequest = { if (!isUpdatingApp) updateInfo = null },
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(24.dp),
-                title = { Text("Có bản cập nhật mới (v${updateInfo!!.versionName ?: "?"})", fontWeight = FontWeight.Bold) },
+                title = { Text("Có bản cập nhật mới (v${currentUpdateInfo.versionName ?: "?"})", fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
                         if (isUpdatingApp) {
@@ -321,7 +322,7 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.height(16.dp))
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
                         } else {
-                            Text(updateInfo!!.changelog ?: "Không có chi tiết cập nhật.", style = MaterialTheme.typography.bodyMedium)
+                            Text(currentUpdateInfo.changelog ?: "Không có chi tiết cập nhật.", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 },
@@ -331,7 +332,7 @@ class MainActivity : ComponentActivity() {
                             isUpdatingApp = true
                             lifecycleScope.launch(Dispatchers.IO) {
                                 try {
-                                    val url = updateInfo!!.downloadUrl
+                                    val url = currentUpdateInfo.downloadUrl
                                     if (url.isNullOrBlank()) throw Exception("Không có URL tải xuống")
                                     val req = Request.Builder().url(url).build()
                                     client.newCall(req).execute().use { resp ->
