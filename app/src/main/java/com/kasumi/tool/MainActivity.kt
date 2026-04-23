@@ -345,6 +345,7 @@ class MainActivity : ComponentActivity() {
                                                 throw Exception("File tải về bị lỗi/rỗng")
                                             }
                                             withContext(Dispatchers.Main) {
+                                                isUpdatingApp = false
                                                 installNormally(outFile) { msg -> lifecycleScope.launch { snackbarHostState.showSnackbar(msg) } }
                                             }
                                         } else throw Exception("HTTP ${resp.code}")
@@ -1345,6 +1346,7 @@ private fun logBg(msg: String) = log(msg)
                     startActivity(intent)
                     onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
                 } catch (e: Exception) { }
+                return
             }
         }
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)

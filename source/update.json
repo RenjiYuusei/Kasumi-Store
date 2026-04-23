@@ -2,5 +2,5 @@
   "versionCode": 13,
   "versionName": "1.6.0",
   "changelog": "- Thêm tính năng tự động kiểm tra và thông báo cập nhật ứng dụng.\n- Cải thiện giao diện.",
-  "downloadUrl": "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/release/app-release.apk"
+  "downloadUrl": "https://github.com/RenjiYuusei/Kasumi-Store/releases/download/v1.6.0/app-release.apk"
 }
