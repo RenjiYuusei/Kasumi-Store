@@ -345,6 +345,22 @@ class MainActivity : ComponentActivity() {
                                             if (!outFile.exists() || outFile.length() == 0L) {
                                                 throw Exception("File tải về bị lỗi/rỗng")
                                             }
+                                            val expectedSha256 = currentUpdateInfo.sha256
+                                            if (!expectedSha256.isNullOrBlank()) {
+                                                val md = java.security.MessageDigest.getInstance("SHA-256")
+                                                java.io.FileInputStream(outFile).use { fis ->
+                                                    val buffer = ByteArray(8192)
+                                                    var bytesRead: Int
+                                                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                                                        md.update(buffer, 0, bytesRead)
+                                                    }
+                                                }
+                                                val hashBytes = md.digest()
+                                                val hexString = hashBytes.joinToString("") { "%02x".format(it) }
+                                                if (!hexString.equals(expectedSha256, ignoreCase = true)) {
+                                                    throw Exception("File tải về bị hỏng (Mã băm không khớp)")
+                                                }
+                                            }
                                             withContext(Dispatchers.Main) {
                                                 isUpdatingApp = false
                                                 installNormally(outFile) { msg -> lifecycleScope.launch { snackbarHostState.showSnackbar(msg) } }
