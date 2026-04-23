@@ -313,7 +313,7 @@ class MainActivity : ComponentActivity() {
                 onDismissRequest = { if (!isUpdatingApp) updateInfo = null },
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 shape = RoundedCornerShape(24.dp),
-                title = { Text("Có bản cập nhật mới (v${updateInfo!!.versionName})", fontWeight = FontWeight.Bold) },
+                title = { Text("Có bản cập nhật mới (v${updateInfo!!.versionName ?: "?"})", fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
                         if (isUpdatingApp) {
@@ -346,7 +346,6 @@ class MainActivity : ComponentActivity() {
                                             }
                                             withContext(Dispatchers.Main) {
                                                 installNormally(outFile) { msg -> lifecycleScope.launch { snackbarHostState.showSnackbar(msg) } }
-                                                isUpdatingApp = false
                                             }
                                         } else throw Exception("HTTP ${resp.code}")
                                     }

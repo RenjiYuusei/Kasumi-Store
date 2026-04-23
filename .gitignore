@@ -48,3 +48,4 @@ tools/web-editor/dist/
 __pycache__/
 *.pyc
 pr_body.txt
+*.orig
