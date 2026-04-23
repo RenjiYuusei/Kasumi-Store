@@ -13,6 +13,13 @@ import java.util.UUID
 enum class SortMode { NAME_ASC, NAME_DESC, SIZE_DESC, DATE_DESC }
 data class FileStats(val exists: Boolean, val size: Long, val lastModified: Long)
 
+data class AppUpdateInfo(
+    val versionCode: Long,
+    val versionName: String,
+    val changelog: String?,
+    val downloadUrl: String
+)
+
 data class ApkItem(
     val id: String,
     val name: String,

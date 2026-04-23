@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
 
     private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
     private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
+    private val UPDATE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/update.json"
 
     // Data states
     private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
@@ -226,6 +227,8 @@ class MainActivity : ComponentActivity() {
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
+        var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+        var isUpdatingApp by remember { mutableStateOf(false) }
 
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
         val snackbarHostState = remember { SnackbarHostState() }
@@ -234,6 +237,10 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(appsList) {
             FileStatsHelper.updateFileStats(appsList, fileStats, cacheDir)
             statsVersion++
+        }
+
+        LaunchedEffect(Unit) {
+            updateInfo = checkAppUpdate()
         }
 
         if (scriptToDownload != null) {
@@ -297,6 +304,60 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = { scriptToDownload = null }) {
                         Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            )
+        }
+
+        if (updateInfo != null) {
+            AlertDialog(
+                onDismissRequest = { if (!isUpdatingApp) updateInfo = null },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(24.dp),
+                title = { Text("Có bản cập nhật mới (v${updateInfo!!.versionName})", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        if (isUpdatingApp) {
+                            Text("Đang tải bản cập nhật...", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
+                        } else {
+                            Text(updateInfo!!.changelog ?: "Không có chi tiết cập nhật.", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            isUpdatingApp = true
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                try {
+                                    val req = Request.Builder().url(updateInfo!!.downloadUrl).build()
+                                    client.newCall(req).execute().use { resp ->
+                                        if (resp.isSuccessful) {
+                                            val outFile = java.io.File(cacheDir, "update.apk")
+                                            resp.body?.byteStream()?.use { input ->
+                                                java.io.FileOutputStream(outFile).use { out -> input.copyTo(out) }
+                                            }
+                                            withContext(Dispatchers.Main) {
+                                                installNormally(outFile) { msg -> lifecycleScope.launch { snackbarHostState.showSnackbar(msg) } }
+                                                isUpdatingApp = false
+                                                updateInfo = null
+                                            }
+                                        } else throw Exception("HTTP ${resp.code}")
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        isUpdatingApp = false
+                                        snackbarHostState.showSnackbar("Lỗi khi tải cập nhật: ${e.message}")
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isUpdatingApp
+                    ) { Text(if (isUpdatingApp) "Đang tải..." else "Cập nhật") }
+                },
+                dismissButton = {
+                    if (!isUpdatingApp) { TextButton(onClick = { updateInfo = null }) { Text(stringResource(R.string.cancel)) } }
                 }
             )
         }
@@ -1099,6 +1160,27 @@ private fun logBg(msg: String) = log(msg)
             return u2
         }
         return url
+    }
+
+    private suspend fun checkAppUpdate(): AppUpdateInfo? = withContext(Dispatchers.IO) {
+        try {
+            val req = Request.Builder().url(UPDATE_URL).header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0").build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    resp.body?.charStream()?.use { reader ->
+                        val info = gson.fromJson(reader, AppUpdateInfo::class.java)
+                        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                        val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            packageInfo.longVersionCode
+                        } else {
+                            packageInfo.versionCode.toLong()
+                        }
+                        if (info.versionCode > currentVersionCode) return@withContext info
+                    }
+                }
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+        null
     }
 
     private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
