@@ -476,9 +476,9 @@ class MainActivity : ComponentActivity() {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    uriHandler.openUri("https://github.com/RenjiYuusei/Kasumi-Store")
+                    uriHandler.openUri("https://discord.gg/CuNhcJpWC7")
                 }) {
-                    Text(stringResource(R.string.about_github), color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.about_discord), color = MaterialTheme.colorScheme.primary)
                 }
             },
             dismissButton = {

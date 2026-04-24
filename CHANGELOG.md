@@ -2,7 +2,7 @@
 
 ## [1.6.0] - 2026-04-24
 ### ✨ Cải tiến giao diện
-- **Hộp thoại Giới thiệu**: Thêm nút "Giới thiệu" trên thanh trên cùng, hiển thị tên ứng dụng, phiên bản hiện tại và liên kết mở trang GitHub.
+- **Hộp thoại Giới thiệu**: Thêm nút "Giới thiệu" trên thanh trên cùng, hiển thị tên ứng dụng, phiên bản hiện tại và nút mở server Discord cộng đồng.
 - **Xác nhận xóa cache**: Thêm hộp thoại xác nhận trước khi xóa cache kèm thống kê số tệp và dung lượng sẽ bị xóa, tránh thao tác nhầm.
 - **Chuẩn hóa chuỗi văn bản**: Chuyển các chuỗi UI còn hard-code (ví dụ nút "Đóng") sang resource `strings.xml` để dễ dịch và đồng nhất.
 
