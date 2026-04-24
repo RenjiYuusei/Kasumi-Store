@@ -612,9 +612,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Stats
+        // Stats (filtered view – shown in the toolbar above the list)
         val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
         val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
+
+        // Full cache stats – used by the clear-cache dialog because `clearCache()`
+        // wipes every cached APK on disk, not just the currently filtered subset.
+        val totalCachedCount = appsList.count { fileStats[it.id]?.exists == true }
+        val totalCachedSize = appsList.sumOf { fileStats[it.id]?.size ?: 0L }
 
         var pullRefreshing by remember { mutableStateOf(false) }
 
@@ -715,7 +720,7 @@ class MainActivity : ComponentActivity() {
                 },
                 text = {
                     Text(
-                        stringResource(R.string.clear_cache_confirm_message, cachedCount, formatFileSize(totalSize)),
+                        stringResource(R.string.clear_cache_confirm_message, totalCachedCount, formatFileSize(totalCachedSize)),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
