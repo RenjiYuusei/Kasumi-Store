@@ -662,7 +662,7 @@ class MainActivity : ComponentActivity() {
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (cachedCount > 0) {
+                        if (totalCachedCount > 0) {
                             TextButton(
                                 onClick = { showClearCacheConfirm = true },
                                 colors = ButtonDefaults.textButtonColors(
@@ -1342,9 +1342,9 @@ class MainActivity : ComponentActivity() {
             }
             try {
                 startActivity(intent)
-                onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
+                onShowSnackbar(getString(R.string.grant_unknown_sources_hint))
             } catch (e: Exception) {
-                onShowSnackbar("Không mở được cài đặt quyền: ${e.message}")
+                onShowSnackbar(getString(R.string.open_unknown_sources_failed, e.message))
             }
             return
         }
@@ -1357,7 +1357,7 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(intent)
         } catch (e: Exception) {
-            onShowSnackbar("Không mở được installer: ${e.message}")
+            onShowSnackbar(getString(R.string.open_installer_failed, e.message))
         }
     }
 

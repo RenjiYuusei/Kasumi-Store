@@ -44,4 +44,7 @@
     <string name="close">Đóng</string>
     <string name="clear_cache_confirm_title">Xóa cache?</string>
     <string name="clear_cache_confirm_message">Bạn có chắc muốn xóa %1$d tệp cache đã tải (%2$s)? Hành động này không thể hoàn tác.</string>
+    <string name="grant_unknown_sources_hint">Hãy cấp quyền, sau đó thử lại</string>
+    <string name="open_unknown_sources_failed">Không mở được cài đặt quyền: %s</string>
+    <string name="open_installer_failed">Không mở được installer: %s</string>
 </resources>
