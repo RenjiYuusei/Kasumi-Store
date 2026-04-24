@@ -37,4 +37,11 @@
     <string name="copied_script">Đã sao chép script</string>
     <string name="deleted_script">Đã xóa script</string>
     <string name="error_prefix">Lỗi: %s</string>
+    <string name="about">Giới thiệu</string>
+    <string name="about_version">Phiên bản %s</string>
+    <string name="about_description">Kasumi Store — Trình quản lý APK và Script cho Delta/Roblox, giao diện Material 3.</string>
+    <string name="about_github">GitHub</string>
+    <string name="close">Đóng</string>
+    <string name="clear_cache_confirm_title">Xóa cache?</string>
+    <string name="clear_cache_confirm_message">Bạn có chắc muốn xóa %1$d tệp cache đã tải (%2$s)? Hành động này không thể hoàn tác.</string>
 </resources>

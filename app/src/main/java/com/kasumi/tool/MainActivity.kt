@@ -1,10 +1,10 @@
 package com.kasumi.tool
 
-import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -26,12 +26,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,7 +41,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
@@ -61,12 +59,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.core.util.AtomicFile
 import androidx.lifecycle.lifecycleScope
@@ -74,11 +71,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
-import com.google.gson.TypeAdapter
-import com.google.gson.reflect.TypeToken
-import com.google.gson.stream.JsonWriter
 import com.kasumi.tool.ui.theme.KasumiTheme
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -86,19 +79,11 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.FileReader
-import java.io.FileWriter
-import java.io.InputStream
-import java.io.Reader
-import java.io.Writer
-import java.security.MessageDigest
 import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -118,12 +103,7 @@ class MainActivity : ComponentActivity() {
 
     private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.MINUTES)
-            .build()
+        (application as KasumiApplication).okHttpClient
     }
     private val gson = Gson()
 
@@ -175,16 +155,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Initializes the activity: configures edge-to-edge UI, registers the install broadcast receiver,
-     * starts background loading of app/script data, requests storage permission, and sets the Compose UI.
-     *
-     * Performs setup required before the UI is shown, including registering the install commit receiver
-     * (with exported flag on Android 33+), launching a lifecycle-scoped coroutine to load persisted items,
-     * preloaded apps, and scripts, and applying the app theme and main composable.
-     *
-     * @param savedInstanceState If non-null, contains the activity's previously saved state.
-     */
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -199,7 +169,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             loadItems()
             setBusy(true)
-            refreshPreloadedApps(initial = true)
+            refreshPreloadedApps()
             loadScriptsFromOnline()
             loadScriptsFromLocal()
             setBusy(false)
@@ -225,6 +195,7 @@ class MainActivity : ComponentActivity() {
         var selectedTab by remember { mutableIntStateOf(0) }
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
+        var showAboutDialog by remember { mutableStateOf(false) }
         var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
@@ -321,8 +292,11 @@ class MainActivity : ComponentActivity() {
                     actions = {
                         if (selectedTab == 0) {
                             IconButton(onClick = { showSortDialog = true }) {
-                                Icon(Icons.Default.FilterList, contentDescription = "Sort")
+                                Icon(Icons.Default.FilterList, contentDescription = stringResource(R.string.sort))
                             }
+                        }
+                        IconButton(onClick = { showAboutDialog = true }) {
+                            Icon(Icons.Default.Info, contentDescription = stringResource(R.string.about))
                         }
                     }
                 )
@@ -432,7 +406,87 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+
+            if (showAboutDialog) {
+                AboutDialog(onDismiss = { showAboutDialog = false })
+            }
         }
+    }
+
+    @Composable
+    fun AboutDialog(onDismiss: () -> Unit) {
+        val context = LocalContext.current
+        val uriHandler = LocalUriHandler.current
+        val versionName = remember {
+            try {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+            } catch (_: PackageManager.NameNotFoundException) {
+                ""
+            }
+        }
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp),
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Apps,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            },
+            title = {
+                Text(
+                    stringResource(R.string.app_name),
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.about_version, versionName),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        stringResource(R.string.about_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    uriHandler.openUri("https://github.com/RenjiYuusei/Kasumi-Store")
+                }) {
+                    Text(stringResource(R.string.about_github), color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
     }
 
     @Composable
@@ -538,7 +592,7 @@ class MainActivity : ComponentActivity() {
             },
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("Đóng", color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.primary)
                 }
             }
         )
@@ -546,7 +600,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
         val scope = rememberCoroutineScope()
-        var isRefreshing by remember { mutableStateOf(false) }
+        var showClearCacheConfirm by remember { mutableStateOf(false) }
         val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
             snapshotFlow {
                 Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
@@ -605,7 +659,7 @@ class MainActivity : ComponentActivity() {
                         )
                         if (cachedCount > 0) {
                             TextButton(
-                                onClick = { clearCache(onShowSnackbar) },
+                                onClick = { showClearCacheConfirm = true },
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error
                                 )
@@ -639,6 +693,52 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
+        if (showClearCacheConfirm) {
+            AlertDialog(
+                onDismissRequest = { showClearCacheConfirm = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(24.dp),
+                icon = {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                title = {
+                    Text(
+                        stringResource(R.string.clear_cache_confirm_title),
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        stringResource(R.string.clear_cache_confirm_message, cachedCount, formatFileSize(totalSize)),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showClearCacheConfirm = false
+                            clearCache(onShowSnackbar)
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(stringResource(R.string.clear_cache))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearCacheConfirm = false }) {
+                        Text(
+                            stringResource(R.string.cancel),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
         }
     }
 
@@ -801,7 +901,6 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
         val scope = rememberCoroutineScope()
-        var isRefreshing by remember { mutableStateOf(false) }
         val filteredScripts = remember(scriptsList, searchQuery) {
             val q = searchQuery.trim()
              if (q.isEmpty()) {
@@ -1008,24 +1107,6 @@ class MainActivity : ComponentActivity() {
         isLoading = busy
     }
 
-    private fun log(msg: String) {
-        Log.d("Kasumi", msg)
-    }
-
-    /**
- * Logs a message intended for background or non-UI contexts.
- *
- * @param msg The message to log.
- */
-private fun logBg(msg: String) = log(msg)
-
-    /**
-     * Loads persisted APK items from shared preferences and updates `appsList`.
-     *
-     * Reads JSON stored under the SharedPreferences file "apk_items" with key "list", parses it into `ApkItem`
-     * objects, and replaces `appsList` with a mutable list of the parsed items. If no stored list exists or
-     * parsing yields no items, `appsList` is set to an empty list.
-     */
     private suspend fun loadItems() {
         val loaded = withContext(Dispatchers.IO) {
             val file = File(filesDir, "items.json")
@@ -1116,7 +1197,7 @@ private fun logBg(msg: String) = log(msg)
         }
     }
 
-    private suspend fun refreshPreloadedApps(initial: Boolean = false) {
+    private suspend fun refreshPreloadedApps() {
         val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
         if (preloaded != null) {
             val newItems = preloaded.map { p ->
@@ -1249,17 +1330,18 @@ private fun logBg(msg: String) = log(msg)
     }
 
     private fun installNormally(file: File, onShowSnackbar: (String) -> Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!packageManager.canRequestPackageInstalls()) {
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:$packageName")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                try {
-                    startActivity(intent)
-                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
-                } catch (e: Exception) { }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:$packageName")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            try {
+                startActivity(intent)
+                onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
+            } catch (e: Exception) {
+                onShowSnackbar("Không mở được cài đặt quyền: ${e.message}")
+            }
+            return
         }
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -1418,7 +1500,7 @@ private suspend fun loadScriptsFromLocal() {
 
                 val dir = File(getDeltaDir(), targetFolder)
                 // Save with .txt extension as requested
-                val fileName = if (script.name.lowercase().endsWith(".txt")) script.name else "${script.name}.txt"
+                val fileName = if (script.name.endsWith(".txt", ignoreCase = true)) script.name else "${script.name}.txt"
                 ScriptUtils.saveScriptToFile(dir, fileName, content)
                 onShowSnackbar(getString(R.string.saved_to, targetFolder))
                 loadScriptsFromLocal() // Refresh
@@ -1442,12 +1524,12 @@ private suspend fun loadScriptsFromLocal() {
          lifecycleScope.launch {
             try {
                 val content = withContext(Dispatchers.IO) {
-                    if (script.localPath != null) {
-                        File(script.localPath).readText()
-                    } else if (script.url != null) {
-                        if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
-                        else "loadstring(game:HttpGet(\"${script.url}\"))()"
-                    } else ""
+                    when {
+                        script.localPath != null -> File(script.localPath).readText()
+                        script.url != null -> if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
+                            else "loadstring(game:HttpGet(\"${script.url}\"))()"
+                        else -> ""
+                    }
                 }
 
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

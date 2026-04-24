@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.0] - 2026-04-24
+### ✨ Cải tiến giao diện
+- **Hộp thoại Giới thiệu**: Thêm nút "Giới thiệu" trên thanh trên cùng, hiển thị tên ứng dụng, phiên bản hiện tại và liên kết mở trang GitHub.
+- **Xác nhận xóa cache**: Thêm hộp thoại xác nhận trước khi xóa cache kèm thống kê số tệp và dung lượng sẽ bị xóa, tránh thao tác nhầm.
+- **Chuẩn hóa chuỗi văn bản**: Chuyển các chuỗi UI còn hard-code (ví dụ nút "Đóng") sang resource `strings.xml` để dễ dịch và đồng nhất.
+
+### 🐛 Sửa lỗi
+- **Cài đặt APK khi thiếu quyền**: Khắc phục lỗi `installNormally` vẫn tiếp tục mở installer dù quyền "Cài đặt ứng dụng không rõ nguồn gốc" chưa được cấp, dẫn đến thông báo lỗi khó hiểu. Giờ đây ứng dụng sẽ dừng lại và hướng dẫn người dùng cấp quyền.
+- **Kiểm tra đuôi `.txt`**: Dùng `endsWith(".txt", ignoreCase = true)` thay vì `lowercase().endsWith(...)` khi lưu script, loại bỏ cấp phát chuỗi thừa và tránh các lỗi locale (Turkish `i`).
+
+### ⚡ Tối ưu mã nguồn
+- **Chia sẻ `OkHttpClient` duy nhất**: `MainActivity` không còn tạo `OkHttpClient` riêng mà tái sử dụng instance trong `KasumiApplication`, tiết kiệm bộ nhớ và tái dùng connection pool cho cả tải ảnh và gọi API.
+- **Gỡ mã chết trong MainActivity**: Loại bỏ các hàm `log`/`logBg`, biến `isRefreshing` không được đọc, tham số `initial` không sử dụng trong `refreshPreloadedApps`, và dọn ~20 import không cần thiết.
+- **Tối ưu `filterAndSortApps`**: Loại bỏ `.lowercase()` thừa trên từ khóa tìm kiếm (hàm đã dùng `contains(ignoreCase = true)`), giảm cấp phát chuỗi mỗi lần gõ phím.
+
+### 🧹 Dọn dead code
+- **Xóa layout XML View cũ**: Bỏ hoàn toàn `item_apk.xml`, `item_installed_app.xml`, `item_script.xml` — các layout View-based không còn được dùng sau khi chuyển sang Jetpack Compose.
+- **Xóa drawable không dùng**: Loại bỏ `ic_sort`, `ic_log`, `ic_download`, `ic_apps`, `ic_installed`, `ic_copy`, `app_icon_bg`, `game_tag_bg`, `card_gradient_bg` và color `tab_icon_tint` — không còn layout nào tham chiếu.
+- **Dọn màu thừa**: Loại bỏ các màu `card_bg`, `card_bg_start`, `card_bg_end`, `elevated_surface`, `success_green`, `warning_orange`, `info_blue`, `delete_red` khỏi `colors.xml` vì không còn được dùng.
+- **Dọn ProGuard rules**: Gỡ bỏ các quy tắc dành cho Glide đã loại bỏ từ phiên bản 1.5.4.
+- **Dọn dependency**: Loại bỏ `androidx.recyclerview:recyclerview` khỏi `app/build.gradle` — không còn RecyclerView nào trong dự án.
+
 ## [1.5.5] - 2026-04-03
 ### 🐛 Sửa lỗi
 - **Làm mới Script**: Khắc phục lỗi vuốt để làm mới (pull-to-refresh) ở tab Scripts không cập nhật danh sách script. Đã sửa để hệ thống tự động tải lại cả script từ server và script cục bộ thay vì tải lại danh sách ứng dụng.

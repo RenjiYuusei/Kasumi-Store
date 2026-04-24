@@ -10,7 +10,7 @@ fun filterAndSortApps(
     sortMode: SortMode,
     fileStats: Map<String, FileStats>
 ): List<ApkItem> {
-    val q = searchQuery.trim().lowercase()
+    val q = searchQuery.trim()
     val filtered = if (q.isEmpty()) {
         appsList
     } else {
@@ -23,11 +23,7 @@ fun filterAndSortApps(
     return when (sortMode) {
         SortMode.NAME_ASC -> filtered.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
         SortMode.NAME_DESC -> filtered.sortedWith(compareBy<ApkItem, String>(String.CASE_INSENSITIVE_ORDER) { it.name }.reversed())
-        SortMode.SIZE_DESC -> filtered.sortedByDescending {
-             fileStats[it.id]?.size ?: 0L
-        }
-        SortMode.DATE_DESC -> filtered.sortedByDescending {
-             fileStats[it.id]?.lastModified ?: 0L
-        }
+        SortMode.SIZE_DESC -> filtered.sortedByDescending { fileStats[it.id]?.size ?: 0L }
+        SortMode.DATE_DESC -> filtered.sortedByDescending { fileStats[it.id]?.lastModified ?: 0L }
     }
 }
