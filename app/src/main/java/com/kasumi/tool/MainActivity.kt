@@ -419,7 +419,16 @@ class MainActivity : ComponentActivity() {
         val uriHandler = LocalUriHandler.current
         val versionName = remember {
             try {
-                context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: ""
+                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    context.packageManager.getPackageInfo(
+                        context.packageName,
+                        PackageManager.PackageInfoFlags.of(0L)
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                }
+                info.versionName ?: ""
             } catch (_: PackageManager.NameNotFoundException) {
                 ""
             }
