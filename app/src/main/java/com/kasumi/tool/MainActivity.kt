@@ -1664,7 +1664,7 @@ private suspend fun loadScriptsFromLocal() {
         } catch (e: Exception) { e.printStackTrace() }
     }
 
-    private fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
+    private suspend fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
          try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!packageManager.canRequestPackageInstalls()) {
@@ -1682,11 +1682,13 @@ private suspend fun loadScriptsFromLocal() {
             val sessionId = installer.createSession(params)
             val session = installer.openSession(sessionId)
             try {
-                for (f in files) {
-                    FileInputStream(f).use { input ->
-                        session.openWrite(f.name, 0, f.length()).use { out ->
-                            input.copyTo(out)
-                            session.fsync(out)
+                withContext(Dispatchers.IO) {
+                    for (f in files) {
+                        FileInputStream(f).use { input ->
+                            session.openWrite(f.name, 0, f.length()).use { out ->
+                                input.copyTo(out)
+                                session.fsync(out)
+                            }
                         }
                     }
                 }
