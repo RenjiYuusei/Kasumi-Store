@@ -1634,7 +1634,6 @@ private suspend fun loadScriptsFromLocal() {
             }
         } catch (e: Exception) { e.printStackTrace() }
         
-        class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
         val sortedApks = results.map {
             val name = it.name
             val c1 = !name.startsWith("base.") && !name.contains("com.")
@@ -1725,3 +1724,5 @@ private suspend fun loadScriptsFromLocal() {
         }
     }
 }
+
+data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
