@@ -82,11 +82,13 @@ import java.io.FileReader
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -1649,7 +1651,7 @@ private suspend fun loadScriptsFromLocal() {
             val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
             if (!obbDir.exists()) obbDir.mkdirs()
 
-            val semaphore = kotlinx.coroutines.sync.Semaphore(2)
+            val semaphore = Semaphore(2)
             obbInfo.obbFiles.map { obbFile ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
@@ -1669,7 +1671,7 @@ private suspend fun loadScriptsFromLocal() {
                 }
             }.awaitAll()
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
+            if (e is CancellationException) throw e
             e.printStackTrace()
         }
     }
