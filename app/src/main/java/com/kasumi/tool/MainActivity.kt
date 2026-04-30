@@ -1640,27 +1640,30 @@ private suspend fun loadScriptsFromLocal() {
         return sortedApks to obbInfo
     }
     
-    private fun installObbFiles(obbInfo: ObbInfo) {
+    private suspend fun installObbFiles(obbInfo: ObbInfo) = coroutineScope {
          try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (!Environment.isExternalStorageManager()) return
+                if (!Environment.isExternalStorageManager()) return@coroutineScope
             }
             val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
             if (!obbDir.exists()) obbDir.mkdirs()
-            for (obbFile in obbInfo.obbFiles) {
-                val destFile = File(obbDir, obbFile.name)
-                FileInputStream(obbFile).use { fis ->
-                    FileOutputStream(destFile).use { fos ->
-                        val src = fis.channel
-                        val dest = fos.channel
-                        var position = 0L
-                        val size = src.size()
-                        while (position < size) {
-                            position += src.transferTo(position, size - position, dest)
+
+            obbInfo.obbFiles.map { obbFile ->
+                async(Dispatchers.IO) {
+                    val destFile = File(obbDir, obbFile.name)
+                    FileInputStream(obbFile).use { fis ->
+                        FileOutputStream(destFile).use { fos ->
+                            val src = fis.channel
+                            val dest = fos.channel
+                            var position = 0L
+                            val size = src.size()
+                            while (position < size) {
+                                position += src.transferTo(position, size - position, dest)
+                            }
                         }
                     }
                 }
-            }
+            }.awaitAll()
         } catch (e: Exception) { e.printStackTrace() }
     }
 
