@@ -87,6 +87,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -1268,7 +1269,7 @@ class MainActivity : ComponentActivity() {
                         return@launch
                     }
                     if (obbInfo != null) {
-                        withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
+                        installObbFiles(obbInfo)
                     }
                     
                     val rooted = RootInstaller.isDeviceRooted()
@@ -1648,23 +1649,29 @@ private suspend fun loadScriptsFromLocal() {
             val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
             if (!obbDir.exists()) obbDir.mkdirs()
 
+            val semaphore = kotlinx.coroutines.sync.Semaphore(2)
             obbInfo.obbFiles.map { obbFile ->
                 async(Dispatchers.IO) {
-                    val destFile = File(obbDir, obbFile.name)
-                    FileInputStream(obbFile).use { fis ->
-                        FileOutputStream(destFile).use { fos ->
-                            val src = fis.channel
-                            val dest = fos.channel
-                            var position = 0L
-                            val size = src.size()
-                            while (position < size) {
-                                position += src.transferTo(position, size - position, dest)
+                    semaphore.withPermit {
+                        val destFile = File(obbDir, obbFile.name)
+                        FileInputStream(obbFile).use { fis ->
+                            FileOutputStream(destFile).use { fos ->
+                                val src = fis.channel
+                                val dest = fos.channel
+                                var position = 0L
+                                val size = src.size()
+                                while (position < size) {
+                                    position += src.transferTo(position, size - position, dest)
+                                }
                             }
                         }
                     }
                 }
             }.awaitAll()
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            e.printStackTrace()
+        }
     }
 
     private suspend fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
