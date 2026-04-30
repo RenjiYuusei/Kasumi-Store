@@ -21,6 +21,18 @@ object RootInstaller {
     private val SESSION_ID_REGEX_1 = Regex("\\[(\\d+)\\]")
     private val SESSION_ID_REGEX_2 = Regex("session\\s+(\\d+)", RegexOption.IGNORE_CASE)
 
+    /** Parse a `pm install-create` session id from its output. */
+    private fun extractSessionId(output: String): String? =
+        SESSION_ID_REGEX_1.find(output)?.groupValues?.get(1)
+            ?: SESSION_ID_REGEX_2.find(output)?.groupValues?.get(1)
+
+    /** Run a single `su -c <cmd>` and capture combined stdout/stderr + exit code. */
+    private fun runSu(cmd: String): Pair<Int, String> {
+        val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
+        val out = p.inputStream.bufferedReader().readText()
+        return p.waitFor() to out
+    }
+
     private val rootedCache: Boolean by lazy {
         try {
             // Kiểm tra su thực sự hoạt động thay vì chỉ kiểm tra sự tồn tại của binary
@@ -50,15 +62,8 @@ object RootInstaller {
             val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
-            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
-                p.outputStream.use { out ->
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } >= 0) {
-                        out.write(buffer, 0, bytesRead)
-                    }
-                    out.flush()
-                }
+                p.outputStream.use { out -> input.copyTo(out, 65536) }
             }
             p.waitFor()
 
@@ -70,12 +75,10 @@ object RootInstaller {
                 shell.exec("rm -f $tmpPath")
                 return false to outCreate
             }
-            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
-                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
-                ?: run {
-                    shell.exec("rm -f $tmpPath")
-                    return false to outCreate
-                }
+            val sessionId = extractSessionId(outCreate) ?: run {
+                shell.exec("rm -f $tmpPath")
+                return false to outCreate
+            }
 
             val (exitWrite, outWrite) = shell.exec("pm install-write $sessionId $safeName $tmpPath")
             if (exitWrite != 0) {
@@ -207,8 +210,7 @@ object RootInstaller {
                 shell.exec("rm -rf $tmpDir")
                 return false to outCreate
             }
-            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
-                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
+            val sessionId = extractSessionId(outCreate)
             if (sessionId.isNullOrBlank()) {
                 shell.exec("rm -rf $tmpDir")
                 return false to outCreate
@@ -237,45 +239,27 @@ object RootInstaller {
 
     private fun installApksByStream(files: List<File>): Pair<Boolean, String> {
         return try {
-            var p = ProcessBuilder("su", "-c", "pm install-create -r")
-                .redirectErrorStream(true)
-                .start()
-            val outCreate = p.inputStream.bufferedReader().readText()
-            val exitCreate = p.waitFor()
+            val (exitCreate, outCreate) = runSu("pm install-create -r")
             if (exitCreate != 0) return false to outCreate
-            val sessionId = SESSION_ID_REGEX_1.find(outCreate)?.groupValues?.get(1)
-                ?: SESSION_ID_REGEX_2.find(outCreate)?.groupValues?.get(1)
+            val sessionId = extractSessionId(outCreate)
             if (sessionId.isNullOrBlank()) return false to outCreate
 
             // Giả định quan trọng: pm install-write -S <size> đọc chính xác <size> byte
             // từ stdin mà không buffer lố sang dữ liệu của file tiếp theo. Hành vi này
             // ổn định trên AOSP nhưng có thể lỗi trên một số ROM tùy chỉnh cũ.
-            val cmdBuilder = StringBuilder()
-            for (i in files.indices) {
-                if (i > 0) cmdBuilder.append(" && ")
-                val f = files[i]
-                val size = f.length()
-                val safeName = sanitizeFilename(f.name)
-                cmdBuilder.append("pm install-write -S $size $sessionId $safeName -")
+            val writeCmd = files.joinToString(" && ") { f ->
+                "pm install-write -S ${f.length()} $sessionId ${sanitizeFilename(f.name)} -"
             }
-
-            p = ProcessBuilder("su", "-c", cmdBuilder.toString())
+            val p = ProcessBuilder("su", "-c", writeCmd)
                 .redirectErrorStream(true)
                 .start()
 
             var writeError: Exception? = null
             try {
-                val buffer = ByteArray(65536)
                 p.outputStream.use { out ->
                     for (f in files) {
-                        f.inputStream().use { input ->
-                            var bytesRead: Int
-                            while (input.read(buffer).also { bytesRead = it } >= 0) {
-                                out.write(buffer, 0, bytesRead)
-                            }
-                        }
+                        f.inputStream().use { input -> input.copyTo(out, 65536) }
                     }
-                    out.flush()
                 }
             } catch (e: Exception) {
                 // Có thể bị Broken pipe nếu pm install-write dừng sớm (vd lỗi apk).
@@ -288,11 +272,7 @@ object RootInstaller {
 
             if (exitW != 0) return false to outW
             if (writeError != null) return false to "write error: ${writeError.message}; pm: $outW"
-            p = ProcessBuilder("su", "-c", "pm install-commit $sessionId")
-                .redirectErrorStream(true)
-                .start()
-            val outCommit = p.inputStream.bufferedReader().readText()
-            val exitCommit = p.waitFor()
+            val (exitCommit, outCommit) = runSu("pm install-commit $sessionId")
             (exitCommit == 0) to outCommit
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
@@ -301,19 +281,11 @@ object RootInstaller {
 
     private fun streamInstall(file: File): Pair<Boolean, String> {
         return try {
-            val size = file.length()
-            val p = ProcessBuilder("su", "-c", "pm install -r -S $size")
+            val p = ProcessBuilder("su", "-c", "pm install -r -S ${file.length()}")
                 .redirectErrorStream(true)
                 .start()
-            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
-                p.outputStream.use { out ->
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } >= 0) {
-                        out.write(buffer, 0, bytesRead)
-                    }
-                    out.flush()
-                }
+                p.outputStream.use { out -> input.copyTo(out, 65536) }
             }
             val procExit = p.waitFor()
             val output = p.inputStream.bufferedReader().readText()
@@ -335,15 +307,8 @@ object RootInstaller {
             val p = ProcessBuilder("su", "-c", "cat > $tmpPath")
                 .redirectErrorStream(true)
                 .start()
-            val buffer = ByteArray(65536)
             file.inputStream().use { input ->
-                p.outputStream.use { out ->
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } >= 0) {
-                        out.write(buffer, 0, bytesRead)
-                    }
-                    out.flush()
-                }
+                p.outputStream.use { out -> input.copyTo(out, 65536) }
             }
             p.waitFor()
 

@@ -121,6 +121,10 @@ class MainActivity : ComponentActivity() {
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
     private var statsVersion by mutableIntStateOf(0)
+    // Resolved package name for each ApkItem.id (extracted from cached APK/XAPK)
+    private val packageNames = mutableStateMapOf<String, String>()
+    // Currently installed apps keyed by packageName
+    private val installedInfo = mutableStateMapOf<String, InstalledInfo>()
 
     private val installReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -190,6 +194,18 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(installReceiver)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-check installed state when returning from system installer/uninstaller dialogs.
+        if (appsList.isNotEmpty()) {
+            lifecycleScope.launch {
+                InstalledPackagesHelper.refresh(
+                    this@MainActivity, appsList, cacheDir, packageNames, installedInfo,
+                )
+            }
+        }
+    }
+
     @Composable
     fun MainScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
@@ -205,6 +221,9 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(appsList) {
             FileStatsHelper.updateFileStats(appsList, fileStats, cacheDir)
             statsVersion++
+            InstalledPackagesHelper.refresh(
+                this@MainActivity, appsList, cacheDir, packageNames, installedInfo,
+            )
         }
 
         if (scriptToDownload != null) {
@@ -701,7 +720,15 @@ class MainActivity : ComponentActivity() {
                             enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
                                     slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
                         ) {
-                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) })
+                            val pkg = packageNames[item.id]
+                            val installed = pkg?.let { installedInfo[it] }
+                            AppItemRow(
+                                item,
+                                stats = fileStats[item.id],
+                                installed = installed,
+                                onInstall = { onInstallClicked(it, onShowSnackbar) },
+                                onUninstall = { onUninstallClicked(it, onShowSnackbar) },
+                            )
                         }
                     }
                 }
@@ -756,10 +783,17 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit) {
+    fun AppItemRow(
+        item: ApkItem,
+        stats: FileStats?,
+        installed: InstalledInfo?,
+        onInstall: (ApkItem) -> Unit,
+        onUninstall: (ApkItem) -> Unit,
+    ) {
         val context = LocalContext.current
         val isCached = stats?.exists == true
         val fileSize = stats?.size ?: 0L
+        val isInstalled = installed != null
         
         Card(
             modifier = Modifier
@@ -854,8 +888,26 @@ class MainActivity : ComponentActivity() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (isInstalled) {
+                        Text(
+                            text = stringResource(R.string.installed_version, installed?.versionName ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                 }
 
+                if (isInstalled) {
+                    IconButton(onClick = { onUninstall(item) }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.uninstall),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
                 IconButton(onClick = { onInstall(item) }) {
                     Icon(
                         Icons.Default.Download,
@@ -1183,19 +1235,6 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    private fun normalizeUrl(raw: String): String {
-        if (!raw.contains("dropbox.com")) return raw
-        var u = raw
-            .replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
-            .replace("://dropbox.com", "://dl.dropboxusercontent.com")
-        u = when {
-            u.contains("dl=0") -> u.replace("dl=0", "dl=1")
-            u.contains("dl=") -> u
-            else -> u + (if (u.contains("?")) "&dl=1" else "?dl=1")
-        }
-        return u
-    }
-
     private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
         try {
             val req = Request.Builder().url(url).header("User-Agent", "CloudPhoneTool/1.0").build()
@@ -1215,13 +1254,11 @@ class MainActivity : ComponentActivity() {
         val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
         if (preloaded != null) {
             val newItems = preloaded.map { p ->
-                val normalized = normalizeUrl(p.url)
-                val id = FileUtils.stableIdFromUrl(p.url)
                 ApkItem(
-                    id = id,
+                    id = FileUtils.stableIdFromUrl(p.url),
                     name = p.name,
                     sourceType = SourceType.URL,
-                    url = normalized,
+                    url = p.url,
                     uri = null,
                     versionName = p.versionName,
                     versionCode = p.versionCode,
@@ -1300,6 +1337,23 @@ class MainActivity : ComponentActivity() {
             } finally {
                 setBusy(false)
             }
+        }
+    }
+
+    private fun onUninstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
+        val pkg = packageNames[item.id]
+        if (pkg.isNullOrBlank()) {
+            onShowSnackbar(getString(R.string.uninstall_unknown_package))
+            return
+        }
+        try {
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:$pkg")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            onShowSnackbar(getString(R.string.uninstall_failed, e.message ?: ""))
         }
     }
 
@@ -1585,7 +1639,8 @@ class MainActivity : ComponentActivity() {
                         try {
                             val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
                             packageName = JSONObject(manifest).optString("package_name")
-                        } catch (e: Exception) {}
+                                .takeIf { it.isNotBlank() }
+                        } catch (_: Exception) {}
                         continue
                     }
                     if (entryName.endsWith(".apk")) {
@@ -1670,16 +1725,18 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
          try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:$packageName")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
-                    return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                try {
+                    startActivity(intent)
+                    onShowSnackbar(getString(R.string.grant_unknown_sources_hint))
+                } catch (e: Exception) {
+                    onShowSnackbar(getString(R.string.open_unknown_sources_failed, e.message ?: ""))
+                }
+                return
             }
             val installer = packageManager.packageInstaller
             val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
@@ -1705,12 +1762,12 @@ class MainActivity : ComponentActivity() {
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
                 )
                 session.commit(pi.intentSender)
-                onShowSnackbar("Đang tiến hành cài đặt…")
+                onShowSnackbar(getString(R.string.installing_in_progress))
             } finally {
                 session.close()
             }
         } catch (e: Exception) {
-            onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
+            onShowSnackbar(getString(R.string.install_splits_failed, e.message ?: ""))
         }
     }
 }

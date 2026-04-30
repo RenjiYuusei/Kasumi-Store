@@ -47,4 +47,9 @@
     <string name="grant_unknown_sources_hint">Hãy cấp quyền, sau đó thử lại</string>
     <string name="open_unknown_sources_failed">Không mở được cài đặt quyền: %s</string>
     <string name="open_installer_failed">Không mở được installer: %s</string>
+    <string name="installed_version">Đã cài v%s</string>
+    <string name="uninstall_unknown_package">Không xác định được package, hãy tải lại APK trước</string>
+    <string name="uninstall_failed">Không gỡ cài đặt được: %s</string>
+    <string name="installing_in_progress">Đang tiến hành cài đặt…</string>
+    <string name="install_splits_failed">Lỗi cài đặt splits: %s</string>
 </resources>
