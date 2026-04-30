@@ -1725,4 +1725,4 @@ private suspend fun loadScriptsFromLocal() {
     }
 }
 
-internal data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
+private data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
