@@ -147,109 +147,6 @@ object RootInstaller {
         }
     }
 
-    // Thông tin môi trường root để ghi log hỗ trợ chẩn đoán
-    data class RootEnv(
-        val rooted: Boolean,
-        val uid0: Boolean,
-        val provider: String,          // Magisk | KernelSU | SuperSU | Unknown | None
-        val suPath: String?,
-        val suVersion: String?,        // su -v / --version / -V
-        val magiskVersionName: String?,
-        val magiskVersionCode: String?,
-        val kernelSuVersion: String?   // từ su -v hoặc getprop
-    )
-
-    fun probeRootEnv(): RootEnv {
-        fun runAndRead(vararg cmd: String): Pair<Int, String> = try {
-            val p = ProcessBuilder(*cmd).redirectErrorStream(true).start()
-            val out = p.inputStream.bufferedReader().readText().trim()
-            val procExit = p.waitFor()
-            procExit to out
-        } catch (e: Exception) { -1 to (e.message ?: "") }
-
-        fun runSuAndRead(cmd: String): Pair<Int, String> = try {
-            val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
-            val out = p.inputStream.bufferedReader().readText().trim()
-            val procExit = p.waitFor()
-            procExit to out
-        } catch (e: Exception) { -1 to (e.message ?: "") }
-
-        // su path
-        val (whichExit, whichOut) = runAndRead("which", "su")
-        val suPath = if (whichExit == 0) whichOut.lineSequence().firstOrNull()?.trim()?.takeUnless { it.isNullOrBlank() } else null
-
-        // uid0 check via su -c id
-        val (idExit, idOut) = runSuAndRead("id")
-        val uid0 = (idExit == 0 && idOut.contains("uid=0"))
-
-        // su version (try several flags)
-        var suVersion: String? = null
-        for (args in listOf(arrayOf("su", "-v"), arrayOf("su", "--version"), arrayOf("su", "-V"))) {
-            val (e, o) = runAndRead(*args)
-            if (e == 0 && o.isNotBlank()) { suVersion = o.lines().first().trim(); break }
-        }
-
-        // Detect Magisk
-        var magiskVName: String? = null
-        var magiskVCode: String? = null
-        run {
-            val (e1, o1) = runSuAndRead("magisk -v")
-            if (e1 == 0 && o1.isNotBlank()) magiskVName = o1.lines().first().trim()
-            val (e2, o2) = runSuAndRead("magisk -V")
-            if (e2 == 0 && o2.isNotBlank()) magiskVCode = o2.lines().first().trim()
-            if (magiskVName == null) {
-                val (eg1, og1) = runSuAndRead("getprop ro.magisk.version")
-                if (eg1 == 0 && og1.isNotBlank()) magiskVName = og1.lines().first().trim()
-            }
-            if (magiskVCode == null) {
-                val (eg2, og2) = runSuAndRead("getprop ro.magisk.version.code")
-                if (eg2 == 0 && og2.isNotBlank()) magiskVCode = og2.lines().first().trim()
-            }
-            // Sanitize error-like outputs (tránh hiển thị 'sh: magisk: not found' như version)
-            fun clean(s: String?): String? {
-                if (s == null) return null
-                val t = s.trim()
-                val tl = t.lowercase()
-                return if (tl.startsWith("sh:") || tl.contains("not found") || tl.contains("inaccessible")) null else t
-            }
-            magiskVName = clean(magiskVName)
-            magiskVCode = clean(magiskVCode)
-        }
-
-        // Detect KernelSU heuristics
-        var kernelSu: String? = null
-        if (suVersion?.contains("KernelSU", ignoreCase = true) == true) {
-            kernelSu = suVersion
-        } else {
-            val (ek1, ok1) = runSuAndRead("getprop ksu.version")
-            if (ek1 == 0 && ok1.isNotBlank()) kernelSu = ok1.lines().first().trim()
-            if (kernelSu == null) {
-                val (ek2, ok2) = runSuAndRead("getprop ro.kernel.su")
-                if (ek2 == 0 && ok2.isNotBlank()) kernelSu = ok2.lines().first().trim()
-            }
-        }
-
-        val rooted = uid0
-        val provider = when {
-            rooted && (magiskVName != null || magiskVCode != null) -> "Magisk"
-            rooted && kernelSu != null -> "KernelSU"
-            rooted && (suVersion?.contains("super", ignoreCase = true) == true) -> "SuperSU"
-            rooted -> "Unknown"
-            else -> "None"
-        }
-
-        return RootEnv(
-            rooted = rooted,
-            uid0 = uid0,
-            provider = provider,
-            suPath = suPath,
-            suVersion = suVersion,
-            magiskVersionName = magiskVName,
-            magiskVersionCode = magiskVCode,
-            kernelSuVersion = kernelSu
-        )
-    }
-
     fun installApk(file: File): Pair<Boolean, String> {
         // 1) Ưu tiên: copy sang /data/local/tmp và cài từ đường dẫn để tránh EPIPE
         val copy = copyToTmpAndInstall(file)
@@ -397,26 +294,6 @@ object RootInstaller {
             val outCommit = p.inputStream.bufferedReader().readText()
             val exitCommit = p.waitFor()
             (exitCommit == 0) to outCommit
-        } catch (e: Exception) {
-            false to (e.message ?: "unknown error")
-        }
-    }
-
-    fun uninstall(packageName: String): Pair<Boolean, String> {
-        return try {
-            var p = ProcessBuilder("su", "-c", "pm uninstall $packageName")
-                .redirectErrorStream(true)
-                .start()
-            val out1 = p.inputStream.bufferedReader().readText()
-            val exit1 = p.waitFor()
-            if (exit1 == 0) return true to out1
-            // fallback --user 0
-            p = ProcessBuilder("su", "-c", "pm uninstall --user 0 $packageName")
-                .redirectErrorStream(true)
-                .start()
-            val out2 = p.inputStream.bufferedReader().readText()
-            val exit2 = p.waitFor()
-            (exit2 == 0) to out2
         } catch (e: Exception) {
             false to (e.message ?: "unknown error")
         }

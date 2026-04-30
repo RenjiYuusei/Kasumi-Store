@@ -100,10 +100,6 @@ data class ApkItem(
             })
             .create()
 
-        fun toJsonList(list: List<ApkItem>): String {
-            return gson.toJson(list)
-        }
-
         fun fromJsonList(json: String?): List<ApkItem> {
             if (json.isNullOrBlank()) return emptyList()
             return try {

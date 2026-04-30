@@ -48,7 +48,6 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -158,7 +157,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -192,7 +190,6 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(installReceiver)
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainScreen() {
         var selectedTab by remember { mutableIntStateOf(0) }
@@ -635,7 +632,6 @@ class MainActivity : ComponentActivity() {
 
         var pullRefreshing by remember { mutableStateOf(false) }
 
-        @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
             isRefreshing = pullRefreshing,
             onRefresh = {
@@ -932,7 +928,6 @@ class MainActivity : ComponentActivity() {
 
         var pullRefreshing by remember { mutableStateOf(false) }
 
-        @OptIn(ExperimentalMaterial3Api::class)
         PullToRefreshBox(
             isRefreshing = pullRefreshing,
             onRefresh = {
@@ -1111,7 +1106,8 @@ class MainActivity : ComponentActivity() {
                     startActivity(intent)
                 }
             }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        } else {
+            // minSdk = 24, so Marshmallow runtime permissions are always required pre-R
             val permissions = arrayOf(
                 android.Manifest.permission.READ_EXTERNAL_STORAGE,
                 android.Manifest.permission.WRITE_EXTERNAL_STORAGE
@@ -1162,7 +1158,7 @@ class MainActivity : ComponentActivity() {
                 list
             }
         }
-        appsList = loaded.ifEmpty { emptyList() }.toMutableList()
+        appsList = loaded
     }
 
     private suspend fun saveItems() {
@@ -1188,15 +1184,16 @@ class MainActivity : ComponentActivity() {
 
 
     private fun normalizeUrl(raw: String): String {
-        var url = raw
-        if (url.contains("dropbox.com")) {
-            var u2 = url
-            u2 = u2.replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
-            u2 = u2.replace("://dropbox.com", "://dl.dropboxusercontent.com")
-            u2 = if (u2.contains("dl=0")) u2.replace("dl=0", "dl=1") else if (u2.contains("dl=")) u2 else u2 + (if (u2.contains("?")) "&dl=1" else "?dl=1")
-            return u2
+        if (!raw.contains("dropbox.com")) return raw
+        var u = raw
+            .replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
+            .replace("://dropbox.com", "://dl.dropboxusercontent.com")
+        u = when {
+            u.contains("dl=0") -> u.replace("dl=0", "dl=1")
+            u.contains("dl=") -> u
+            else -> u + (if (u.contains("?")) "&dl=1" else "?dl=1")
         }
-        return url
+        return u
     }
 
     private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
@@ -1274,10 +1271,8 @@ class MainActivity : ComponentActivity() {
                         installObbFiles(obbInfo)
                     }
                     
-                    val rooted = RootInstaller.isDeviceRooted()
-                     if (rooted) {
-                        val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
-                        val (ok, msg) = resSplit
+                    if (RootInstaller.isDeviceRooted()) {
+                        val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
                         if (ok) {
                             onShowSnackbar("Cài đặt thành công")
                         } else {
@@ -1289,10 +1284,8 @@ class MainActivity : ComponentActivity() {
                     return@launch
                 }
 
-                 val rooted = RootInstaller.isDeviceRooted()
-                if (rooted) {
-                    val resApk: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
-                    val (ok, msg) = resApk
+                if (RootInstaller.isDeviceRooted()) {
+                    val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
                     if (ok) {
                         onShowSnackbar("Cài đặt thành công")
                     } else {
@@ -1376,9 +1369,9 @@ class MainActivity : ComponentActivity() {
     private fun formatFileSize(bytes: Long): String {
         return when {
             bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-            else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            bytes < 1024 * 1024 -> String.format(Locale.ROOT, "%.1f KB", bytes / 1024.0)
+            bytes < 1024 * 1024 * 1024 -> String.format(Locale.ROOT, "%.1f MB", bytes / (1024.0 * 1024.0))
+            else -> String.format(Locale.ROOT, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         }
     }
 
@@ -1478,22 +1471,21 @@ class MainActivity : ComponentActivity() {
         return File(PATH_DELTA_LEGACY)
     }
 
-private suspend fun loadScriptsFromLocal() {
+    private suspend fun loadScriptsFromLocal() {
         val context = this@MainActivity
         withContext(Dispatchers.IO) {
+            val deltaDir = getDeltaDir()
             val newLocals = mutableListOf<ScriptItem>()
-            val autoExecuteDir = File(getDeltaDir(), "Autoexecute")
-            val scriptsDir = File(getDeltaDir(), "Scripts")
 
             val autoString = context.getString(R.string.local_auto)
-            autoExecuteDir.listFiles()?.forEach {
+            File(deltaDir, "Autoexecute").listFiles()?.forEach {
                 if (it.isFile) {
                     newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, autoString, null, it.absolutePath))
                 }
             }
 
             val manualString = context.getString(R.string.local_manual)
-            scriptsDir.listFiles()?.forEach {
+            File(deltaDir, "Scripts").listFiles()?.forEach {
                 if (it.isFile) {
                     newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, manualString, null, it.absolutePath))
                 }
