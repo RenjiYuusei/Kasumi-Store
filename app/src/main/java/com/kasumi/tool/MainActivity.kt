@@ -82,11 +82,14 @@ import java.io.FileReader
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -1268,7 +1271,7 @@ class MainActivity : ComponentActivity() {
                         return@launch
                     }
                     if (obbInfo != null) {
-                        withContext(Dispatchers.IO) { installObbFiles(obbInfo) }
+                        installObbFiles(obbInfo)
                     }
                     
                     val rooted = RootInstaller.isDeviceRooted()
@@ -1640,28 +1643,37 @@ private suspend fun loadScriptsFromLocal() {
         return sortedApks to obbInfo
     }
     
-    private fun installObbFiles(obbInfo: ObbInfo) {
+    private suspend fun installObbFiles(obbInfo: ObbInfo) = coroutineScope {
          try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (!Environment.isExternalStorageManager()) return
+                if (!Environment.isExternalStorageManager()) return@coroutineScope
             }
             val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
             if (!obbDir.exists()) obbDir.mkdirs()
-            for (obbFile in obbInfo.obbFiles) {
-                val destFile = File(obbDir, obbFile.name)
-                FileInputStream(obbFile).use { fis ->
-                    FileOutputStream(destFile).use { fos ->
-                        val src = fis.channel
-                        val dest = fos.channel
-                        var position = 0L
-                        val size = src.size()
-                        while (position < size) {
-                            position += src.transferTo(position, size - position, dest)
+
+            val semaphore = Semaphore(2)
+            obbInfo.obbFiles.map { obbFile ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        val destFile = File(obbDir, obbFile.name)
+                        FileInputStream(obbFile).use { fis ->
+                            FileOutputStream(destFile).use { fos ->
+                                val src = fis.channel
+                                val dest = fos.channel
+                                var position = 0L
+                                val size = src.size()
+                                while (position < size) {
+                                    position += src.transferTo(position, size - position, dest)
+                                }
+                            }
                         }
                     }
                 }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
+            }.awaitAll()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            e.printStackTrace()
+        }
     }
 
     private suspend fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
