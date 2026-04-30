@@ -1634,11 +1634,13 @@ private suspend fun loadScriptsFromLocal() {
             }
         } catch (e: Exception) { e.printStackTrace() }
         
-        val sortedApks = results.sortedWith(compareBy(
-            { !it.name.startsWith("base.") && !it.name.contains("com.") },
-            { it.name.startsWith("config.") || it.name.startsWith("split_") },
-            { it.name }
-        ))
+        val sortedApks = results.map {
+            val name = it.name
+            val c1 = !name.startsWith("base.") && !name.contains("com.")
+            val c2 = name.startsWith("config.") || name.startsWith("split_")
+            SortKey(it, c1, c2, name)
+        }.sortedWith(compareBy({ it.c1 }, { it.c2 }, { it.name }))
+            .map { it.file }
         val obbInfo = if (obbFiles.isNotEmpty() && packageName != null) ObbInfo(packageName, obbFiles) else null
         return sortedApks to obbInfo
     }
@@ -1722,3 +1724,5 @@ private suspend fun loadScriptsFromLocal() {
         }
     }
 }
+
+private data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
