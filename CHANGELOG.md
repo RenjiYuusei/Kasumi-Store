@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0] - 2026-05-01
+### ✨Tính năng mới
+- **Tab "Login Roblox"**: Thêm tab thứ ba ở thanh điều hướng để đăng nhập tài khoản Roblox bằng cookie `.ROBLOSECURITY` mà không cần tài khoản/mật khẩu.
+  - **Trích xuất Cookie**: Đọc cookie từ database WebView của Roblox tại `/data/data/com.roblox.client/app_webview/Default/Cookies` (cần root). Có nút sao chép và nút "Dùng để login" để đẩy cookie sang phần đăng nhập.
+  - **Đăng nhập bằng Cookie**: Dán cookie `.ROBLOSECURITY` của tài khoản cần đăng nhập, ứng dụng sẽ tự động:
+    1. Force-stop ứng dụng Roblox.
+    2. Xóa file `Cookies-journal/wal/shm` để tránh xung đột writer SQLite.
+    3. `DELETE FROM cookies` xóa toàn bộ dữ liệu cũ và `INSERT OR REPLACE` cookie mới với host `.roblox.com`.
+    4. Sửa quyền (`chown`/`chmod`/`restorecon`) cho khớp với uid của ứng dụng Roblox.
+  - **Hiển thị nhật ký từng bước**: Mỗi bước root đều có log chi tiết để dễ chẩn đoán khi gặp lỗi.
+  - **Bảo mật**: Có cảnh báo trong UI; cookie được ẩn mặc định (toggle hiện/ẩn) và validate định dạng (`_|WARNING:` prefix) trước khi chèn vào SQL.
+  - Yêu cầu: Quyền root (Magisk/KernelSU) và lệnh `sqlite3` trên thiết bị; ứng dụng Roblox đã được cài (`com.roblox.client`).
+
+### 🛠️Hạ tầng
+- **`RobloxLoginManager`**: Module mới sử dụng `ProcessBuilder("su", "-c", ...)` để chạy lệnh root, escape SQL/shell an toàn cho cookie.
+- **Bump phiên bản**: `1.6.0` → `1.7.0` (versionCode 13 → 14).
+
 ## [1.6.0] - 2026-04-24
 ### ✨ Cải tiến giao diện
 - **Hộp thoại Giới thiệu**: Thêm nút "Giới thiệu" trên thanh trên cùng, hiển thị tên ứng dụng, phiên bản hiện tại và nút mở server Discord cộng đồng.

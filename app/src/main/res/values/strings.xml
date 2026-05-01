@@ -47,4 +47,14 @@
     <string name="grant_unknown_sources_hint">Hãy cấp quyền, sau đó thử lại</string>
     <string name="open_unknown_sources_failed">Không mở được cài đặt quyền: %s</string>
     <string name="open_installer_failed">Không mở được installer: %s</string>
+
+    <!-- Login Roblox tab -->
+    <string name="tab_roblox_login">Login Roblox</string>
+    <string name="roblox_login_title">Đăng nhập Roblox bằng Cookie</string>
+    <string name="roblox_login_extract_title">Trích xuất Cookie</string>
+    <string name="roblox_login_extract_desc">Đọc cookie .ROBLOSECURITY của tài khoản đang đăng nhập trong ứng dụng Roblox.</string>
+    <string name="roblox_login_inject_title">Đăng nhập bằng Cookie</string>
+    <string name="roblox_login_inject_desc">Dán cookie .ROBLOSECURITY của tài khoản muốn đăng nhập. App sẽ tắt Roblox, ghi cookie và cấp lại quyền cần thiết.</string>
+    <string name="roblox_login_warning_title">Cảnh báo</string>
+    <string name="roblox_login_warning_body">Cookie .ROBLOSECURITY có quyền truy cập đầy đủ vào tài khoản. Tuyệt đối không chia sẻ với người lạ. Chỉ dùng cookie của tài khoản chính bạn.</string>
 </resources>
