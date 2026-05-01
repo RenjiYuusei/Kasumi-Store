@@ -380,11 +380,11 @@ class MainActivity : ComponentActivity() {
                             )
                             Icon(
                                 if (selectedTab == 2) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Outlined.Login,
-                                contentDescription = "Login Roblox",
+                                contentDescription = stringResource(R.string.tab_roblox_login),
                                 modifier = Modifier.scale(scale)
                             )
                         },
-                        label = { Text("Login Roblox", fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
+                        label = { Text(stringResource(R.string.tab_roblox_login), fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2; searchQuery = "" },
                         colors = NavigationBarItemDefaults.colors(

@@ -460,7 +460,57 @@ object RobloxLoginManager {
         }
         steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
 
-        // 5. Mở DB bằng SQLiteDatabase và sửa cookie qua API Kotlin
+        // 5. Probe encryption mode: nếu WebView của Roblox đang lưu cookie
+        // dạng encrypted_value (Chromium 112+ với OSCrypt enabled), việc
+        // INSERT plaintext vào cột `value` sẽ bị WebView bỏ qua khi đọc
+        // → login giả (DB ghi OK nhưng tài khoản không đổi). Cảnh báo
+        // sớm thay vì báo thành công rồi user mở Roblox vẫn thấy account cũ.
+        try {
+            SQLiteDatabase.openDatabase(
+                cacheDb.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READONLY
+            ).use { db ->
+                db.rawQuery(
+                    "SELECT COUNT(*) FROM cookies WHERE host_key LIKE ? AND length(encrypted_value) > 0",
+                    arrayOf("%roblox.com")
+                ).use { c ->
+                    val encryptedCount = if (c.moveToFirst()) c.getInt(0) else 0
+                    if (encryptedCount > 0) {
+                        steps += StepResult(
+                            "Probe encryption mode",
+                            true,
+                            0,
+                            "Phát hiện $encryptedCount cookie có encrypted_value",
+                            ""
+                        )
+                        cleanupCache(context)
+                        return Outcome(
+                            success = false,
+                            message = "WebView của Roblox đang dùng mã hóa cookie (encrypted_value). Inject plaintext vào cột `value` sẽ bị WebView bỏ qua khi đọc → login sẽ thất bại. Tính năng này không hoạt động trên thiết bị/ROM hiện tại.",
+                            steps = steps
+                        )
+                    }
+                    steps += StepResult(
+                        "Probe encryption mode",
+                        true,
+                        0,
+                        "Plaintext mode (encrypted_value rỗng)",
+                        ""
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            steps += StepResult("Probe encryption mode", false, -1, "", e.message ?: "")
+            cleanupCache(context)
+            return Outcome(
+                success = false,
+                message = "Lỗi mở database SQLite (probe): ${e.message}",
+                steps = steps
+            )
+        }
+
+        // 6. Mở DB bằng SQLiteDatabase và sửa cookie qua API Kotlin
         try {
             SQLiteDatabase.openDatabase(
                 cacheDb.absolutePath,
@@ -531,7 +581,7 @@ object RobloxLoginManager {
             )
         }
 
-        // 6. Copy DB ngược về Roblox + restore quyền.
+        // 7. Copy DB ngược về Roblox + restore quyền.
         //
         // Hai điểm quan trọng:
         //  - Ghi qua file tạm `${cookiesDb}.tmp` rồi `mv` để có atomic

@@ -85,6 +85,13 @@ fun RobloxLoginScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Text(
+            text = stringResource(R.string.roblox_login_title),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+        )
+
         StatusCard(
             rooted = rooted,
             robloxInstalled = robloxInstalled,
