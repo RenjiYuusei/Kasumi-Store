@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -72,6 +73,8 @@ fun RobloxLoginScreen(
         }
     }
 
+    val ready = rooted == true && robloxInstalled == true
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -82,7 +85,7 @@ fun RobloxLoginScreen(
         StatusCard(rooted = rooted, robloxInstalled = robloxInstalled)
 
         ExtractSection(
-            enabled = rooted == true && !extracting && !injecting,
+            enabled = ready && !extracting && !injecting,
             isLoading = extracting,
             cookie = extractedCookie,
             cookieRevealed = cookieRevealed,
@@ -117,7 +120,7 @@ fun RobloxLoginScreen(
         )
 
         InjectSection(
-            enabled = rooted == true && !extracting && !injecting,
+            enabled = ready && !extracting && !injecting,
             isLoading = injecting,
             value = cookieInput,
             onValueChange = { cookieInput = it },
@@ -268,13 +271,13 @@ private fun ExtractSection(
                 Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Trích xuất Cookie",
+                    text = stringResource(R.string.roblox_login_extract_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
             Text(
-                text = "Đọc cookie .ROBLOSECURITY của tài khoản đang đăng nhập trong ứng dụng Roblox.",
+                text = stringResource(R.string.roblox_login_extract_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -405,13 +408,13 @@ private fun InjectSection(
                 Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Đăng nhập bằng Cookie",
+                    text = stringResource(R.string.roblox_login_inject_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
             Text(
-                text = "Dán cookie .ROBLOSECURITY của tài khoản muốn đăng nhập. App sẽ tắt Roblox, ghi cookie và cấp lại quyền cần thiết.",
+                text = stringResource(R.string.roblox_login_inject_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -582,13 +585,13 @@ private fun WarningCard() {
             Spacer(modifier = Modifier.width(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Cảnh báo",
+                    text = stringResource(R.string.roblox_login_warning_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
                 Text(
-                    text = "Cookie .ROBLOSECURITY có quyền truy cập đầy đủ vào tài khoản. Tuyệt đối không chia sẻ với người lạ. Chỉ dùng cookie của tài khoản chính bạn.",
+                    text = stringResource(R.string.roblox_login_warning_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )

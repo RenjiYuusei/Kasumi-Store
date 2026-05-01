@@ -189,7 +189,8 @@ object RobloxLoginManager {
      * Quy trình tương tự script gốc của user:
      *  1. Force-stop Roblox.
      *  2. Xóa các file `Cookies-journal/wal/shm` để tránh xung đột writer.
-     *  3. `DELETE FROM cookies` để xóa toàn bộ dữ liệu cũ.
+     *  3. `DELETE FROM cookies WHERE host_key LIKE '%.roblox.com'` để chỉ xóa
+     *     cookie thuộc Roblox, không động đến các cookie khác trong WebView.
      *  4. `INSERT OR REPLACE` cookie mới với host `.roblox.com`.
      *  5. Sửa quyền (chown, chmod, restorecon) cho khớp với uid của ứng dụng Roblox.
      */
@@ -238,14 +239,28 @@ object RobloxLoginManager {
             )
         }
 
-        // Bước 3: Xóa data cũ và chèn cookie mới
+        // Bước 3: Đảm bảo có sqlite3
+        val checkSqlite = runStep(
+            "Kiểm tra sqlite3",
+            "command -v sqlite3 >/dev/null 2>&1 && echo OK || echo MISSING"
+        )
+        steps += checkSqlite
+        if (!checkSqlite.output.contains("OK")) {
+            return Outcome(
+                success = false,
+                message = "Thiết bị không có lệnh `sqlite3`. Hãy cài thêm `sqlite3` (Magisk module hoặc termux) rồi thử lại.",
+                steps = steps
+            )
+        }
+
+        // Bước 4: Xóa data cũ (chỉ cookie Roblox) và chèn cookie mới
         val sqlEscapedCookie = trimmed.replace("'", "''")
-        val deleteCmd = "sqlite3 $COOKIES_DB \"DELETE FROM cookies;\""
+        val deleteCmd = "sqlite3 $COOKIES_DB \"DELETE FROM cookies WHERE host_key LIKE '%roblox.com';\""
         val insertSql = buildInsertSql(sqlEscapedCookie)
         val insertCmd = "sqlite3 $COOKIES_DB \"$insertSql\""
 
         val finalSteps = listOf(
-            "Xóa sạch cookie cũ" to deleteCmd,
+            "Xóa cookie Roblox cũ" to deleteCmd,
             "Chèn cookie mới" to insertCmd,
             "Sửa quyền (chown)" to "APP_USER=\$(stat -c '%U' $APP_DATA) && chown \$APP_USER:\$APP_USER $COOKIES_DB",
             "Sửa quyền (chmod)" to "chmod 660 $COOKIES_DB",
@@ -273,12 +288,16 @@ object RobloxLoginManager {
 
     /** Xây dựng câu lệnh `INSERT OR REPLACE` cho bảng `cookies` của Chromium. */
     private fun buildInsertSql(cookieValue: String): String {
-        // Các giá trị thời gian được lấy theo template trong script gốc; Chromium
-        // sẽ tự cập nhật khi WebView khởi tạo lại.
-        val creationUtc = 13421673867034526L
-        val expiresUtc = 13456233867034526L
-        val lastAccessUtc = 13421673867034526L
-        val lastUpdateUtc = 13421673867053634L
+        // Chromium dùng microseconds kể từ epoch Windows (1601-01-01).
+        // Khoảng cách giữa 1601-01-01 và 1970-01-01 là 11644473600 giây.
+        val unixEpochOffsetMicros = 11644473600L * 1_000_000L
+        val nowMicros = System.currentTimeMillis() * 1_000L + unixEpochOffsetMicros
+        val creationUtc = nowMicros
+        // Cookie .ROBLOSECURITY mặc định có hiệu lực ~1 năm; lấy 400 ngày
+        // (giới hạn tối đa của Chromium đối với cookie persistent).
+        val expiresUtc = nowMicros + 400L * 86400L * 1_000_000L
+        val lastAccessUtc = nowMicros
+        val lastUpdateUtc = nowMicros
 
         return "INSERT OR REPLACE INTO cookies " +
             "(creation_utc, host_key, top_frame_site_key, name, value, encrypted_value, path, expires_utc, " +
