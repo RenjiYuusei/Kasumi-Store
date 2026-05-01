@@ -148,6 +148,10 @@ object RobloxLoginManager {
         // Không cho phép ký tự điều khiển / xuống dòng để tránh người dùng vô tình
         // dán cả "name=value\n" của trình duyệt.
         if (trimmed.any { it == '\n' || it == '\r' || it == '\t' || it == ' ' }) return false
+        // Cookie .ROBLOSECURITY của Roblox luôn là ASCII printable (base64-url +
+        // dấu `_|.:-`) — reject mọi byte ngoài dải 33..126 để tránh chuỗi
+        // giả mạo hoặc bị mã hóa sai (UTF-8 multi-byte, cắt dán nhầm).
+        if (trimmed.any { it.code < 33 || it.code > 126 }) return false
         return true
     }
 
@@ -591,6 +595,10 @@ object RobloxLoginManager {
         //    — trên một số ROM Android, tên user dạng `u0_a123` không có
         //    trong /etc/passwd nên `chown <name>` sẽ fail.
         val restoreCmd = listOf(
+            // Dọn file tmp leftover từ lần retry trước (nếu có) — file nằm
+            // trong /data/data/<pkg>/app_webview/Default/ thuộc uid Roblox,
+            // chỉ root mới xóa được, mà cleanupCache() chỉ dọn cacheDir của app.
+            "rm -f '${cookiesDb}.tmp'",
             "cp '${cacheDb.absolutePath}' '${cookiesDb}.tmp'",
             "mv '${cookiesDb}.tmp' '$cookiesDb'",
             "APP_UID=\$(stat -c '%u' $appData) && APP_GID=\$(stat -c '%g' $appData) && chown \$APP_UID:\$APP_GID $cookiesDb",
