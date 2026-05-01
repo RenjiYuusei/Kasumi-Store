@@ -56,6 +56,7 @@ fun RobloxLoginScreen(
 
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var robloxInstalled by remember { mutableStateOf<Boolean?>(null) }
+    var detectedPackage by remember { mutableStateOf<String?>(null) }
 
     var extracting by remember { mutableStateOf(false) }
     var injecting by remember { mutableStateOf(false) }
@@ -68,9 +69,11 @@ fun RobloxLoginScreen(
 
     LaunchedEffect(Unit) {
         rooted = withContext(Dispatchers.IO) { RootInstaller.isDeviceRooted() }
-        robloxInstalled = withContext(Dispatchers.IO) {
-            RobloxLoginManager.isRobloxInstalled(context)
+        val pkg = withContext(Dispatchers.IO) {
+            RobloxLoginManager.detectActivePackage(context)
         }
+        detectedPackage = pkg
+        robloxInstalled = pkg != null
     }
 
     val ready = rooted == true && robloxInstalled == true
@@ -82,7 +85,11 @@ fun RobloxLoginScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        StatusCard(rooted = rooted, robloxInstalled = robloxInstalled)
+        StatusCard(
+            rooted = rooted,
+            robloxInstalled = robloxInstalled,
+            detectedPackage = detectedPackage
+        )
 
         ExtractSection(
             enabled = ready && !extracting && !injecting,
@@ -167,7 +174,11 @@ fun RobloxLoginScreen(
 }
 
 @Composable
-private fun StatusCard(rooted: Boolean?, robloxInstalled: Boolean?) {
+private fun StatusCard(
+    rooted: Boolean?,
+    robloxInstalled: Boolean?,
+    detectedPackage: String?
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -199,11 +210,16 @@ private fun StatusCard(rooted: Boolean?, robloxInstalled: Boolean?) {
                 pending = rooted == null,
                 hintWhenMissing = "Cần root (Magisk/KernelSU) để truy cập database cookie."
             )
+            val robloxLabel = when {
+                detectedPackage != null -> "Roblox đã cài ($detectedPackage)"
+                robloxInstalled == false -> "Roblox chưa cài (com.roblox.client / .vnggames)"
+                else -> "Roblox (đang kiểm tra…)"
+            }
             StatusRow(
-                label = "Roblox đã cài (com.roblox.client)",
+                label = robloxLabel,
                 ready = robloxInstalled == true,
                 pending = robloxInstalled == null,
-                hintWhenMissing = "Hãy cài đặt Roblox và mở ít nhất 1 lần để khởi tạo dữ liệu."
+                hintWhenMissing = "Hãy cài đặt Roblox (bản global hoặc VNG) và mở ít nhất 1 lần để khởi tạo dữ liệu."
             )
         }
     }
