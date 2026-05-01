@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.7.0] - 2026-05-01
+### ✨ Tính năng mới
+- **Gỡ ứng dụng đã cài**: Mỗi dòng app trong danh sách giờ tự nhận diện ứng dụng đã có trên thiết bị (qua `PackageManager`) và hiển thị nhãn `Đã cài v<phiên bản>` cùng nút biểu tượng thùng rác màu đỏ. Bấm nút này mở thẳng hộp thoại gỡ cài đặt chuẩn của hệ thống (`Intent.ACTION_DELETE`) — không cần root, không cần permission. Trạng thái tự refresh khi quay lại app sau khi confirm/hủy hộp thoại hệ thống.
+- **`InstalledPackagesHelper`**: Module mới trích `package_name` từ APK đã cache (`getPackageArchiveInfo` cho `.apk`, đọc `manifest.json` cho `.xapk/.apks/.apkm`) và đồng bộ map `packageName → InstalledInfo` từ `PackageManager`.
+
+### 🧹 Dọn dead code
+- **Xóa `RootInstaller.probeRootEnv()` + `RootEnv` data class** (~100 dòng): không nơi nào gọi.
+- **Xóa `ApkItem.toJsonList()`**: không nơi nào gọi (giữ `fromJsonList` cho migration legacy `SharedPreferences`).
+- **Xóa hàm `normalizeUrl()`**: logic chuyển Dropbox share URL sang direct download không còn cần thiết. Lưu ý: nếu `source/apps.json` còn entry Dropbox với `dl=0` thì URL đó không tải được nữa — cần update phía dữ liệu.
+- **Bỏ import `ExperimentalMaterial3Api` thừa** + 4 `@OptIn` ở method/composable: class-level OptIn đã cover.
+- **Bỏ nhánh `else if (VERSION_CODES.M)`** always-true trong `requestStoragePermission` (minSdk=24).
+- **Bỏ `.ifEmpty { emptyList() }.toMutableList()` redundant** trong `loadItems`.
+- **Bỏ biến `msg` không dùng** ở 2 chỗ trong `onInstallClicked` (`val (ok, _) = ...`).
+
+### ⚡ Tối ưu mã nguồn
+- **`RootInstaller` DRY**: extract 2 helper `extractSessionId(output)` (4 chỗ regex match) và `runSu(cmd)` (4 chỗ `ProcessBuilder` boilerplate) — bớt ~30 dòng. Thay 4 vòng `while (input.read(buffer))…` bằng `input.copyTo(out, 65536)`.
+- **`loadScriptsFromLocal`**: cache `getDeltaDir()` 1 lần thay vì gọi 4 lần (mỗi lần đều `File(...).exists()`).
+- **`formatFileSize`**: thêm `Locale.ROOT` cho `String.format` để tránh dấu thập phân khác locale (tiếng Việt sẽ ra "1,5 KB" thay vì "1.5 KB").
+- **Đồng nhất string resource**: `installSplitsNormally` chuyển 3 chuỗi VN hardcoded sang `R.string.*` (giống `installNormally`).
+
+### 🐛 Sửa lỗi
+- **Fallback `versionName` null**: khi app đã cài có `PackageInfo.versionName == null`, hiển thị `Đã cài v?` thay vì `Đã cài v` (thiếu số phiên bản).
+- **`extractSplitsAndObb`**: chỉ gán `packageName` khi `manifest.json` parse được giá trị non-blank, tránh trường hợp gán string rỗng làm `obbInfo` được tạo nhưng vô nghĩa.
+
+### 📦 Strings (vi) mới
+- `installed_version` — "Đã cài v%s"
+- `uninstall_unknown_package` — "Không xác định được package, hãy tải lại APK trước"
+- `uninstall_failed` — "Không gỡ cài đặt được: %s"
+- `installing_in_progress` — "Đang tiến hành cài đặt…"
+- `install_splits_failed` — "Lỗi cài đặt splits: %s"
+
 ## [1.6.0] - 2026-04-24
 ### ✨ Cải tiến giao diện
 - **Hộp thoại Giới thiệu**: Thêm nút "Giới thiệu" trên thanh trên cùng, hiển thị tên ứng dụng, phiên bản hiện tại và nút mở server Discord cộng đồng.
