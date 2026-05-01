@@ -8,6 +8,8 @@ import android.os.Build
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /**
  * Quản lý đăng nhập Roblox bằng cookie .ROBLOSECURITY thông qua quyền root.
@@ -71,23 +73,78 @@ object RobloxLoginManager {
     private data class RawResult(val exitCode: Int, val output: String, val error: String)
 
     /**
+     * Thời gian chờ tối đa cho một lệnh `su -c <cmd>` trước khi bị huỷ.
+     *
+     * 60 giây đủ rộng cho cả tình huống chậm nhất:
+     *  - Lần đầu gọi `su`: Magisk/KernelSU hiện dialog xin quyền — user
+     *    có thể mất vài chục giây để bấm "Cho phép".
+     *  - `cp` Cookies DB sang cacheDir trên thiết bị I/O chậm.
+     * Các lệnh thường (force-stop, chown, restorecon) chạy < 1s.
+     */
+    private const val SU_TIMEOUT_SEC = 60L
+
+    /**
      * Thực thi một lệnh shell với quyền root.
      *
      * Đọc stdout/stderr **song song** (CompletableFuture) để tránh deadlock khi
      * pipe buffer của một stream bị đầy (~64 KB trên Linux) trong khi stream
      * còn lại chưa được tiêu thụ.
+     *
+     * Có timeout cứng [SU_TIMEOUT_SEC] giây — nếu `su` không phản hồi
+     * (ví dụ: user không bấm grant root, su binary lỗi, deadlock kernel),
+     * process sẽ bị `destroy()` và hàm trả về [RawResult] với exit -1
+     * thay vì block UI vô hạn. minSdk = 24 nên `Process.waitFor(long, TimeUnit)`
+     * không có sẵn (API 26+); dùng [CompletableFuture] wrap quanh `waitFor()`
+     * để cài đặt timeout tương đương.
      */
     private fun executeAsRoot(command: String): RawResult {
+        var process: Process? = null
         return try {
-            val process = ProcessBuilder("su", "-c", command).start()
+            val p = ProcessBuilder("su", "-c", command).start().also { process = it }
             val outputFuture = CompletableFuture.supplyAsync {
-                process.inputStream.bufferedReader().readText()
+                p.inputStream.bufferedReader().readText()
             }
-            val errorText = process.errorStream.bufferedReader().readText()
-            val outputText = outputFuture.get()
-            val exitCode = process.waitFor()
+            val errorFuture = CompletableFuture.supplyAsync {
+                p.errorStream.bufferedReader().readText()
+            }
+            val waitFuture = CompletableFuture.supplyAsync { p.waitFor() }
+
+            val exitCode = try {
+                waitFuture.get(SU_TIMEOUT_SEC, TimeUnit.SECONDS)
+            } catch (_: TimeoutException) {
+                // Quá hạn — gửi SIGTERM. Sau khi process chết, các pipe stdout/stderr
+                // được kernel đóng, nên các read future sẽ trả EOF và tự complete.
+                p.destroy()
+                outputFuture.cancel(true)
+                errorFuture.cancel(true)
+                waitFuture.cancel(true)
+                return RawResult(
+                    exitCode = -1,
+                    output = "",
+                    error = "Lệnh `su` quá thời gian chờ ($SU_TIMEOUT_SEC s) — process đã bị huỷ. " +
+                        "Có thể đang chờ user grant quyền root, hoặc `su` binary không phản hồi."
+                )
+            }
+
+            // Process đã exit; thu output/error với thời gian ân hạn nhỏ
+            // để các thread đọc kịp drain buffer còn lại.
+            val outputText = try {
+                outputFuture.get(2, TimeUnit.SECONDS)
+            } catch (_: Exception) {
+                outputFuture.cancel(true)
+                ""
+            }
+            val errorText = try {
+                errorFuture.get(2, TimeUnit.SECONDS)
+            } catch (_: Exception) {
+                errorFuture.cancel(true)
+                ""
+            }
             RawResult(exitCode, outputText.trim(), errorText.trim())
         } catch (e: Exception) {
+            // Dọn process nếu có lỗi giữa chừng (vd: ProcessBuilder.start() ok
+            // nhưng các bước sau ném).
+            try { process?.destroy() } catch (_: Exception) { /* ignore */ }
             RawResult(-1, "", e.message ?: "Unknown error")
         }
     }
