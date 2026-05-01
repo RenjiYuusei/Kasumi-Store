@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import java.io.File
+import java.io.RandomAccessFile
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -157,6 +158,28 @@ object RobloxLoginManager {
     }
 
     /**
+     * Sau khi copy DB sang cacheDir, ta hay gặp lỗi
+     * `SQLITE_IOERR_BEGIN_ATOMIC` (code 7434) trên Android vì SQLite cố dùng
+     * tính năng F2FS atomic write khi DB đang ở **WAL mode** (byte 18–19 của
+     * file header = 2). Trên cacheDir của app khác (khác uid với DB gốc),
+     * F2FS atomic write thuờng bị từ chối.
+     *
+     * Ghi đè byte 18 và 19 về `1` (legacy / rollback journal) để SQLite
+     * bỏ qua WAL hoàn toàn trong bản copy này. Việc này không ảnh hưởng
+     * đến DB gốc của Roblox (sẽ được khởi tạo lại WAL khi Roblox mở).
+     */
+    private fun forceLegacyJournalMode(dbFile: File) {
+        if (dbFile.length() < 100) return
+        RandomAccessFile(dbFile, "rw").use { raf ->
+            raf.seek(18L)
+            // 18 = file format write version, 19 = file format read version.
+            // 1 = legacy/rollback, 2 = WAL.
+            raf.writeByte(1)
+            raf.writeByte(1)
+        }
+    }
+
+    /**
      * Trích xuất cookie .ROBLOSECURITY từ database WebView của Roblox.
      *
      * Trả về [Outcome.cookie] nếu thành công. Nếu cookie được mã hóa, [Outcome.message]
@@ -195,17 +218,17 @@ object RobloxLoginManager {
             )
         }
 
-        // 4. Copy DB (và -wal/-shm nếu có) sang cacheDir để đọc bằng SQLiteDatabase
+        // 4. Copy DB (và -wal nếu có) sang cacheDir để đọc bằng SQLiteDatabase.
+        // Không copy `-shm` vì nó chứa state đồng bộ inode-specific của Chromium
+        // — SQLite sẽ tự tạo lại.
         cleanupCache(context)
         val cacheDb = File(context.cacheDir, CACHE_DB_NAME)
         val cacheWal = File(context.cacheDir, CACHE_WAL_NAME)
-        val cacheShm = File(context.cacheDir, CACHE_SHM_NAME)
 
         val copyCmd = listOf(
             "cp '$cookiesDb' '${cacheDb.absolutePath}'",
             "chmod 666 '${cacheDb.absolutePath}'",
-            "if [ -f '$cookiesDir/Cookies-wal' ]; then cp '$cookiesDir/Cookies-wal' '${cacheWal.absolutePath}' && chmod 666 '${cacheWal.absolutePath}'; fi",
-            "if [ -f '$cookiesDir/Cookies-shm' ]; then cp '$cookiesDir/Cookies-shm' '${cacheShm.absolutePath}' && chmod 666 '${cacheShm.absolutePath}'; fi"
+            "if [ -f '$cookiesDir/Cookies-wal' ]; then cp '$cookiesDir/Cookies-wal' '${cacheWal.absolutePath}' && chmod 666 '${cacheWal.absolutePath}'; fi"
         ).joinToString(" && ")
         val copy = runStep("Copy DB ra cache app", copyCmd)
         steps += copy
@@ -218,13 +241,31 @@ object RobloxLoginManager {
             )
         }
 
-        // 5. Đọc cookie bằng SQLiteDatabase API (không dùng shell sqlite3)
+        // 5. Ép cache DB sang legacy journal mode để tránh F2FS atomic write
+        // (lỗi `SQLITE_IOERR_BEGIN_ATOMIC` / code 7434 khi mở DB đang ở WAL mode
+        // trên filesystem của app khác uid). Nếu có file `-wal` thì xóa luôn
+        // (sau khi ép header về legacy, SQLite sẽ bỏ qua WAL).
+        try {
+            forceLegacyJournalMode(cacheDb)
+            cacheWal.delete()
+        } catch (e: Exception) {
+            steps += StepResult("Ép legacy journal mode", false, -1, "", e.message ?: "")
+            cleanupCache(context)
+            return Outcome(
+                success = false,
+                message = "Không điều chỉnh được file header DB: ${e.message}",
+                steps = steps
+            )
+        }
+        steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
+
+        // 6. Đọc cookie bằng SQLiteDatabase API (không dùng shell sqlite3)
         return try {
-            // Mở read-write để SQLite có thể checkpoint WAL nếu có
+            // Mở READONLY: không cần write, tránh mọi atomic-write.
             SQLiteDatabase.openDatabase(
                 cacheDb.absolutePath,
                 null,
-                SQLiteDatabase.OPEN_READWRITE
+                SQLiteDatabase.OPEN_READONLY
             ).use { db ->
                 db.query(
                     /* table = */ "cookies",
@@ -388,13 +429,32 @@ object RobloxLoginManager {
             )
         }
 
-        // 4. Mở DB bằng SQLiteDatabase và sửa cookie qua API Kotlin
+        // 4. Ép cache DB sang legacy journal mode để tránh F2FS atomic write
+        // (`SQLITE_IOERR_BEGIN_ATOMIC` / code 7434).
+        try {
+            forceLegacyJournalMode(cacheDb)
+        } catch (e: Exception) {
+            steps += StepResult("Ép legacy journal mode", false, -1, "", e.message ?: "")
+            cleanupCache(context)
+            return Outcome(
+                success = false,
+                message = "Không điều chỉnh được file header DB: ${e.message}",
+                steps = steps
+            )
+        }
+        steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
+
+        // 5. Mở DB bằng SQLiteDatabase và sửa cookie qua API Kotlin
         try {
             SQLiteDatabase.openDatabase(
                 cacheDb.absolutePath,
                 null,
                 SQLiteDatabase.OPEN_READWRITE
             ).use { db ->
+                // Đảm bảo connection thực sự ở rollback-journal mode + tắt
+                // synchronous full để không khởi động atomic-write trong commit.
+                db.execSQL("PRAGMA journal_mode = DELETE")
+                db.execSQL("PRAGMA synchronous = NORMAL")
                 db.beginTransaction()
                 try {
                     val deleted = db.delete(
@@ -434,7 +494,7 @@ object RobloxLoginManager {
             )
         }
 
-        // 5. Copy DB ngược về Roblox + restore quyền.
+        // 6. Copy DB ngược về Roblox + restore quyền.
         // Dùng UID/GID dạng số (`%u`/`%g`) thay vì tên symbolic (`%U`) — trên một
         // số ROM Android, tên user dạng `u0_a123` không có trong /etc/passwd nên
         // `chown <name>` sẽ fail.
