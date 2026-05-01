@@ -1,8 +1,11 @@
 package com.kasumi.tool
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
+import java.io.File
 
 /**
  * Quản lý đăng nhập Roblox bằng cookie .ROBLOSECURITY thông qua quyền root.
@@ -16,7 +19,10 @@ import android.os.Build
  * 2. Chèn cookie vào database để đăng nhập trực tiếp vào tài khoản Roblox mà
  *    không cần tài khoản/mật khẩu.
  *
- * Mọi thao tác đều yêu cầu quyền root (su).
+ * Triển khai: dùng `su` để **copy** file DB (cùng `-wal`/`-shm` nếu có) sang
+ * `cacheDir` của ứng dụng (chmod 666), sau đó đọc/ghi bằng API
+ * [SQLiteDatabase] có sẵn trong Android — không phụ thuộc vào lệnh `sqlite3`
+ * trên thiết bị. Sau khi sửa, copy ngược lại + restore quyền (chown/chmod 660/restorecon).
  */
 object RobloxLoginManager {
 
@@ -27,6 +33,10 @@ object RobloxLoginManager {
     private const val APP_DATA = "/data/data/com.roblox.client"
     private const val COOKIES_DIR = "/data/data/com.roblox.client/app_webview/Default"
     private const val COOKIES_DB = "/data/data/com.roblox.client/app_webview/Default/Cookies"
+
+    private const val CACHE_DB_NAME = "roblox_cookies.db"
+    private const val CACHE_WAL_NAME = "roblox_cookies.db-wal"
+    private const val CACHE_SHM_NAME = "roblox_cookies.db-shm"
 
     // Mẫu chuỗi cookie .ROBLOSECURITY hợp lệ (token bắt đầu bằng "_|WARNING:")
     private val COOKIE_REGEX = Regex("^[A-Za-z0-9_+\\-=/.|:]+\\.[A-Za-z0-9_+\\-=/.|:]+$")
@@ -99,16 +109,27 @@ object RobloxLoginManager {
         return COOKIE_REGEX.matches(trimmed)
     }
 
+    private fun cleanupCache(context: Context) {
+        File(context.cacheDir, CACHE_DB_NAME).delete()
+        File(context.cacheDir, CACHE_WAL_NAME).delete()
+        File(context.cacheDir, CACHE_SHM_NAME).delete()
+    }
+
     /**
      * Trích xuất cookie .ROBLOSECURITY từ database WebView của Roblox.
      *
      * Trả về [Outcome.cookie] nếu thành công. Nếu cookie được mã hóa, [Outcome.message]
      * sẽ thông báo và trả về `null` cookie.
      */
-    fun extractCookie(): Outcome {
+    fun extractCookie(context: Context): Outcome {
         val steps = mutableListOf<StepResult>()
 
-        // 1. Kiểm tra database tồn tại
+        // 1. Force-stop Roblox để đảm bảo DB ổn định khi copy
+        val stop = runStep("Tắt Roblox", "am force-stop $ROBLOX_PACKAGE")
+        steps += stop
+        // Không return-fail ở đây: Roblox có thể đang không chạy
+
+        // 2. Kiểm tra database tồn tại
         val checkDb = runStep(
             "Kiểm tra database cookie",
             "test -f $COOKIES_DB && echo 'EXISTS' || echo 'MISSING'"
@@ -122,79 +143,123 @@ object RobloxLoginManager {
             )
         }
 
-        // 2. Kiểm tra sqlite3 có sẵn
-        val checkSqlite = runStep(
-            "Kiểm tra sqlite3",
-            "command -v sqlite3 >/dev/null 2>&1 && echo OK || echo MISSING"
-        )
-        steps += checkSqlite
-        if (!checkSqlite.output.contains("OK")) {
+        // 3. Copy DB (và -wal/-shm nếu có) sang cacheDir để đọc bằng SQLiteDatabase
+        cleanupCache(context)
+        val cacheDb = File(context.cacheDir, CACHE_DB_NAME)
+        val cacheWal = File(context.cacheDir, CACHE_WAL_NAME)
+        val cacheShm = File(context.cacheDir, CACHE_SHM_NAME)
+
+        val copyCmd = listOf(
+            "cp '$COOKIES_DB' '${cacheDb.absolutePath}'",
+            "chmod 666 '${cacheDb.absolutePath}'",
+            "if [ -f '$COOKIES_DIR/Cookies-wal' ]; then cp '$COOKIES_DIR/Cookies-wal' '${cacheWal.absolutePath}' && chmod 666 '${cacheWal.absolutePath}'; fi",
+            "if [ -f '$COOKIES_DIR/Cookies-shm' ]; then cp '$COOKIES_DIR/Cookies-shm' '${cacheShm.absolutePath}' && chmod 666 '${cacheShm.absolutePath}'; fi"
+        ).joinToString(" && ")
+        val copy = runStep("Copy DB ra cache app", copyCmd)
+        steps += copy
+        if (!copy.success) {
+            cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Thiết bị không có lệnh `sqlite3`. Hãy cài thêm `sqlite3` (Magisk module hoặc termux) rồi thử lại.",
+                message = "Không copy được database: ${copy.error.ifBlank { copy.output }}",
                 steps = steps
             )
         }
 
-        // 3. Đọc cookie - thử cột `value` trước (plaintext),
-        //    nếu rỗng thì báo có khả năng cookie đang được mã hóa.
-        val sql = "SELECT value FROM cookies WHERE name='$COOKIE_NAME' AND host_key LIKE '%roblox.com' LIMIT 1;"
-        val readCmd = "sqlite3 $COOKIES_DB \"$sql\""
-        val readResult = runStep("Đọc cookie .ROBLOSECURITY", readCmd)
-        steps += readResult
-
-        if (!readResult.success) {
-            return Outcome(
-                success = false,
-                message = "Không đọc được database cookie. ${readResult.error.ifBlank { readResult.output }}",
-                steps = steps
-            )
-        }
-
-        val value = readResult.output.trim()
-        if (value.isEmpty()) {
-            // Thử kiểm tra xem có row tồn tại không (encrypted)
-            val checkEnc = runStep(
-                "Kiểm tra encrypted_value",
-                "sqlite3 $COOKIES_DB \"SELECT length(encrypted_value) FROM cookies WHERE name='$COOKIE_NAME' AND host_key LIKE '%roblox.com' LIMIT 1;\""
-            )
-            steps += checkEnc
-            val encLen = checkEnc.output.trim().toIntOrNull() ?: 0
-            return if (encLen > 0) {
-                Outcome(
-                    success = false,
-                    message = "Cookie hiện đang được mã hóa (encrypted_value=$encLen bytes). Phiên bản WebView này không lưu cookie dạng plaintext nên không thể trích xuất trực tiếp.",
-                    steps = steps
-                )
-            } else {
-                Outcome(
-                    success = false,
-                    message = "Không tìm thấy cookie .ROBLOSECURITY. Hãy đăng nhập vào Roblox ít nhất 1 lần rồi thử lại.",
-                    steps = steps
-                )
+        // 4. Đọc cookie bằng SQLiteDatabase API (không dùng shell sqlite3)
+        return try {
+            // Mở read-write để SQLite có thể checkpoint WAL nếu có
+            SQLiteDatabase.openDatabase(
+                cacheDb.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READWRITE
+            ).use { db ->
+                db.query(
+                    /* table = */ "cookies",
+                    /* columns = */ arrayOf("value", "encrypted_value"),
+                    /* selection = */ "name = ? AND host_key LIKE ?",
+                    /* selectionArgs = */ arrayOf(COOKIE_NAME, "%roblox.com"),
+                    /* groupBy = */ null,
+                    /* having = */ null,
+                    /* orderBy = */ "creation_utc DESC",
+                    /* limit = */ "1"
+                ).use { c ->
+                    if (!c.moveToFirst()) {
+                        steps += StepResult(
+                            "Truy vấn cookie",
+                            true,
+                            0,
+                            "Không tìm thấy cookie .ROBLOSECURITY",
+                            ""
+                        )
+                        return@use Outcome(
+                            success = false,
+                            message = "Không tìm thấy cookie .ROBLOSECURITY trong database. Hãy đăng nhập Roblox trước rồi thử lại.",
+                            steps = steps
+                        )
+                    }
+                    val value = c.getString(0).orEmpty()
+                    val encVal = try {
+                        c.getBlob(1)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (value.isNotBlank()) {
+                        steps += StepResult("Truy vấn cookie", true, 0, "OK", "")
+                        Outcome(
+                            success = true,
+                            message = "Đã lấy cookie .ROBLOSECURITY thành công.",
+                            steps = steps,
+                            cookie = value
+                        )
+                    } else if (encVal != null && encVal.isNotEmpty()) {
+                        steps += StepResult(
+                            "Truy vấn cookie",
+                            true,
+                            0,
+                            "encrypted_value = ${encVal.size} bytes",
+                            ""
+                        )
+                        Outcome(
+                            success = false,
+                            message = "Cookie đang được WebView mã hóa (encrypted_value). Phiên bản WebView/Android này không cho phép đọc cookie trực tiếp.",
+                            steps = steps
+                        )
+                    } else {
+                        steps += StepResult("Truy vấn cookie", true, 0, "Empty", "")
+                        Outcome(
+                            success = false,
+                            message = "Cookie tồn tại nhưng giá trị rỗng. Có thể tài khoản chưa đăng nhập.",
+                            steps = steps
+                        )
+                    }
+                }
             }
+        } catch (e: Exception) {
+            steps += StepResult("Mở DB SQLite", false, -1, "", e.message ?: "Unknown error")
+            Outcome(
+                success = false,
+                message = "Lỗi mở database SQLite: ${e.message}",
+                steps = steps
+            )
+        } finally {
+            cleanupCache(context)
         }
-
-        return Outcome(
-            success = true,
-            message = "Đã trích xuất cookie thành công.",
-            steps = steps,
-            cookie = value
-        )
     }
 
     /**
      * Chèn cookie vào database để đăng nhập trực tiếp vào tài khoản Roblox.
      *
-     * Quy trình tương tự script gốc của user:
+     * Quy trình:
      *  1. Force-stop Roblox.
      *  2. Xóa các file `Cookies-journal/wal/shm` để tránh xung đột writer.
-     *  3. `DELETE FROM cookies WHERE host_key LIKE '%.roblox.com'` để chỉ xóa
-     *     cookie thuộc Roblox, không động đến các cookie khác trong WebView.
-     *  4. `INSERT OR REPLACE` cookie mới với host `.roblox.com`.
-     *  5. Sửa quyền (chown, chmod, restorecon) cho khớp với uid của ứng dụng Roblox.
+     *  3. Copy file `Cookies` sang `cacheDir` (chmod 666 để app đọc được).
+     *  4. Mở DB bằng [SQLiteDatabase], `DELETE WHERE host_key LIKE '%roblox.com'`,
+     *     sau đó `INSERT` cookie mới với host `.roblox.com` (dùng [ContentValues],
+     *     không cần escape SQL thủ công).
+     *  5. Copy DB ngược về thư mục Roblox + sửa quyền (chown, chmod 660, restorecon).
      */
-    fun injectCookie(cookie: String): Outcome {
+    fun injectCookie(context: Context, cookie: String): Outcome {
         val trimmed = cookie.trim()
         if (!isCookieFormatValid(trimmed)) {
             return Outcome(
@@ -206,7 +271,7 @@ object RobloxLoginManager {
 
         val steps = mutableListOf<StepResult>()
 
-        // Bước 1: Force-stop và xóa các file phụ trợ của SQLite
+        // 1. Force-stop và dọn các file WAL/SHM/journal trên thư mục Roblox
         val cleanupSteps = listOf(
             "Tắt Roblox" to "am force-stop $ROBLOX_PACKAGE",
             "Xóa Cookies-journal" to "rm -f $COOKIES_DIR/Cookies-journal",
@@ -225,7 +290,7 @@ object RobloxLoginManager {
             }
         }
 
-        // Bước 2: Đảm bảo database tồn tại
+        // 2. Đảm bảo database tồn tại
         val checkDb = runStep(
             "Kiểm tra database cookie",
             "test -f $COOKIES_DB && echo OK || echo MISSING"
@@ -239,44 +304,85 @@ object RobloxLoginManager {
             )
         }
 
-        // Bước 3: Đảm bảo có sqlite3
-        val checkSqlite = runStep(
-            "Kiểm tra sqlite3",
-            "command -v sqlite3 >/dev/null 2>&1 && echo OK || echo MISSING"
+        // 3. Copy file DB sang cacheDir của app
+        cleanupCache(context)
+        val cacheDb = File(context.cacheDir, CACHE_DB_NAME)
+        val copy = runStep(
+            "Copy DB ra cache app",
+            "cp '$COOKIES_DB' '${cacheDb.absolutePath}' && chmod 666 '${cacheDb.absolutePath}'"
         )
-        steps += checkSqlite
-        if (!checkSqlite.output.contains("OK")) {
+        steps += copy
+        if (!copy.success) {
+            cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Thiết bị không có lệnh `sqlite3`. Hãy cài thêm `sqlite3` (Magisk module hoặc termux) rồi thử lại.",
+                message = "Không copy được database: ${copy.error.ifBlank { copy.output }}",
                 steps = steps
             )
         }
 
-        // Bước 4: Xóa data cũ (chỉ cookie Roblox) và chèn cookie mới
-        val sqlEscapedCookie = trimmed.replace("'", "''")
-        val deleteCmd = "sqlite3 $COOKIES_DB \"DELETE FROM cookies WHERE host_key LIKE '%roblox.com';\""
-        val insertSql = buildInsertSql(sqlEscapedCookie)
-        val insertCmd = "sqlite3 $COOKIES_DB \"$insertSql\""
+        // 4. Mở DB bằng SQLiteDatabase và sửa cookie qua API Kotlin
+        try {
+            SQLiteDatabase.openDatabase(
+                cacheDb.absolutePath,
+                null,
+                SQLiteDatabase.OPEN_READWRITE
+            ).use { db ->
+                db.beginTransaction()
+                try {
+                    val deleted = db.delete(
+                        /* table = */ "cookies",
+                        /* whereClause = */ "host_key LIKE ?",
+                        /* whereArgs = */ arrayOf("%roblox.com")
+                    )
 
-        val finalSteps = listOf(
-            "Xóa cookie Roblox cũ" to deleteCmd,
-            "Chèn cookie mới" to insertCmd,
-            "Sửa quyền (chown)" to "APP_USER=\$(stat -c '%U' $APP_DATA) && chown \$APP_USER:\$APP_USER $COOKIES_DB",
-            "Sửa quyền (chmod)" to "chmod 660 $COOKIES_DB",
-            "Sửa quyền (restorecon)" to "restorecon $COOKIES_DB || true"
-        )
+                    val cv = buildCookieValues(trimmed)
+                    db.insertOrThrow("cookies", null, cv)
+                    db.setTransactionSuccessful()
 
-        for ((name, cmd) in finalSteps) {
-            val r = runStep(name, cmd)
-            steps += r
-            if (!r.success) {
-                return Outcome(
-                    success = false,
-                    message = "Bước \"$name\" thất bại (exit ${r.exitCode}): ${r.error.ifBlank { r.output }}",
-                    steps = steps
-                )
+                    steps += StepResult(
+                        name = "Ghi cookie vào DB",
+                        success = true,
+                        exitCode = 0,
+                        output = "Đã xóa $deleted cookie cũ + chèn 1 cookie mới",
+                        error = ""
+                    )
+                } finally {
+                    db.endTransaction()
+                }
             }
+        } catch (e: Exception) {
+            steps += StepResult(
+                name = "Ghi cookie vào DB",
+                success = false,
+                exitCode = -1,
+                output = "",
+                error = e.message ?: "Unknown error"
+            )
+            cleanupCache(context)
+            return Outcome(
+                success = false,
+                message = "Lỗi ghi database SQLite: ${e.message}",
+                steps = steps
+            )
+        }
+
+        // 5. Copy DB ngược về Roblox + restore quyền
+        val restoreCmd = listOf(
+            "cp '${cacheDb.absolutePath}' '$COOKIES_DB'",
+            "APP_USER=\$(stat -c '%U' $APP_DATA) && chown \$APP_USER:\$APP_USER $COOKIES_DB",
+            "chmod 660 $COOKIES_DB",
+            "restorecon $COOKIES_DB || true"
+        ).joinToString(" && ")
+        val restore = runStep("Đẩy DB lại Roblox + sửa quyền", restoreCmd)
+        steps += restore
+        cleanupCache(context)
+        if (!restore.success) {
+            return Outcome(
+                success = false,
+                message = "Không đẩy được DB ngược về Roblox: ${restore.error.ifBlank { restore.output }}",
+                steps = steps
+            )
         }
 
         return Outcome(
@@ -286,24 +392,35 @@ object RobloxLoginManager {
         )
     }
 
-    /** Xây dựng câu lệnh `INSERT OR REPLACE` cho bảng `cookies` của Chromium. */
-    private fun buildInsertSql(cookieValue: String): String {
+    /** Build [ContentValues] cho 1 dòng cookie `.ROBLOSECURITY` với host `.roblox.com`. */
+    private fun buildCookieValues(cookieValue: String): ContentValues {
         // Chromium dùng microseconds kể từ epoch Windows (1601-01-01).
         // Khoảng cách giữa 1601-01-01 và 1970-01-01 là 11644473600 giây.
         val unixEpochOffsetMicros = 11644473600L * 1_000_000L
         val nowMicros = System.currentTimeMillis() * 1_000L + unixEpochOffsetMicros
-        val creationUtc = nowMicros
         // Cookie .ROBLOSECURITY mặc định có hiệu lực ~1 năm; lấy 400 ngày
         // (giới hạn tối đa của Chromium đối với cookie persistent).
         val expiresUtc = nowMicros + 400L * 86400L * 1_000_000L
-        val lastAccessUtc = nowMicros
-        val lastUpdateUtc = nowMicros
 
-        return "INSERT OR REPLACE INTO cookies " +
-            "(creation_utc, host_key, top_frame_site_key, name, value, encrypted_value, path, expires_utc, " +
-            "is_secure, is_httponly, last_access_utc, has_expires, is_persistent, priority, samesite, " +
-            "source_scheme, source_port, last_update_utc) " +
-            "VALUES ($creationUtc, '.roblox.com', '', '$COOKIE_NAME', '$cookieValue', X'', '/', $expiresUtc, " +
-            "1, 1, $lastAccessUtc, 1, 1, 1, -1, 2, 443, $lastUpdateUtc);"
+        return ContentValues().apply {
+            put("creation_utc", nowMicros)
+            put("host_key", ".roblox.com")
+            put("top_frame_site_key", "")
+            put("name", COOKIE_NAME)
+            put("value", cookieValue)
+            put("encrypted_value", ByteArray(0))
+            put("path", "/")
+            put("expires_utc", expiresUtc)
+            put("is_secure", 1)
+            put("is_httponly", 1)
+            put("last_access_utc", nowMicros)
+            put("has_expires", 1)
+            put("is_persistent", 1)
+            put("priority", 1)
+            put("samesite", -1)
+            put("source_scheme", 2)
+            put("source_port", 443)
+            put("last_update_utc", nowMicros)
+        }
     }
 }

@@ -95,7 +95,7 @@ fun RobloxLoginScreen(
                     extracting = true
                     extractedCookie = null
                     val outcome = withContext(Dispatchers.IO) {
-                        RobloxLoginManager.extractCookie()
+                        RobloxLoginManager.extractCookie(context)
                     }
                     lastResult = outcome
                     extracting = false
@@ -147,7 +147,7 @@ fun RobloxLoginScreen(
                 scope.launch {
                     injecting = true
                     val outcome = withContext(Dispatchers.IO) {
-                        RobloxLoginManager.injectCookie(cookie)
+                        RobloxLoginManager.injectCookie(context, cookie)
                     }
                     lastResult = outcome
                     injecting = false

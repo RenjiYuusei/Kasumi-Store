@@ -11,10 +11,10 @@
     4. Sửa quyền (`chown`/`chmod`/`restorecon`) cho khớp với uid của ứng dụng Roblox.
   - **Hiển thị nhật ký từng bước**: Mỗi bước root đều có log chi tiết để dễ chẩn đoán khi gặp lỗi.
   - **Bảo mật**: Có cảnh báo trong UI; cookie được ẩn mặc định (toggle hiện/ẩn) và validate định dạng (`_|WARNING:` prefix) trước khi chèn vào SQL.
-  - Yêu cầu: Quyền root (Magisk/KernelSU) và lệnh `sqlite3` trên thiết bị; ứng dụng Roblox đã được cài (`com.roblox.client`).
+  - Yêu cầu: Quyền root (Magisk/KernelSU); ứng dụng Roblox đã được cài (`com.roblox.client`). Không cần binary `sqlite3` trên thiết bị (đọc/ghi DB qua API Android `SQLiteDatabase`).
 
 ### 🛠️Hạ tầng
-- **`RobloxLoginManager`**: Module mới sử dụng `ProcessBuilder("su", "-c", ...)` để chạy lệnh root, escape SQL/shell an toàn cho cookie.
+- **`RobloxLoginManager`**: Module mới sử dụng `ProcessBuilder("su", "-c", ...)` chỉ để **copy** file DB sang `cacheDir` của ứng dụng; việc đọc/ghi DB SQLite được thực hiện bằng API `android.database.sqlite.SQLiteDatabase` thuần Kotlin (Cursor + ContentValues), **không cần binary `sqlite3`** trên thiết bị. Sau khi sửa xong, copy ngược lại + restore quyền (chown/chmod 660/restorecon).
 - **Bump phiên bản**: `1.6.0` → `1.7.0` (versionCode 13 → 14).
 
 ## [1.6.0] - 2026-04-24
