@@ -46,6 +46,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -369,6 +371,30 @@ class MainActivity : ComponentActivity() {
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
+                    NavigationBarItem(
+                        icon = {
+                            val scale by animateFloatAsState(
+                                targetValue = if (selectedTab == 2) 1.2f else 1.0f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                                label = "scale"
+                            )
+                            Icon(
+                                if (selectedTab == 2) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Outlined.Login,
+                                contentDescription = stringResource(R.string.tab_roblox_login),
+                                modifier = Modifier.scale(scale)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.tab_roblox_login), fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2; searchQuery = "" },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
             }
         ) { innerPadding ->
@@ -381,21 +407,25 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                KasumiSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
-                )
+                if (selectedTab != 2) {
+                    KasumiSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
+                    )
+                }
 
-                if (selectedTab == 0) {
-                    AppsListContent(searchQuery, onShowSnackbar = { msg ->
+                when (selectedTab) {
+                    0 -> AppsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
-                } else {
-                    ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
+                    1 -> ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     }, onDownloadRequest = { script ->
                         scriptToDownload = script
+                    })
+                    else -> RobloxLoginScreen(onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
                 }
             }
@@ -415,6 +445,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
 
     @Composable
     fun AboutDialog(onDismiss: () -> Unit) {
