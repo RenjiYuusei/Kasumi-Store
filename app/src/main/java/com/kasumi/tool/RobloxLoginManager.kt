@@ -241,102 +241,117 @@ object RobloxLoginManager {
             )
         }
 
-        // 5. Ép cache DB sang legacy journal mode để tránh F2FS atomic write
-        // (lỗi `SQLITE_IOERR_BEGIN_ATOMIC` / code 7434 khi mở DB đang ở WAL mode
-        // trên filesystem của app khác uid). Nếu có file `-wal` thì xóa luôn
-        // (sau khi ép header về legacy, SQLite sẽ bỏ qua WAL).
-        try {
-            forceLegacyJournalMode(cacheDb)
-            cacheWal.delete()
-        } catch (e: Exception) {
-            steps += StepResult("Ép legacy journal mode", false, -1, "", e.message ?: "")
-            cleanupCache(context)
-            return Outcome(
-                success = false,
-                message = "Không điều chỉnh được file header DB: ${e.message}",
-                steps = steps
-            )
-        }
-        steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
-
-        // 6. Đọc cookie bằng SQLiteDatabase API (không dùng shell sqlite3)
+        // 5. Đọc cookie bằng SQLiteDatabase API (không dùng shell sqlite3).
+        //
+        // Chiến lược 2 bước:
+        //   a) Thử mở với WAL còn nguyên (READONLY) — SQLite sẽ tự merge WAL +
+        //      main DB để đưa ra các cookie mới nhất. Do `am force-stop` gửi
+        //      SIGKILL nên WAL có thể chứa cookie chưa checkpoint.
+        //   b) Nếu (a) thất bại vì F2FS atomic-write (`SQLITE_IOERR_BEGIN_ATOMIC`,
+        //      code 7434), fallback: ép byte 18-19 của header về 1 (legacy /
+        //      rollback journal) + xóa -wal trong cache, mở lại. Trường hợp
+        //      này có thể mất cookie chưa checkpoint từ WAL, nhưng vẫn lấy
+        //      được dữ liệu trong main DB.
         return try {
-            // Mở READONLY: không cần write, tránh mọi atomic-write.
-            SQLiteDatabase.openDatabase(
-                cacheDb.absolutePath,
-                null,
-                SQLiteDatabase.OPEN_READONLY
-            ).use { db ->
-                db.query(
-                    /* table = */ "cookies",
-                    /* columns = */ arrayOf("value", "encrypted_value"),
-                    /* selection = */ "name = ? AND host_key LIKE ?",
-                    /* selectionArgs = */ arrayOf(COOKIE_NAME, "%roblox.com"),
-                    /* groupBy = */ null,
-                    /* having = */ null,
-                    /* orderBy = */ "creation_utc DESC",
-                    /* limit = */ "1"
-                ).use { c ->
-                    if (!c.moveToFirst()) {
-                        steps += StepResult(
-                            "Truy vấn cookie",
-                            true,
-                            0,
-                            "Không tìm thấy cookie .ROBLOSECURITY",
-                            ""
-                        )
-                        return@use Outcome(
-                            success = false,
-                            message = "Không tìm thấy cookie .ROBLOSECURITY trong database. Hãy đăng nhập Roblox trước rồi thử lại.",
-                            steps = steps
-                        )
-                    }
-                    val value = c.getString(0).orEmpty()
-                    val encVal = try {
-                        c.getBlob(1)
-                    } catch (_: Exception) {
-                        null
-                    }
-                    if (value.isNotBlank()) {
-                        steps += StepResult("Truy vấn cookie", true, 0, "OK", "")
-                        Outcome(
-                            success = true,
-                            message = "Đã lấy cookie .ROBLOSECURITY thành công.",
-                            steps = steps,
-                            cookie = value
-                        )
-                    } else if (encVal != null && encVal.isNotEmpty()) {
-                        steps += StepResult(
-                            "Truy vấn cookie",
-                            true,
-                            0,
-                            "encrypted_value = ${encVal.size} bytes",
-                            ""
-                        )
-                        Outcome(
-                            success = false,
-                            message = "Cookie đang được WebView mã hóa (encrypted_value). Phiên bản WebView/Android này không cho phép đọc cookie trực tiếp.",
-                            steps = steps
-                        )
-                    } else {
-                        steps += StepResult("Truy vấn cookie", true, 0, "Empty", "")
-                        Outcome(
-                            success = false,
-                            message = "Cookie tồn tại nhưng giá trị rỗng. Có thể tài khoản chưa đăng nhập.",
-                            steps = steps
-                        )
-                    }
-                }
-            }
+            queryCookie(cacheDb, steps)
         } catch (e: Exception) {
-            steps += StepResult("Mở DB SQLite", false, -1, "", e.message ?: "Unknown error")
-            Outcome(
-                success = false,
-                message = "Lỗi mở database SQLite: ${e.message}",
-                steps = steps
+            // Fallback: ép legacy + bỏ WAL rồi thử lại
+            steps += StepResult(
+                "Mở DB (lần 1)",
+                false,
+                -1,
+                "",
+                "${e.message ?: "unknown"} — fallback sang legacy mode"
             )
+            try {
+                forceLegacyJournalMode(cacheDb)
+                cacheWal.delete()
+                steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
+                queryCookie(cacheDb, steps)
+            } catch (e2: Exception) {
+                steps += StepResult("Mở DB (lần 2)", false, -1, "", e2.message ?: "")
+                Outcome(
+                    success = false,
+                    message = "Lỗi mở database SQLite: ${e2.message}",
+                    steps = steps
+                )
+            }
         } finally {
             cleanupCache(context)
+        }
+    }
+
+    /**
+     * Truy vấn cookie từ file SQLite [cacheDb] ở cacheDir. Trách nhiệm của
+     * caller là đảm bảo file sẵn sàng để mở (đã copy về, chỉnh quyền,…).
+     * Phương thức này không cleanup file cache.
+     */
+    private fun queryCookie(cacheDb: File, steps: MutableList<StepResult>): Outcome {
+        SQLiteDatabase.openDatabase(
+            cacheDb.absolutePath,
+            null,
+            SQLiteDatabase.OPEN_READONLY
+        ).use { db ->
+            return db.query(
+                /* table = */ "cookies",
+                /* columns = */ arrayOf("value", "encrypted_value"),
+                /* selection = */ "name = ? AND host_key LIKE ?",
+                /* selectionArgs = */ arrayOf(COOKIE_NAME, "%roblox.com"),
+                /* groupBy = */ null,
+                /* having = */ null,
+                /* orderBy = */ "creation_utc DESC",
+                /* limit = */ "1"
+            ).use { c ->
+                if (!c.moveToFirst()) {
+                    steps += StepResult(
+                        "Truy vấn cookie",
+                        true,
+                        0,
+                        "Không tìm thấy cookie .ROBLOSECURITY",
+                        ""
+                    )
+                    return@use Outcome(
+                        success = false,
+                        message = "Không tìm thấy cookie .ROBLOSECURITY trong database. Hãy đăng nhập Roblox trước rồi thử lại.",
+                        steps = steps
+                    )
+                }
+                val value = c.getString(0).orEmpty()
+                val encVal = try {
+                    c.getBlob(1)
+                } catch (_: Exception) {
+                    null
+                }
+                if (value.isNotBlank()) {
+                    steps += StepResult("Truy vấn cookie", true, 0, "OK", "")
+                    Outcome(
+                        success = true,
+                        message = "Đã lấy cookie .ROBLOSECURITY thành công.",
+                        steps = steps,
+                        cookie = value
+                    )
+                } else if (encVal != null && encVal.isNotEmpty()) {
+                    steps += StepResult(
+                        "Truy vấn cookie",
+                        true,
+                        0,
+                        "encrypted_value = ${encVal.size} bytes",
+                        ""
+                    )
+                    Outcome(
+                        success = false,
+                        message = "Cookie đang được WebView mã hóa (encrypted_value). Phiên bản WebView/Android này không cho phép đọc cookie trực tiếp.",
+                        steps = steps
+                    )
+                } else {
+                    steps += StepResult("Truy vấn cookie", true, 0, "Empty", "")
+                    Outcome(
+                        success = false,
+                        message = "Cookie tồn tại nhưng giá trị rỗng. Có thể tài khoản chưa đăng nhập.",
+                        steps = steps
+                    )
+                }
+            }
         }
     }
 
@@ -404,7 +419,7 @@ object RobloxLoginManager {
             "test -f $cookiesDb && echo OK || echo MISSING"
         )
         steps += checkDb
-        if (!checkDb.output.contains("OK")) {
+        if (!checkDb.success || !checkDb.output.contains("OK")) {
             return Outcome(
                 success = false,
                 message = "Không tìm thấy database cookie của Roblox ($pkg). Hãy mở ứng dụng Roblox ít nhất 1 lần rồi thử lại.",
@@ -430,7 +445,8 @@ object RobloxLoginManager {
         }
 
         // 4. Ép cache DB sang legacy journal mode để tránh F2FS atomic write
-        // (`SQLITE_IOERR_BEGIN_ATOMIC` / code 7434).
+        // (`SQLITE_IOERR_BEGIN_ATOMIC` / code 7434). Đây là thao tác ghép
+        // 2 byte header trên cache copy, không ảnh hưởng DB gốc.
         try {
             forceLegacyJournalMode(cacheDb)
         } catch (e: Exception) {
@@ -454,7 +470,24 @@ object RobloxLoginManager {
                 // Đảm bảo connection thực sự ở rollback-journal mode + tắt
                 // synchronous full để không khởi động atomic-write trong commit.
                 db.execSQL("PRAGMA journal_mode = DELETE")
-                db.execSQL("PRAGMA synchronous = NORMAL")
+                db.execSQL("PRAGMA synchronous = OFF")
+
+                // Đọc schema thực tế của bảng `cookies`. Schema Chromium thay đổi
+                // theo phiên bản WebView (v12 → v23+); ta chỉ insert những cột
+                // mà schema thực sự có, tránh INSERT fail vì cột không tồn tại
+                // (DB cũ) hoặc thiếu cột bắt buộc không default (DB mới).
+                val schemaCols = listCookieColumns(db)
+                if (schemaCols.isEmpty()) {
+                    throw IllegalStateException("Không đọc được schema của bảng cookies")
+                }
+                steps += StepResult(
+                    "Đọc schema cookies",
+                    true,
+                    0,
+                    "${schemaCols.size} cột: ${schemaCols.joinToString(",")}",
+                    ""
+                )
+
                 db.beginTransaction()
                 try {
                     val deleted = db.delete(
@@ -463,7 +496,7 @@ object RobloxLoginManager {
                         /* whereArgs = */ arrayOf("%roblox.com")
                     )
 
-                    val cv = buildCookieValues(trimmed)
+                    val cv = buildCookieValues(trimmed, schemaCols)
                     db.insertOrThrow("cookies", null, cv)
                     db.setTransactionSuccessful()
 
@@ -471,7 +504,7 @@ object RobloxLoginManager {
                         name = "Ghi cookie vào DB",
                         success = true,
                         exitCode = 0,
-                        output = "Đã xóa $deleted cookie cũ + chèn 1 cookie mới",
+                        output = "Đã xóa $deleted cookie cũ + chèn 1 cookie mới (${cv.size()} cột)",
                         error = ""
                     )
                 } finally {
@@ -522,8 +555,37 @@ object RobloxLoginManager {
         )
     }
 
-    /** Build [ContentValues] cho 1 dòng cookie `.ROBLOSECURITY` với host `.roblox.com`. */
-    private fun buildCookieValues(cookieValue: String): ContentValues {
+    /**
+     * Trả về tập tên cột hiện có trong bảng `cookies` của Chromium WebView.
+     *
+     * Schema Chromium thay đổi theo thời gian:
+     *  - v12 (Chrome <80, ROM cũ): 15 cột, không có `top_frame_site_key`,
+     *    `source_port`, `last_update_utc`.
+     *  - v15+ (Chrome 92+): thêm `top_frame_site_key`, `source_port`.
+     *  - v17+ (Chrome 105+): thêm `last_update_utc`.
+     *  - v20+ (Chrome 112+): thêm `source_type`.
+     *  - v23+ (Chrome 118+): thêm `has_cross_site_ancestor`.
+     */
+    private fun listCookieColumns(db: SQLiteDatabase): Set<String> {
+        val cols = mutableSetOf<String>()
+        db.rawQuery("PRAGMA table_info(cookies)", null).use { c ->
+            val nameIdx = c.getColumnIndex("name")
+            if (nameIdx < 0) return cols
+            while (c.moveToNext()) {
+                cols.add(c.getString(nameIdx))
+            }
+        }
+        return cols
+    }
+
+    /**
+     * Build [ContentValues] cho 1 dòng cookie `.ROBLOSECURITY` với host `.roblox.com`.
+     *
+     * Chỉ set những cột có mặt trong [schemaCols] — để tương thích cả schema
+     * Chromium cũ (v12: không có `top_frame_site_key`/`source_port`/...) và mới
+     * (v23+: có thêm `source_type`, `has_cross_site_ancestor`).
+     */
+    private fun buildCookieValues(cookieValue: String, schemaCols: Set<String>): ContentValues {
         // Chromium dùng microseconds kể từ epoch Windows (1601-01-01).
         // Khoảng cách giữa 1601-01-01 và 1970-01-01 là 11644473600 giây.
         val unixEpochOffsetMicros = 11644473600L * 1_000_000L
@@ -532,25 +594,33 @@ object RobloxLoginManager {
         // (giới hạn tối đa của Chromium đối với cookie persistent).
         val expiresUtc = nowMicros + 400L * 86400L * 1_000_000L
 
-        return ContentValues().apply {
-            put("creation_utc", nowMicros)
-            put("host_key", ".roblox.com")
-            put("top_frame_site_key", "")
-            put("name", COOKIE_NAME)
-            put("value", cookieValue)
-            put("encrypted_value", ByteArray(0))
-            put("path", "/")
-            put("expires_utc", expiresUtc)
-            put("is_secure", 1)
-            put("is_httponly", 1)
-            put("last_access_utc", nowMicros)
-            put("has_expires", 1)
-            put("is_persistent", 1)
-            put("priority", 1)
-            put("samesite", -1)
-            put("source_scheme", 2)
-            put("source_port", 443)
-            put("last_update_utc", nowMicros)
-        }
+        val cv = ContentValues()
+        // Cột bắt buộc (NOT NULL không default) trong mọi schema:
+        if ("creation_utc" in schemaCols) cv.put("creation_utc", nowMicros)
+        if ("host_key" in schemaCols) cv.put("host_key", ".roblox.com")
+        if ("name" in schemaCols) cv.put("name", COOKIE_NAME)
+        if ("value" in schemaCols) cv.put("value", cookieValue)
+        if ("path" in schemaCols) cv.put("path", "/")
+        if ("expires_utc" in schemaCols) cv.put("expires_utc", expiresUtc)
+        if ("is_secure" in schemaCols) cv.put("is_secure", 1)
+        if ("is_httponly" in schemaCols) cv.put("is_httponly", 1)
+        if ("last_access_utc" in schemaCols) cv.put("last_access_utc", nowMicros)
+        // Có DEFAULT trong mọi phiên bản nhưng vẫn nên set để đúng ngữ nghĩa:
+        if ("has_expires" in schemaCols) cv.put("has_expires", 1)
+        if ("is_persistent" in schemaCols) cv.put("is_persistent", 1)
+        if ("priority" in schemaCols) cv.put("priority", 1)
+        if ("encrypted_value" in schemaCols) cv.put("encrypted_value", ByteArray(0))
+        if ("samesite" in schemaCols) cv.put("samesite", -1)
+        if ("source_scheme" in schemaCols) cv.put("source_scheme", 2)
+        // Chromium v15+:
+        if ("top_frame_site_key" in schemaCols) cv.put("top_frame_site_key", "")
+        if ("source_port" in schemaCols) cv.put("source_port", 443)
+        // Chromium v17+:
+        if ("last_update_utc" in schemaCols) cv.put("last_update_utc", nowMicros)
+        // Chromium v20+ (Chrome 112+):
+        if ("source_type" in schemaCols) cv.put("source_type", 0)
+        // Chromium v23+ (Chrome 118+):
+        if ("has_cross_site_ancestor" in schemaCols) cv.put("has_cross_site_ancestor", 0)
+        return cv
     }
 }
