@@ -1,7 +1,5 @@
 package com.kasumi.tool
 
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -108,6 +106,7 @@ fun RobloxLoginScreen(
                 scope.launch {
                     extracting = true
                     extractedCookie = null
+                    lastResult = null
                     val outcome = withContext(Dispatchers.IO) {
                         RobloxLoginManager.extractCookie(context)
                     }
@@ -139,7 +138,7 @@ fun RobloxLoginScreen(
             value = cookieInput,
             onValueChange = { cookieInput = it },
             onPasteFromClipboard = {
-                val clipboardText = readClipboard(context)
+                val clipboardText = clipboardManager.getText()?.toString()
                 if (clipboardText.isNullOrBlank()) {
                     onShowSnackbar("Clipboard trống")
                 } else {
@@ -160,6 +159,7 @@ fun RobloxLoginScreen(
                 }
                 scope.launch {
                     injecting = true
+                    lastResult = null
                     val outcome = withContext(Dispatchers.IO) {
                         RobloxLoginManager.injectCookie(context, cookie)
                     }
@@ -623,13 +623,3 @@ private fun WarningCard() {
     }
 }
 
-private fun readClipboard(context: Context): String? {
-    return try {
-        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        val clip = cm?.primaryClip ?: return null
-        if (clip.itemCount == 0) return null
-        clip.getItemAt(0).coerceToText(context)?.toString()
-    } catch (_: Exception) {
-        null
-    }
-}
