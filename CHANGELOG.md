@@ -3,7 +3,8 @@
 ## [1.7.0] - 2026-05-01
 ### ✨Tính năng mới
 - **Tab "Login Roblox"**: Thêm tab thứ ba ở thanh điều hướng để đăng nhập tài khoản Roblox bằng cookie `.ROBLOSECURITY` mà không cần tài khoản/mật khẩu.
-  - **Trích xuất Cookie**: Đọc cookie từ database WebView của Roblox tại `/data/data/com.roblox.client/app_webview/Default/Cookies` (cần root). Có nút sao chép và nút "Dùng để login" để đẩy cookie sang phần đăng nhập.
+  - **Hỗ trợ cả 2 bản Roblox**: tự động phát hiện `com.roblox.client` (global) và `com.roblox.client.vnggames` (VNG) — ưu tiên bản global nếu cài cả hai.
+  - **Trích xuất Cookie**: Đọc cookie từ database WebView của Roblox tại `/data/data/<package>/app_webview/Default/Cookies` (cần root). Có nút sao chép và nút "Dùng để login" để đẩy cookie sang phần đăng nhập.
   - **Đăng nhập bằng Cookie**: Dán cookie `.ROBLOSECURITY` của tài khoản cần đăng nhập, ứng dụng sẽ tự động:
     1. Force-stop ứng dụng Roblox.
     2. Xóa file `Cookies-journal/wal/shm` để tránh xung đột writer SQLite.
@@ -11,10 +12,12 @@
     4. Sửa quyền (`chown`/`chmod`/`restorecon`) cho khớp với uid của ứng dụng Roblox.
   - **Hiển thị nhật ký từng bước**: Mỗi bước root đều có log chi tiết để dễ chẩn đoán khi gặp lỗi.
   - **Bảo mật**: Có cảnh báo trong UI; cookie được ẩn mặc định (toggle hiện/ẩn) và validate định dạng (`_|WARNING:` prefix) trước khi chèn vào SQL.
-  - Yêu cầu: Quyền root (Magisk/KernelSU); ứng dụng Roblox đã được cài (`com.roblox.client`). Không cần binary `sqlite3` trên thiết bị (đọc/ghi DB qua API Android `SQLiteDatabase`).
+  - Yêu cầu: Quyền root (Magisk/KernelSU); một trong 2 bản Roblox đã cài (`com.roblox.client` hoặc `com.roblox.client.vnggames`). Không cần binary `sqlite3` trên thiết bị (đọc/ghi DB qua API Android `SQLiteDatabase`).
 
 ### 🛠️Hạ tầng
 - **`RobloxLoginManager`**: Module mới sử dụng `ProcessBuilder("su", "-c", ...)` chỉ để **copy** file DB sang `cacheDir` của ứng dụng; việc đọc/ghi DB SQLite được thực hiện bằng API `android.database.sqlite.SQLiteDatabase` thuần Kotlin (Cursor + ContentValues), **không cần binary `sqlite3`** trên thiết bị. Sau khi sửa xong, copy ngược lại + restore quyền (chown/chmod 660/restorecon).
+- **Đọc stdout/stderr song song** trong `executeAsRoot` (CompletableFuture) để tránh deadlock khi pipe buffer đầy.
+- **Chown bằng UID/GID dạng số** (`stat -c '%u'`/`'%g'`) thay vì tên symbolic — đáng tin cậy hơn trên các ROM Android không có `/etc/passwd`.
 - **Bump phiên bản**: `1.6.0` → `1.7.0` (versionCode 13 → 14).
 
 ## [1.6.0] - 2026-04-24
