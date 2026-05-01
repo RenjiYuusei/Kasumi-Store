@@ -38,8 +38,8 @@ object RobloxLoginManager {
     private const val CACHE_WAL_NAME = "roblox_cookies.db-wal"
     private const val CACHE_SHM_NAME = "roblox_cookies.db-shm"
 
-    // Mẫu chuỗi cookie .ROBLOSECURITY hợp lệ (token bắt đầu bằng "_|WARNING:")
-    private val COOKIE_REGEX = Regex("^[A-Za-z0-9_+\\-=/.|:]+\\.[A-Za-z0-9_+\\-=/.|:]+$")
+    private const val COOKIE_PREFIX = "_|WARNING:"
+    private const val COOKIE_MIN_LENGTH = 100
 
     data class StepResult(
         val name: String,
@@ -100,13 +100,22 @@ object RobloxLoginManager {
         }
     }
 
-    /** Kiểm tra cookie có hợp lệ về mặt định dạng (không gồm ký tự nguy hiểm). */
+    /**
+     * Kiểm tra cookie có nhìn như một cookie .ROBLOSECURITY hợp lệ hay không.
+     *
+     * Validate rất lỏng để người dùng có thể dán nguyên cookie từ bất kỳ nguồn nào.
+     * Việc ghi vào DB đã parameterized qua [ContentValues] / `whereArgs` nên không cần
+     * loại trừ ký tự "nguy hiểm" cho SQL/shell.
+     */
     fun isCookieFormatValid(cookie: String): Boolean {
         val trimmed = cookie.trim()
-        if (trimmed.length < 100) return false
-        // Cookie hợp lệ phải bắt đầu bằng tiền tố cảnh báo của Roblox
-        if (!trimmed.startsWith("_|WARNING:")) return false
-        return COOKIE_REGEX.matches(trimmed)
+        if (trimmed.length < COOKIE_MIN_LENGTH) return false
+        // Cookie .ROBLOSECURITY luôn bắt đầu bằng "_|WARNING:" theo format của Roblox
+        if (!trimmed.startsWith(COOKIE_PREFIX)) return false
+        // Không cho phép ký tự điều khiển / xuống dòng để tránh người dùng vô tình
+        // dán cả "name=value\n" của trình duyệt.
+        if (trimmed.any { it == '\n' || it == '\r' || it == '\t' || it == ' ' }) return false
+        return true
     }
 
     private fun cleanupCache(context: Context) {
@@ -264,7 +273,7 @@ object RobloxLoginManager {
         if (!isCookieFormatValid(trimmed)) {
             return Outcome(
                 success = false,
-                message = "Cookie không hợp lệ. Cookie phải bắt đầu bằng `_|WARNING:` và chỉ chứa các ký tự an toàn.",
+                message = "Cookie không hợp lệ. Phải bắt đầu bằng `_|WARNING:` và không chứa khoảng trắng/xuống dòng.",
                 steps = emptyList()
             )
         }
