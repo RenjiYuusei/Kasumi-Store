@@ -57,4 +57,48 @@
     <string name="roblox_login_inject_desc">Dán cookie .ROBLOSECURITY của tài khoản muốn đăng nhập. App sẽ tắt Roblox, ghi cookie và cấp lại quyền cần thiết.</string>
     <string name="roblox_login_warning_title">Cảnh báo</string>
     <string name="roblox_login_warning_body">Cookie .ROBLOSECURITY có quyền truy cập đầy đủ vào tài khoản. Tuyệt đối không chia sẻ với người lạ. Chỉ dùng cookie của tài khoản chính bạn.</string>
+
+    <!-- Login Roblox: snackbars -->
+    <string name="roblox_login_snackbar_copied">Đã sao chép cookie .ROBLOSECURITY</string>
+    <string name="roblox_login_snackbar_used_as_login">Đã dán cookie vào ô đăng nhập bên dưới</string>
+    <string name="roblox_login_snackbar_clipboard_empty">Clipboard trống</string>
+    <string name="roblox_login_snackbar_pasted">Đã dán cookie từ clipboard</string>
+    <string name="roblox_login_snackbar_paste_first">Hãy dán cookie .ROBLOSECURITY trước</string>
+    <string name="roblox_login_snackbar_invalid">Cookie không hợp lệ. Phải bắt đầu bằng `_|WARNING:`.</string>
+
+    <!-- Login Roblox: status card -->
+    <string name="roblox_login_status_title">Trạng thái thiết bị</string>
+    <string name="roblox_login_status_root_label">Quyền Root (su)</string>
+    <string name="roblox_login_status_root_hint">Cần root (Magisk/KernelSU) để truy cập database cookie.</string>
+    <string name="roblox_login_status_roblox_installed">Roblox đã cài (%1$s)</string>
+    <string name="roblox_login_status_roblox_missing">Roblox chưa cài (com.roblox.client / .vnggames)</string>
+    <string name="roblox_login_status_roblox_checking">Roblox (đang kiểm tra…)</string>
+    <string name="roblox_login_status_roblox_hint">Hãy cài đặt Roblox (bản global hoặc VNG) và mở ít nhất 1 lần để khởi tạo dữ liệu.</string>
+    <string name="roblox_login_status_state_checking">Đang kiểm tra…</string>
+    <string name="roblox_login_status_state_ready">Sẵn sàng</string>
+    <string name="roblox_login_status_state_unavailable">Không khả dụng</string>
+
+    <!-- Login Roblox: extract section -->
+    <string name="roblox_login_extract_loading">Đang đọc cookie…</string>
+    <string name="roblox_login_extract_button">Đọc cookie từ Roblox</string>
+    <string name="roblox_login_extract_copy">Sao chép</string>
+    <string name="roblox_login_extract_use_as_login">Dùng để login</string>
+
+    <!-- Login Roblox: cookie preview -->
+    <string name="roblox_login_cookie_preview_label">Cookie .ROBLOSECURITY (%1$d ký tự)</string>
+    <string name="roblox_login_cookie_preview_show">Hiện</string>
+    <string name="roblox_login_cookie_preview_hide">Ẩn</string>
+
+    <!-- Login Roblox: inject section -->
+    <string name="roblox_login_inject_field_label">.ROBLOSECURITY</string>
+    <string name="roblox_login_inject_field_placeholder">_|WARNING:-DO-NOT-SHARE-THIS…</string>
+    <string name="roblox_login_inject_paste">Dán</string>
+    <string name="roblox_login_inject_clear">Xóa</string>
+    <string name="roblox_login_inject_loading">Đang đăng nhập…</string>
+    <string name="roblox_login_inject_button">Đăng nhập</string>
+
+    <!-- Login Roblox: result log -->
+    <string name="roblox_login_result_success">Thành công</string>
+    <string name="roblox_login_result_error">Lỗi</string>
+    <string name="roblox_login_result_log_title">Nhật ký</string>
 </resources>

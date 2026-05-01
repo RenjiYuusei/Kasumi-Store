@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,6 +52,15 @@ fun RobloxLoginScreen(
     val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
+    // stringResource() chỉ gọi được trong @Composable; cache lại để dùng
+    // trong các lambda non-Composable (onCopy, onLogin, …).
+    val copiedMsg = stringResource(R.string.roblox_login_snackbar_copied)
+    val usedAsLoginMsg = stringResource(R.string.roblox_login_snackbar_used_as_login)
+    val clipboardEmptyMsg = stringResource(R.string.roblox_login_snackbar_clipboard_empty)
+    val pastedMsg = stringResource(R.string.roblox_login_snackbar_pasted)
+    val pasteFirstMsg = stringResource(R.string.roblox_login_snackbar_paste_first)
+    val invalidCookieMsg = stringResource(R.string.roblox_login_snackbar_invalid)
+
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var robloxInstalled by remember { mutableStateOf<Boolean?>(null) }
     var detectedPackage by remember { mutableStateOf<String?>(null) }
@@ -65,10 +75,14 @@ fun RobloxLoginScreen(
     var lastResult by remember { mutableStateOf<RobloxLoginManager.Outcome?>(null) }
 
     LaunchedEffect(Unit) {
-        rooted = withContext(Dispatchers.IO) { RootInstaller.isDeviceRooted() }
-        val pkg = withContext(Dispatchers.IO) {
+        // Hai I/O check độc lập — chạy song song để rút ngắn trạng thái
+        // "đang kiểm tra" còn bằng max(rooted, detectPkg) thay vì tổng.
+        val rootedDeferred = async(Dispatchers.IO) { RootInstaller.isDeviceRooted() }
+        val pkgDeferred = async(Dispatchers.IO) {
             RobloxLoginManager.detectActivePackage(context)
         }
+        rooted = rootedDeferred.await()
+        val pkg = pkgDeferred.await()
         detectedPackage = pkg
         robloxInstalled = pkg != null
     }
@@ -123,11 +137,11 @@ fun RobloxLoginScreen(
             onCopy = { cookie ->
                 clipboardManager.setText(AnnotatedString(cookie))
                 // Trên Android 13+, hệ thống đã hiển thị toast tự động; vẫn giữ snackbar.
-                onShowSnackbar("Đã sao chép cookie .ROBLOSECURITY")
+                onShowSnackbar(copiedMsg)
             },
             onUseAsLogin = { cookie ->
                 cookieInput = cookie
-                onShowSnackbar("Đã dán cookie vào ô đăng nhập bên dưới")
+                onShowSnackbar(usedAsLoginMsg)
             }
         )
 
@@ -139,21 +153,21 @@ fun RobloxLoginScreen(
             onPasteFromClipboard = {
                 val clipboardText = clipboardManager.getText()?.toString()
                 if (clipboardText.isNullOrBlank()) {
-                    onShowSnackbar("Clipboard trống")
+                    onShowSnackbar(clipboardEmptyMsg)
                 } else {
                     cookieInput = clipboardText.trim()
-                    onShowSnackbar("Đã dán cookie từ clipboard")
+                    onShowSnackbar(pastedMsg)
                 }
             },
             onClear = { cookieInput = "" },
             onLogin = {
                 val cookie = cookieInput.trim()
                 if (cookie.isEmpty()) {
-                    onShowSnackbar("Hãy dán cookie .ROBLOSECURITY trước")
+                    onShowSnackbar(pasteFirstMsg)
                     return@InjectSection
                 }
                 if (!RobloxLoginManager.isCookieFormatValid(cookie)) {
-                    onShowSnackbar("Cookie không hợp lệ. Phải bắt đầu bằng `_|WARNING:`.")
+                    onShowSnackbar(invalidCookieMsg)
                     return@InjectSection
                 }
                 scope.launch {
@@ -204,28 +218,31 @@ private fun StatusCard(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Trạng thái thiết bị",
+                    text = stringResource(R.string.roblox_login_status_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
             StatusRow(
-                label = "Quyền Root (su)",
+                label = stringResource(R.string.roblox_login_status_root_label),
                 ready = rooted == true,
                 pending = rooted == null,
-                hintWhenMissing = "Cần root (Magisk/KernelSU) để truy cập database cookie."
+                hintWhenMissing = stringResource(R.string.roblox_login_status_root_hint)
             )
             val robloxLabel = when {
-                detectedPackage != null -> "Roblox đã cài ($detectedPackage)"
-                robloxInstalled == false -> "Roblox chưa cài (com.roblox.client / .vnggames)"
-                else -> "Roblox (đang kiểm tra…)"
+                detectedPackage != null -> stringResource(
+                    R.string.roblox_login_status_roblox_installed,
+                    detectedPackage
+                )
+                robloxInstalled == false -> stringResource(R.string.roblox_login_status_roblox_missing)
+                else -> stringResource(R.string.roblox_login_status_roblox_checking)
             }
             StatusRow(
                 label = robloxLabel,
                 ready = robloxInstalled == true,
                 pending = robloxInstalled == null,
-                hintWhenMissing = "Hãy cài đặt Roblox (bản global hoặc VNG) và mở ít nhất 1 lần để khởi tạo dữ liệu."
+                hintWhenMissing = stringResource(R.string.roblox_login_status_roblox_hint)
             )
         }
     }
@@ -239,9 +256,21 @@ private fun StatusRow(
     hintWhenMissing: String
 ) {
     val (icon, tint, status) = when {
-        pending -> Triple(Icons.Default.Warning, MaterialTheme.colorScheme.onSurfaceVariant, "Đang kiểm tra…")
-        ready -> Triple(Icons.Default.CheckCircle, MaterialTheme.colorScheme.primary, "Sẵn sàng")
-        else -> Triple(Icons.Default.Error, MaterialTheme.colorScheme.error, "Không khả dụng")
+        pending -> Triple(
+            Icons.Default.Warning,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            stringResource(R.string.roblox_login_status_state_checking)
+        )
+        ready -> Triple(
+            Icons.Default.CheckCircle,
+            MaterialTheme.colorScheme.primary,
+            stringResource(R.string.roblox_login_status_state_ready)
+        )
+        else -> Triple(
+            Icons.Default.Error,
+            MaterialTheme.colorScheme.error,
+            stringResource(R.string.roblox_login_status_state_unavailable)
+        )
     }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -317,11 +346,11 @@ private fun ExtractSection(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("Đang đọc cookie…")
+                    Text(stringResource(R.string.roblox_login_extract_loading))
                 } else {
                     Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Đọc cookie từ Roblox")
+                    Text(stringResource(R.string.roblox_login_extract_button))
                 }
             }
 
@@ -342,7 +371,7 @@ private fun ExtractSection(
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Sao chép")
+                        Text(stringResource(R.string.roblox_login_extract_copy))
                     }
                     OutlinedButton(
                         onClick = { onUseAsLogin(cookie) },
@@ -351,7 +380,7 @@ private fun ExtractSection(
                     ) {
                         Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Dùng để login")
+                        Text(stringResource(R.string.roblox_login_extract_use_as_login))
                     }
                 }
             }
@@ -372,7 +401,10 @@ private fun CookiePreview(cookie: String, revealed: Boolean, onToggleReveal: () 
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "Cookie .ROBLOSECURITY (${cookie.length} ký tự)",
+                    text = stringResource(
+                        R.string.roblox_login_cookie_preview_label,
+                        cookie.length
+                    ),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
@@ -380,7 +412,9 @@ private fun CookiePreview(cookie: String, revealed: Boolean, onToggleReveal: () 
                 IconButton(onClick = onToggleReveal, modifier = Modifier.size(28.dp)) {
                     Icon(
                         if (revealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (revealed) "Ẩn" else "Hiện",
+                        contentDescription = if (revealed)
+                            stringResource(R.string.roblox_login_cookie_preview_hide)
+                        else stringResource(R.string.roblox_login_cookie_preview_show),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -445,8 +479,8 @@ private fun InjectSection(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(".ROBLOSECURITY") },
-                placeholder = { Text("_|WARNING:-DO-NOT-SHARE-THIS…") },
+                label = { Text(stringResource(R.string.roblox_login_inject_field_label)) },
+                placeholder = { Text(stringResource(R.string.roblox_login_inject_field_placeholder)) },
                 singleLine = false,
                 maxLines = 4,
                 visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
@@ -455,7 +489,9 @@ private fun InjectSection(
                     IconButton(onClick = { hidden = !hidden }) {
                         Icon(
                             if (hidden) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = if (hidden) "Hiện" else "Ẩn"
+                            contentDescription = if (hidden)
+                                stringResource(R.string.roblox_login_cookie_preview_show)
+                            else stringResource(R.string.roblox_login_cookie_preview_hide)
                         )
                     }
                 }
@@ -473,7 +509,7 @@ private fun InjectSection(
                 ) {
                     Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Dán")
+                    Text(stringResource(R.string.roblox_login_inject_paste))
                 }
                 OutlinedButton(
                     onClick = onClear,
@@ -481,7 +517,7 @@ private fun InjectSection(
                     shape = RoundedCornerShape(12.dp),
                     enabled = value.isNotEmpty() && !isLoading
                 ) {
-                    Text("Xóa")
+                    Text(stringResource(R.string.roblox_login_inject_clear))
                 }
             }
 
@@ -498,11 +534,11 @@ private fun InjectSection(
                         color = MaterialTheme.colorScheme.onPrimary
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("Đang đăng nhập…")
+                    Text(stringResource(R.string.roblox_login_inject_loading))
                 } else {
                     Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Đăng nhập")
+                    Text(stringResource(R.string.roblox_login_inject_button))
                 }
             }
         }
@@ -531,7 +567,9 @@ private fun ResultLogCard(result: RobloxLoginManager.Outcome) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (result.success) "Thành công" else "Lỗi",
+                    text = if (result.success)
+                        stringResource(R.string.roblox_login_result_success)
+                    else stringResource(R.string.roblox_login_result_error),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = borderColor
@@ -545,7 +583,7 @@ private fun ResultLogCard(result: RobloxLoginManager.Outcome) {
             if (result.steps.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Nhật ký",
+                    text = stringResource(R.string.roblox_login_result_log_title),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
