@@ -470,7 +470,11 @@ object RobloxLoginManager {
                 // Đảm bảo connection thực sự ở rollback-journal mode + tắt
                 // synchronous full để không khởi động atomic-write trong commit.
                 db.execSQL("PRAGMA journal_mode = DELETE")
-                db.execSQL("PRAGMA synchronous = OFF")
+                // Giữ mức NORMAL: SQLite vẫn fsync sau commit để cacheDb được
+                // lưu xuống đĩa trước khi bước copy ngược đọc lại. Việc bỏ
+                // batch atomic-write đã được giải quyết bằng forceLegacyJournalMode
+                // (ép header về 1) — không cần hạ mức xuống OFF.
+                db.execSQL("PRAGMA synchronous = NORMAL")
 
                 // Đọc schema thực tế của bảng `cookies`. Schema Chromium thay đổi
                 // theo phiên bản WebView (v12 → v23+); ta chỉ insert những cột
@@ -528,11 +532,17 @@ object RobloxLoginManager {
         }
 
         // 6. Copy DB ngược về Roblox + restore quyền.
-        // Dùng UID/GID dạng số (`%u`/`%g`) thay vì tên symbolic (`%U`) — trên một
-        // số ROM Android, tên user dạng `u0_a123` không có trong /etc/passwd nên
-        // `chown <name>` sẽ fail.
+        //
+        // Hai điểm quan trọng:
+        //  - Ghi qua file tạm `${cookiesDb}.tmp` rồi `mv` để có atomic
+        //    rename (syscall `rename()`). Nếu process bị kill giữa chừng,
+        //    file `Cookies` gốc vẫn nguyến vẹn — tránh corrupt SQLite.
+        //  - Dùng UID/GID dạng số (`%u`/`%g`) thay vì tên symbolic (`%U`)
+        //    — trên một số ROM Android, tên user dạng `u0_a123` không có
+        //    trong /etc/passwd nên `chown <name>` sẽ fail.
         val restoreCmd = listOf(
-            "cp '${cacheDb.absolutePath}' '$cookiesDb'",
+            "cp '${cacheDb.absolutePath}' '${cookiesDb}.tmp'",
+            "mv '${cookiesDb}.tmp' '$cookiesDb'",
             "APP_UID=\$(stat -c '%u' $appData) && APP_GID=\$(stat -c '%g' $appData) && chown \$APP_UID:\$APP_GID $cookiesDb",
             "chmod 660 $cookiesDb",
             "restorecon $cookiesDb || true"
