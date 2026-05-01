@@ -669,7 +669,9 @@ object RobloxLoginManager {
         steps += replace
         if (!replace.success) {
             // Cố gắng dọn file tmp leftover trong thư mục Roblox (chỉ root xóa được).
-            runStep("Dọn file tmp", "rm -f '${cookiesDb}.tmp'")
+            // Append vào steps để hiển thị trong nhật ký — user biết file tmp
+            // đã được dọn sạch hay vẫn còn sót.
+            steps += runStep("Dọn file tmp", "rm -f '${cookiesDb}.tmp'")
             cleanupCache(context)
             return Outcome(
                 success = false,
