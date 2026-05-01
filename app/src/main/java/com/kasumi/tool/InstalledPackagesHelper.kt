@@ -67,6 +67,7 @@ object InstalledPackagesHelper {
         packageNames: MutableMap<String, String>,
         installedInfo: MutableMap<String, InstalledInfo>,
     ) = coroutineScope {
+        val currentIds = items.mapTo(HashSet()) { it.id }
         val toExtract = items.filter { it.id !in packageNames }
         val extracted = withContext(Dispatchers.IO) {
             toExtract.map { item ->
@@ -77,7 +78,13 @@ object InstalledPackagesHelper {
             }.awaitAll().filterNotNull()
         }
 
-        val knownPackages = (packageNames.values + extracted.map { it.second }).toSet()
+        // Only consider packages tied to items currently in the list, plus the
+        // ones we just extracted. This prevents [packageNames] / [installedInfo]
+        // from growing unboundedly as the user refreshes sources over time.
+        val knownPackages = buildSet {
+            for ((id, pkg) in packageNames) if (id in currentIds) add(pkg)
+            for ((_, pkg) in extracted) add(pkg)
+        }
         val refreshed = withContext(Dispatchers.IO) {
             knownPackages.map { pkg ->
                 async { pkg to getInstalledInfo(context, pkg) }
@@ -85,6 +92,7 @@ object InstalledPackagesHelper {
         }
 
         withContext(Dispatchers.Main.immediate) {
+            packageNames.keys.retainAll(currentIds)
             for ((id, pkg) in extracted) packageNames[id] = pkg
             installedInfo.clear()
             for ((pkg, info) in refreshed) {
