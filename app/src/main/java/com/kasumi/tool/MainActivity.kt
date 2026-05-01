@@ -889,8 +889,9 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if (isInstalled) {
+                        val installedVer = installed?.versionName?.takeIf { it.isNotBlank() } ?: "?"
                         Text(
-                            text = stringResource(R.string.installed_version, installed?.versionName ?: ""),
+                            text = stringResource(R.string.installed_version, installedVer),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.secondary,
                             fontWeight = FontWeight.Medium,
