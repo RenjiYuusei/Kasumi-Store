@@ -28,6 +28,7 @@ object InstalledPackagesHelper {
             packageNameFromManifestJson(file)
         } else {
             runCatching {
+                @Suppress("DEPRECATION")
                 context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)?.packageName
             }.getOrNull()
         }

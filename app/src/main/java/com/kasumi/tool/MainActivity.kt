@@ -1348,7 +1348,8 @@ class MainActivity : ComponentActivity() {
             return
         }
         try {
-            val intent = Intent(Intent.ACTION_DELETE).apply {
+            @Suppress("DEPRECATION")
+            val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE).apply {
                 data = Uri.parse("package:$pkg")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
