@@ -587,31 +587,68 @@ object RobloxLoginManager {
 
         // 7. Copy DB ngược về Roblox + restore quyền.
         //
-        // Hai điểm quan trọng:
+        // Tách thành các bước độc lập thay vì nối toàn bộ bằng `&&`:
+        //  - Bước "ghi DB" (`cp` + `mv`) là CRITICAL — nếu fail thì abort.
+        //  - Các bước sửa quyền (`chown`, `chmod`, `restorecon`) chạy
+        //    riêng để một bước fail không skip các bước còn lại. Nếu
+        //    chỉ nối `&&`, lệnh `stat -c '%u'` fail (BusyBox quirk hoặc
+        //    Android Go) sẽ làm `chmod`/`restorecon` không chạy → file
+        //    `Cookies` thuộc `root:root` với perms mặc định, Roblox đọc
+        //    không được.
+        //  - `chown` ưu tiên `stat -c '%u'`; fallback sang `ls -nd` (in
+        //    UID/GID dạng số ở cột 3, 4) để tăng tương thích BusyBox.
         //  - Ghi qua file tạm `${cookiesDb}.tmp` rồi `mv` để có atomic
         //    rename (syscall `rename()`). Nếu process bị kill giữa chừng,
-        //    file `Cookies` gốc vẫn nguyến vẹn — tránh corrupt SQLite.
-        //  - Dùng UID/GID dạng số (`%u`/`%g`) thay vì tên symbolic (`%U`)
-        //    — trên một số ROM Android, tên user dạng `u0_a123` không có
-        //    trong /etc/passwd nên `chown <name>` sẽ fail.
-        val restoreCmd = listOf(
+        //    file `Cookies` gốc vẫn nguyên vẹn — tránh corrupt SQLite.
+        val replaceCmd = listOf(
             // Dọn file tmp leftover từ lần retry trước (nếu có) — file nằm
             // trong /data/data/<pkg>/app_webview/Default/ thuộc uid Roblox,
             // chỉ root mới xóa được, mà cleanupCache() chỉ dọn cacheDir của app.
             "rm -f '${cookiesDb}.tmp'",
             "cp '${cacheDb.absolutePath}' '${cookiesDb}.tmp'",
-            "mv '${cookiesDb}.tmp' '$cookiesDb'",
-            "APP_UID=\$(stat -c '%u' $appData) && APP_GID=\$(stat -c '%g' $appData) && chown \$APP_UID:\$APP_GID $cookiesDb",
-            "chmod 660 $cookiesDb",
-            "restorecon $cookiesDb || true"
+            "mv '${cookiesDb}.tmp' '$cookiesDb'"
         ).joinToString(" && ")
-        val restore = runStep("Đẩy DB lại Roblox + sửa quyền", restoreCmd)
-        steps += restore
-        cleanupCache(context)
-        if (!restore.success) {
+        val replace = runStep("Đẩy DB lại Roblox", replaceCmd)
+        steps += replace
+        if (!replace.success) {
+            // Cố gắng dọn file tmp leftover trong thư mục Roblox (chỉ root xóa được).
+            runStep("Dọn file tmp", "rm -f '${cookiesDb}.tmp'")
+            cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Không đẩy được DB ngược về Roblox: ${restore.error.ifBlank { restore.output }}",
+                message = "Không đẩy được DB ngược về Roblox: ${replace.error.ifBlank { replace.output }}",
+                steps = steps
+            )
+        }
+
+        // chown: ưu tiên `stat`, fallback `ls -nd` (BusyBox-compatible).
+        // `set -- $(ls -nd <dir>)` parse: $1=mode $2=links $3=UID $4=GID ...
+        val chownCmd =
+            "(APP_UID=\$(stat -c '%u' $appData 2>/dev/null) && " +
+            "APP_GID=\$(stat -c '%g' $appData 2>/dev/null) && " +
+            "[ -n \"\$APP_UID\" ] && [ -n \"\$APP_GID\" ] && " +
+            "chown \$APP_UID:\$APP_GID $cookiesDb) || " +
+            "(set -- \$(ls -nd $appData) && chown \$3:\$4 $cookiesDb)"
+        val chown = runStep("Sửa owner Cookies", chownCmd)
+        steps += chown
+
+        // chmod + restorecon: chạy độc lập, không phụ thuộc chown.
+        val chmod = runStep("Sửa quyền 660", "chmod 660 $cookiesDb")
+        steps += chmod
+        val restorecon = runStep("Khôi phục SELinux context", "restorecon $cookiesDb || true")
+        steps += restorecon
+
+        cleanupCache(context)
+
+        // chown thất bại là critical — Roblox process (UID riêng) sẽ không
+        // đọc được file thuộc root:root. chmod/restorecon fail thì warn
+        // nhưng vẫn coi như inject thành công (Roblox vẫn có thể đọc nhờ
+        // SELinux permissive hoặc DAC owner check).
+        if (!chown.success) {
+            return Outcome(
+                success = false,
+                message = "DB đã được đẩy về Roblox nhưng KHÔNG sửa được owner — Roblox sẽ không đọc được Cookies. " +
+                    "Vui lòng chạy lại với `su` hoạt động đúng. Lỗi: ${chown.error.ifBlank { chown.output }}",
                 steps = steps
             )
         }

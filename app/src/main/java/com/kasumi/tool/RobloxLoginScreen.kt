@@ -21,7 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -551,7 +550,7 @@ private fun ResultLogCard(result: RobloxLoginManager.Outcome) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 result.steps.forEach { step ->
-                    val color = if (step.success) Color(0xFF66BB6A) else MaterialTheme.colorScheme.error
+                    val color = if (step.success) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
                     Row(verticalAlignment = Alignment.Top) {
                         Text(
                             text = if (step.success) "✓" else "✗",
