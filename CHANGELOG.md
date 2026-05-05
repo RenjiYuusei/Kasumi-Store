@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1] - 2026-05-05
+### 🐛 Sửa lỗi
+- **Login Roblox bằng cookie — Lỗi `disk I/O error (code 7434)`**: Khắc phục lỗi `SQLITE_IOERR_BEGIN_ATOMIC` ở bước "Ghi cookie vào DB" trên một số thiết bị (đặc biệt là bản Roblox VNG `com.roblox.client.vnggames`).
+  - **Nguyên nhân**: SQLite chỉ ioctl `F2FS_IOC_START_ATOMIC_WRITE` khi commit ở rollback-journal mode (DELETE/TRUNCATE/PERSIST), KHÔNG phải WAL. Việc ép cache DB sang **legacy mode** (byte 18-19 = 1) trong bản trước thực ra là nguyên nhân kích hoạt atomic write — ngược với mục tiêu ban đầu. Trên cacheDir của app khác, ioctl này có thể trả EBUSY/EPERM (do attribute inode hoặc SELinux context) khiến commit fail.
+  - **Cách sửa**: Đổi sang ép **WAL mode** (byte 18-19 = 2) cho cache DB và `PRAGMA journal_mode = WAL` cho connection, sau đó `PRAGMA wal_checkpoint(TRUNCATE)` để flush WAL vào main DB trước khi đẩy ngược về Roblox. WAL pathway không bao giờ ioctl `F2FS_IOC_START_ATOMIC_WRITE` → bypass hoàn toàn lỗi 7434.
+- **Bump phiên bản**: `1.7.0` → `1.7.1` (versionCode 14 → 15).
+
 ## [1.7.0] - 2026-05-01
 ### ✨Tính năng mới
 - **Tab "Login Roblox"**: Thêm tab thứ ba ở thanh điều hướng để đăng nhập tài khoản Roblox bằng cookie `.ROBLOSECURITY` mà không cần tài khoản/mật khẩu.
