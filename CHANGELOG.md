@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.7.3] - 2026-05-05
+### 🎨 UI / UX
+- **Login Roblox — đồng bộ chiều cao 2 nút "Sao chép" / "Dùng để login"**: Trên màn hình hẹp, text "Dùng để login" bị wrap thành 2 dòng khiến nút phải cao hơn nút trái. Fix: ép `IntrinsicSize.Min` cho Row + `maxLines=1, softWrap=false, overflow=Ellipsis` cho Text + giảm contentPadding/icon size để text vừa khít trong 1 dòng.
+- **Bump phiên bản**: `1.7.2` → `1.7.3` (versionCode 16 → 17).
+
+## [1.7.2] - 2026-05-05
+### 🐛 Sửa lỗi
+- **Login Roblox bằng cookie — Lỗi `unknown error (code 0 SQLITE_OK): Queries can be performed using SQLiteDatabase query or rawQuery methods only`**: Tiếp nối fix `1.7.1` — sau khi đổi sang WAL mode, connection setup lại fail vì gọi `db.execSQL("PRAGMA journal_mode = WAL")`.
+  - **Nguyên nhân**: `PRAGMA journal_mode = X` (kể cả dạng setter) luôn trả về 1 row chứa mode mới. Android `SQLiteDatabase.execSQL()` từ chối thực thi câu lệnh có output column → throw `SQLiteException` ngay khi prepare statement. Bản 1.7.1 cũ dùng `PRAGMA journal_mode = DELETE` cũng gặp tình huống tương tự nhưng có thể đã bị che bởi lỗi 7434 ở bước commit nên không lộ ra.
+  - **Cách sửa**: Đổi `db.execSQL("PRAGMA journal_mode = WAL")` thành `db.rawQuery("PRAGMA journal_mode = WAL", null).use { ... }` và verify cột 0 = `"wal"`. Nếu mode trả về khác `wal` → throw để abort thay vì rơi xuống rollback journal (có thể lại trigger 7434). `PRAGMA synchronous = NORMAL` (setter) KHÔNG trả row nên giữ nguyên `execSQL`.
+- **Bump phiên bản**: `1.7.1` → `1.7.2` (versionCode 15 → 16).
+
+## [1.7.1] - 2026-05-05
+### 🐛 Sửa lỗi
+- **Login Roblox bằng cookie — Lỗi `disk I/O error (code 7434)`**: Khắc phục lỗi `SQLITE_IOERR_BEGIN_ATOMIC` ở bước "Ghi cookie vào DB" trên một số thiết bị (đặc biệt là bản Roblox VNG `com.roblox.client.vnggames`).
+  - **Nguyên nhân**: SQLite chỉ ioctl `F2FS_IOC_START_ATOMIC_WRITE` khi commit ở rollback-journal mode (DELETE/TRUNCATE/PERSIST), KHÔNG phải WAL. Việc ép cache DB sang **legacy mode** (byte 18-19 = 1) trong bản trước thực ra là nguyên nhân kích hoạt atomic write — ngược với mục tiêu ban đầu. Trên cacheDir của app khác, ioctl này có thể trả EBUSY/EPERM (do attribute inode hoặc SELinux context) khiến commit fail.
+  - **Cách sửa**: Đổi sang ép **WAL mode** (byte 18-19 = 2) cho cache DB và `PRAGMA journal_mode = WAL` cho connection, sau đó `PRAGMA wal_checkpoint(TRUNCATE)` để flush WAL vào main DB trước khi đẩy ngược về Roblox. WAL pathway không bao giờ ioctl `F2FS_IOC_START_ATOMIC_WRITE` → bypass hoàn toàn lỗi 7434.
+- **Bump phiên bản**: `1.7.0` → `1.7.1` (versionCode 14 → 15).
+
 ## [1.7.0] - 2026-05-01
 ### ✨Tính năng mới
 - **Tab "Login Roblox"**: Thêm tab thứ ba ở thanh điều hướng để đăng nhập tài khoản Roblox bằng cookie `.ROBLOSECURITY` mà không cần tài khoản/mật khẩu.

@@ -219,24 +219,58 @@ object RobloxLoginManager {
     }
 
     /**
-     * Sau khi copy DB sang cacheDir, ta hay gặp lỗi
-     * `SQLITE_IOERR_BEGIN_ATOMIC` (code 7434) trên Android vì SQLite cố dùng
-     * tính năng F2FS atomic write khi DB đang ở **WAL mode** (byte 18–19 của
-     * file header = 2). Trên cacheDir của app khác (khác uid với DB gốc),
-     * F2FS atomic write thuờng bị từ chối.
+     * Ghi đè byte 18-19 của file header SQLite để ép journal mode khi mở.
+     * Byte 18 = file format write version, byte 19 = file format read version.
+     * Giá trị: `1` = legacy / rollback journal, `2` = WAL.
      *
-     * Ghi đè byte 18 và 19 về `1` (legacy / rollback journal) để SQLite
-     * bỏ qua WAL hoàn toàn trong bản copy này. Việc này không ảnh hưởng
-     * đến DB gốc của Roblox (sẽ được khởi tạo lại WAL khi Roblox mở).
+     * **Lưu ý F2FS atomic write & lỗi `SQLITE_IOERR_BEGIN_ATOMIC` (code 7434):**
+     *
+     * Trái với suy nghĩ ban đầu, **WAL mode KHÔNG kích hoạt** F2FS atomic
+     * write. SQLite chỉ ioctl `F2FS_IOC_START_ATOMIC_WRITE` khi đang ở
+     * **rollback-journal** mode (DELETE/TRUNCATE/PERSIST) — đây là cơ chế
+     * tối ưu commit để tránh phải ghi journal file. Trong WAL mode,
+     * durability được đảm bảo qua WAL file riêng, không cần atomic file
+     * replace.
+     *
+     * Trên cacheDir, file DB được `cp` từ thư mục data của package khác
+     * (Roblox) — inode có thể có atomic-write attribute hoặc SELinux context
+     * khiến `F2FS_IOC_START_ATOMIC_WRITE` trả về EBUSY/EPERM thay vì
+     * ENOTTY/EOPNOTSUPP. SQLite chỉ tự disable feature khi gặp ENOTTY/EOPNOTSUPP;
+     * các lỗi khác → trả về `SQLITE_IOERR_BEGIN_ATOMIC` và commit thất bại.
+     *
+     * → Khi cần GHI vào cache DB, dùng [forceWalJournalMode] (mode = 2) để
+     *   bỏ qua hoàn toàn codepath atomic write.
+     * → Khi chỉ ĐỌC (extract cookie), [forceLegacyJournalMode] (mode = 1)
+     *   vẫn an toàn vì atomic write không kích hoạt trên READONLY open;
+     *   mục đích ở đó là loại bỏ tham chiếu WAL khi -wal file đã bị xoá
+     *   (sau khi Roblox bị `am force-stop` SIGKILL giữa lúc checkpoint).
      */
     private fun forceLegacyJournalMode(dbFile: File) {
         if (dbFile.length() < 100) return
         RandomAccessFile(dbFile, "rw").use { raf ->
             raf.seek(18L)
-            // 18 = file format write version, 19 = file format read version.
-            // 1 = legacy/rollback, 2 = WAL.
             raf.writeByte(1)
             raf.writeByte(1)
+        }
+    }
+
+    /**
+     * Ép byte 18-19 của file header về `2` (WAL) — xem chi tiết về F2FS
+     * atomic write trong doc của [forceLegacyJournalMode].
+     *
+     * Dùng trước khi mở DB ở chế độ READWRITE để **tránh** lỗi
+     * `SQLITE_IOERR_BEGIN_ATOMIC` (code 7434): WAL mode không bao giờ ioctl
+     * `F2FS_IOC_START_ATOMIC_WRITE` khi commit. Cookies DB của Chromium
+     * WebView mặc định đã ở WAL mode nên thường đây là no-op, nhưng vẫn
+     * gọi để bảo đảm — phòng trường hợp ROM/WebView cũ tạo DB ở rollback
+     * journal mode.
+     */
+    private fun forceWalJournalMode(dbFile: File) {
+        if (dbFile.length() < 100) return
+        RandomAccessFile(dbFile, "rw").use { raf ->
+            raf.seek(18L)
+            raf.writeByte(2)
+            raf.writeByte(2)
         }
     }
 
@@ -505,13 +539,19 @@ object RobloxLoginManager {
             )
         }
 
-        // 4. Ép cache DB sang legacy journal mode để tránh F2FS atomic write
-        // (`SQLITE_IOERR_BEGIN_ATOMIC` / code 7434). Đây là thao tác ghép
-        // 2 byte header trên cache copy, không ảnh hưởng DB gốc.
+        // 4. Ép cache DB sang WAL journal mode để tránh F2FS atomic write
+        // (`SQLITE_IOERR_BEGIN_ATOMIC` / code 7434).
+        //
+        // SQLite chỉ ioctl `F2FS_IOC_START_ATOMIC_WRITE` khi commit ở
+        // rollback-journal mode (DELETE/TRUNCATE/PERSIST). WAL mode dùng
+        // WAL file riêng để track durability nên KHÔNG đụng tới atomic
+        // write → bypass hoàn toàn lỗi 7434 trên cacheDir. Đây là thao
+        // tác ghi 2 byte header trên cache copy, không ảnh hưởng DB gốc
+        // của Roblox.
         try {
-            forceLegacyJournalMode(cacheDb)
+            forceWalJournalMode(cacheDb)
         } catch (e: Exception) {
-            steps += StepResult("Ép legacy journal mode", false, -1, "", e.message ?: "")
+            steps += StepResult("Ép WAL journal mode", false, -1, "", e.message ?: "")
             cleanupCache(context)
             return Outcome(
                 success = false,
@@ -519,7 +559,7 @@ object RobloxLoginManager {
                 steps = steps
             )
         }
-        steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
+        steps += StepResult("Ép WAL journal mode", true, 0, "OK", "")
 
         // 5. Probe encryption mode: nếu WebView của Roblox đang lưu cookie
         // dạng encrypted_value (Chromium 112+ với OSCrypt enabled), việc
@@ -578,13 +618,32 @@ object RobloxLoginManager {
                 null,
                 SQLiteDatabase.OPEN_READWRITE
             ).use { db ->
-                // Đảm bảo connection thực sự ở rollback-journal mode + tắt
-                // synchronous full để không khởi động atomic-write trong commit.
-                db.execSQL("PRAGMA journal_mode = DELETE")
-                // Giữ mức NORMAL: SQLite vẫn fsync sau commit để cacheDb được
-                // lưu xuống đĩa trước khi bước copy ngược đọc lại. Việc bỏ
-                // batch atomic-write đã được giải quyết bằng forceLegacyJournalMode
-                // (ép header về 1) — không cần hạ mức xuống OFF.
+                // Đảm bảo connection ở WAL mode để bypass F2FS atomic write
+                // (xem comment forceWalJournalMode). Header đã được ép sang WAL
+                // ở bước 4 nên thường PRAGMA này là no-op; vẫn gọi để chắc chắn
+                // — nếu phiên bản SQLite của Android lờ header bytes, lệnh này
+                // đảm bảo connection nhận đúng mode.
+                //
+                // PHẢI dùng rawQuery (không phải execSQL): `PRAGMA journal_mode = X`
+                // luôn trả về 1 row chứa mode mới (kể cả ở dạng setter), và Android
+                // SQLiteDatabase.execSQL() throw `SQLiteException("Queries can be
+                // performed using SQLiteDatabase query or rawQuery methods only")`
+                // khi statement có output column.
+                val effectiveMode = db.rawQuery("PRAGMA journal_mode = WAL", null).use { c ->
+                    if (c.moveToFirst()) c.getString(0)?.lowercase() else null
+                }
+                if (effectiveMode != "wal") {
+                    // Một số ROM có thể từ chối WAL trên cacheDir (vd: directory
+                    // không cho exclusive lock). Throw sớm để outer catch chuyển
+                    // thành Outcome failure, tránh trường hợp commit ở rollback
+                    // mode trigger lại lỗi 7434.
+                    throw IllegalStateException(
+                        "Không bật được WAL (mode hiện tại: $effectiveMode) — cache DB sẽ rơi vào rollback journal và có thể trigger lỗi 7434"
+                    )
+                }
+                // Giữ mức NORMAL: WAL + NORMAL fsync sau commit là cấu hình
+                // chuẩn của Chromium WebView (cũng dùng cho Cookies DB gốc).
+                // PRAGMA synchronous (setter) KHÔNG trả row → execSQL hợp lệ.
                 db.execSQL("PRAGMA synchronous = NORMAL")
 
                 // Đọc schema thực tế của bảng `cookies`. Schema Chromium thay đổi
@@ -625,10 +684,62 @@ object RobloxLoginManager {
                 } finally {
                     db.endTransaction()
                 }
+
+                // Sau commit ở WAL mode, dữ liệu đang nằm trong file `-wal`
+                // (cacheDir/roblox_cookies.db-wal) chứ chưa nhập vào main DB.
+                // Bước 7 ở dưới chỉ copy main DB ngược về Roblox — KHÔNG copy
+                // -wal, vì thư mục Roblox đã bị xoá Cookies-wal/shm ở bước 1
+                // (để tránh xung đột writer khi Roblox mở lại).
+                //
+                // → Phải `wal_checkpoint(TRUNCATE)` để merge toàn bộ WAL vào
+                //   main DB và truncate WAL về 0 byte. Sau đó main DB chứa
+                //   đầy đủ dữ liệu mới và có thể đẩy ngược lại Roblox an toàn.
+                //   `TRUNCATE` không kích hoạt F2FS atomic write (vẫn ở WAL
+                //   pathway, chỉ là pha checkpoint).
+                db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
+                    // `PRAGMA wal_checkpoint` luôn trả về đúng 1 row trên SQLite
+                    // hợp lệ; cursor rỗng nghĩa là pragma chạy không đúng — không
+                    // thể xác nhận trạng thái WAL → throw để abort thay vì silent
+                    // skip (cookie sẽ kẹt trong WAL nếu có frame chưa flush).
+                    if (!c.moveToFirst()) {
+                        throw IllegalStateException(
+                            "WAL checkpoint không trả về kết quả — không thể xác nhận trạng thái"
+                        )
+                    }
+                    // Cột 0 = busy (1 nếu có reader/writer khác đang giữ),
+                    // cột 1 = log frames trong WAL, cột 2 = frames đã checkpoint.
+                    val busy = c.getInt(0)
+                    val logFrames = c.getInt(1)
+                    val checkpointed = c.getInt(2)
+                    if (busy != 0) {
+                        // Hiếm gặp trên cache copy (chỉ có connection của ta),
+                        // nhưng nếu xảy ra phải ABORT — cookie mới vẫn nằm
+                        // trong WAL file, chưa merge vào main DB. Bước 7 chỉ
+                        // copy main DB ngược về Roblox nên cookie sẽ bị mất
+                        // → user thấy "đăng nhập thành công" nhưng mở Roblox
+                        // vẫn account cũ. Throw để outer catch chuyển thành
+                        // Outcome(success = false).
+                        throw IllegalStateException(
+                            "WAL checkpoint chưa hoàn thành (busy=$busy) — main DB có thể thiếu cookie mới"
+                        )
+                    }
+                    steps += StepResult(
+                        name = "Checkpoint WAL",
+                        success = true,
+                        exitCode = 0,
+                        output = "log=$logFrames frames, checkpointed=$checkpointed frames",
+                        error = ""
+                    )
+                }
             }
         } catch (e: Exception) {
+            // Catch chung cho cả khối: open DB, đọc schema, transaction
+            // (delete + insert), checkpoint WAL. Tên generic để không xung
+            // đột với các step cụ thể đã được append phía trên (vd:
+            // "Ghi cookie vào DB" đã success trước khi checkpoint throw,
+            // nếu reuse cùng tên sẽ thấy hai entry mâu thuẫn trong nhật ký).
             steps += StepResult(
-                name = "Ghi cookie vào DB",
+                name = "Thao tác DB SQLite",
                 success = false,
                 exitCode = -1,
                 output = "",
