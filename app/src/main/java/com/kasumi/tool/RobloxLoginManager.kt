@@ -685,13 +685,14 @@ object RobloxLoginManager {
                         val busy = c.getInt(0)
                         if (busy != 0) {
                             // Hiếm gặp trên cache copy (chỉ có connection của ta),
-                            // nhưng nếu xảy ra, log để dễ chẩn đoán.
-                            steps += StepResult(
-                                "Checkpoint WAL",
-                                false,
-                                -1,
-                                "busy=$busy",
-                                "WAL chưa flush hết — main DB có thể thiếu cookie mới"
+                            // nhưng nếu xảy ra phải ABORT — cookie mới vẫn nằm
+                            // trong WAL file, chưa merge vào main DB. Bước 7
+                            // chỉ copy main DB ngược về Roblox nên cookie sẽ
+                            // bị mất → user thấy "đăng nhập thành công" nhưng
+                            // mở Roblox vẫn account cũ. Throw để outer catch
+                            // chuyển thành Outcome(success = false).
+                            throw IllegalStateException(
+                                "WAL checkpoint chưa hoàn thành (busy=$busy) — main DB có thể thiếu cookie mới"
                             )
                         }
                     }
