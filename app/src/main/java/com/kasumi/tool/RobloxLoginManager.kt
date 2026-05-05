@@ -679,28 +679,49 @@ object RobloxLoginManager {
                 //   `TRUNCATE` không kích hoạt F2FS atomic write (vẫn ở WAL
                 //   pathway, chỉ là pha checkpoint).
                 db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
-                    if (c.moveToFirst()) {
-                        // Cột 0 = busy (1 nếu có reader/writer khác đang giữ),
-                        // cột 1 = log frames trong WAL, cột 2 = frames đã checkpoint.
-                        val busy = c.getInt(0)
-                        if (busy != 0) {
-                            // Hiếm gặp trên cache copy (chỉ có connection của ta),
-                            // nhưng nếu xảy ra phải ABORT — cookie mới vẫn nằm
-                            // trong WAL file, chưa merge vào main DB. Bước 7
-                            // chỉ copy main DB ngược về Roblox nên cookie sẽ
-                            // bị mất → user thấy "đăng nhập thành công" nhưng
-                            // mở Roblox vẫn account cũ. Throw để outer catch
-                            // chuyển thành Outcome(success = false).
-                            throw IllegalStateException(
-                                "WAL checkpoint chưa hoàn thành (busy=$busy) — main DB có thể thiếu cookie mới"
-                            )
-                        }
+                    // `PRAGMA wal_checkpoint` luôn trả về đúng 1 row trên SQLite
+                    // hợp lệ; cursor rỗng nghĩa là pragma chạy không đúng — không
+                    // thể xác nhận trạng thái WAL → throw để abort thay vì silent
+                    // skip (cookie sẽ kẹt trong WAL nếu có frame chưa flush).
+                    if (!c.moveToFirst()) {
+                        throw IllegalStateException(
+                            "WAL checkpoint không trả về kết quả — không thể xác nhận trạng thái"
+                        )
                     }
+                    // Cột 0 = busy (1 nếu có reader/writer khác đang giữ),
+                    // cột 1 = log frames trong WAL, cột 2 = frames đã checkpoint.
+                    val busy = c.getInt(0)
+                    val logFrames = c.getInt(1)
+                    val checkpointed = c.getInt(2)
+                    if (busy != 0) {
+                        // Hiếm gặp trên cache copy (chỉ có connection của ta),
+                        // nhưng nếu xảy ra phải ABORT — cookie mới vẫn nằm
+                        // trong WAL file, chưa merge vào main DB. Bước 7 chỉ
+                        // copy main DB ngược về Roblox nên cookie sẽ bị mất
+                        // → user thấy "đăng nhập thành công" nhưng mở Roblox
+                        // vẫn account cũ. Throw để outer catch chuyển thành
+                        // Outcome(success = false).
+                        throw IllegalStateException(
+                            "WAL checkpoint chưa hoàn thành (busy=$busy) — main DB có thể thiếu cookie mới"
+                        )
+                    }
+                    steps += StepResult(
+                        name = "Checkpoint WAL",
+                        success = true,
+                        exitCode = 0,
+                        output = "log=$logFrames frames, checkpointed=$checkpointed frames",
+                        error = ""
+                    )
                 }
             }
         } catch (e: Exception) {
+            // Catch chung cho cả khối: open DB, đọc schema, transaction
+            // (delete + insert), checkpoint WAL. Tên generic để không xung
+            // đột với các step cụ thể đã được append phía trên (vd:
+            // "Ghi cookie vào DB" đã success trước khi checkpoint throw,
+            // nếu reuse cùng tên sẽ thấy hai entry mâu thuẫn trong nhật ký).
             steps += StepResult(
-                name = "Ghi cookie vào DB",
+                name = "Thao tác DB SQLite",
                 success = false,
                 exitCode = -1,
                 output = "",
