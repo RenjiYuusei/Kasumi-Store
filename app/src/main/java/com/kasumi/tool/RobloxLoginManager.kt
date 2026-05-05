@@ -623,9 +623,27 @@ object RobloxLoginManager {
                 // ở bước 4 nên thường PRAGMA này là no-op; vẫn gọi để chắc chắn
                 // — nếu phiên bản SQLite của Android lờ header bytes, lệnh này
                 // đảm bảo connection nhận đúng mode.
-                db.execSQL("PRAGMA journal_mode = WAL")
+                //
+                // PHẢI dùng rawQuery (không phải execSQL): `PRAGMA journal_mode = X`
+                // luôn trả về 1 row chứa mode mới (kể cả ở dạng setter), và Android
+                // SQLiteDatabase.execSQL() throw `SQLiteException("Queries can be
+                // performed using SQLiteDatabase query or rawQuery methods only")`
+                // khi statement có output column.
+                val effectiveMode = db.rawQuery("PRAGMA journal_mode = WAL", null).use { c ->
+                    if (c.moveToFirst()) c.getString(0)?.lowercase() else null
+                }
+                if (effectiveMode != "wal") {
+                    // Một số ROM có thể từ chối WAL trên cacheDir (vd: directory
+                    // không cho exclusive lock). Throw sớm để outer catch chuyển
+                    // thành Outcome failure, tránh trường hợp commit ở rollback
+                    // mode trigger lại lỗi 7434.
+                    throw IllegalStateException(
+                        "Không bật được WAL (mode hiện tại: $effectiveMode) — cache DB sẽ rơi vào rollback journal và có thể trigger lỗi 7434"
+                    )
+                }
                 // Giữ mức NORMAL: WAL + NORMAL fsync sau commit là cấu hình
                 // chuẩn của Chromium WebView (cũng dùng cho Cookies DB gốc).
+                // PRAGMA synchronous (setter) KHÔNG trả row → execSQL hợp lệ.
                 db.execSQL("PRAGMA synchronous = NORMAL")
 
                 // Đọc schema thực tế của bảng `cookies`. Schema Chromium thay đổi

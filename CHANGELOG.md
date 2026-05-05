@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2] - 2026-05-05
+### 🐛 Sửa lỗi
+- **Login Roblox bằng cookie — Lỗi `unknown error (code 0 SQLITE_OK): Queries can be performed using SQLiteDatabase query or rawQuery methods only`**: Tiếp nối fix `1.7.1` — sau khi đổi sang WAL mode, connection setup lại fail vì gọi `db.execSQL("PRAGMA journal_mode = WAL")`.
+  - **Nguyên nhân**: `PRAGMA journal_mode = X` (kể cả dạng setter) luôn trả về 1 row chứa mode mới. Android `SQLiteDatabase.execSQL()` từ chối thực thi câu lệnh có output column → throw `SQLiteException` ngay khi prepare statement. Bản 1.7.1 cũ dùng `PRAGMA journal_mode = DELETE` cũng gặp tình huống tương tự nhưng có thể đã bị che bởi lỗi 7434 ở bước commit nên không lộ ra.
+  - **Cách sửa**: Đổi `db.execSQL("PRAGMA journal_mode = WAL")` thành `db.rawQuery("PRAGMA journal_mode = WAL", null).use { ... }` và verify cột 0 = `"wal"`. Nếu mode trả về khác `wal` → throw để abort thay vì rơi xuống rollback journal (có thể lại trigger 7434). `PRAGMA synchronous = NORMAL` (setter) KHÔNG trả row nên giữ nguyên `execSQL`.
+- **Bump phiên bản**: `1.7.1` → `1.7.2` (versionCode 15 → 16).
+
 ## [1.7.1] - 2026-05-05
 ### 🐛 Sửa lỗi
 - **Login Roblox bằng cookie — Lỗi `disk I/O error (code 7434)`**: Khắc phục lỗi `SQLITE_IOERR_BEGIN_ATOMIC` ở bước "Ghi cookie vào DB" trên một số thiết bị (đặc biệt là bản Roblox VNG `com.roblox.client.vnggames`).
