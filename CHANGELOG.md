@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.3] - 2026-05-05
+### 🎨 UI / UX
+- **Login Roblox — đồng bộ chiều cao 2 nút "Sao chép" / "Dùng để login"**: Trên màn hình hẹp, text "Dùng để login" bị wrap thành 2 dòng khiến nút phải cao hơn nút trái. Fix: ép `IntrinsicSize.Min` cho Row + `maxLines=1, softWrap=false, overflow=Ellipsis` cho Text + giảm contentPadding/icon size để text vừa khít trong 1 dòng.
+- **Bump phiên bản**: `1.7.2` → `1.7.3` (versionCode 16 → 17).
+
 ## [1.7.2] - 2026-05-05
 ### 🐛 Sửa lỗi
 - **Login Roblox bằng cookie — Lỗi `unknown error (code 0 SQLITE_OK): Queries can be performed using SQLiteDatabase query or rawQuery methods only`**: Tiếp nối fix `1.7.1` — sau khi đổi sang WAL mode, connection setup lại fail vì gọi `db.execSQL("PRAGMA journal_mode = WAL")`.
