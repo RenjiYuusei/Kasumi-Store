@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.8.0] - 2026-05-06
+### ✨Tính năng mới
+- **Tab "Auto Rejoin"**: Thêm tab thứ 4 ở thanh điều hướng để tự động rejoin Roblox khi tài khoản bị **kick / disconnect / crash / force-stop** — không phải mở app rồi bấm lại tay nữa.
+  - **Hỗ trợ cả 2 bản Roblox**: tự động phát hiện `com.roblox.client` (global) và `com.roblox.client.vnggames` (VNG) — ưu tiên bản global nếu cài cả hai (đồng bộ với tab "Login Roblox").
+  - **Cấu hình**:
+    - **Place ID** (bắt buộc): chỉ chấp nhận chuỗi số (1–16 chữ số), validate trước khi start.
+    - **Game Instance ID** (tùy chọn): dùng cho VIP server / Private server — gắn vào URL deeplink dạng `&gameInstanceId=…`.
+    - **Chu kỳ kiểm tra**: slider 5–60 giây, mặc định 15s.
+  - **Cơ chế kiểm tra trạng thái** (theo thứ tự early-return):
+    1. `pidof <pkg>` — process còn sống không.
+    2. `dumpsys activity activities | grep 'roblox://'` — đang trong game đúng `placeId` hay không (regex `placeId=([0-9]+)` để extract).
+    3. `logcat -d -t 1000 | grep -E '(You have been kicked|Lost connection with reason|Sending disconnect with reason|Disconnection Notification|Connection lost|Teleport failed|same account launched|server.?shut)'` — phát hiện disconnect/kick gần đây.
+  - **Cơ chế rejoin** (3 phương thức, fallback theo thứ tự):
+    - **M1 — Experiences deeplink**: `roblox://experiences/start?placeId=<id>[&gameInstanceId=<gid>]` (ưu tiên).
+    - **M2 — Legacy deeplink**: `roblox://placeId=<id>` (cho ROM/client cũ).
+    - **M3 — Cold launch**: `am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p <pkg>` (chỉ mở app).
+  - **UI**: Status card (root + Roblox), Config card (PlaceId, GameInstanceId, Slider chu kỳ), Control card (Start/Stop, hiển thị state hiện tại + tổng số lần đã rejoin), Log card (50 dòng cuộn, có timestamp + level INFO/OK/WARN/ERR), Warning card (cảnh báo cần app foreground).
+  - Yêu cầu: Quyền root (Magisk/KernelSU); một trong 2 bản Roblox đã cài.
+
+### 🛠️Hạ tầng
+- **`AutoRejoinManager`**: Module mới, độc lập với `RobloxLoginManager` (chỉ delegate `detectActivePackage` để giữ 1 nguồn sự thật khi cả 2 bản Roblox cùng cài). Pattern `executeAsRoot` được copy thay vì internalize để 2 module không phụ thuộc chéo.
+- **`AutoRejoinScreen`**: Vòng lặp polling bind vào `LaunchedEffect(running)` — khi user toggle off / navigate tab khác, coroutine cancel tự động qua scope hierarchy. Log buffer giới hạn 50 entries để tránh phình memory khi loop chạy nhiều giờ.
+- **Bump phiên bản**: `1.7.3` → `1.8.0` (versionCode 17 → 18).
+
 ## [1.7.3] - 2026-05-05
 ### 🎨 UI / UX
 - **Login Roblox — đồng bộ chiều cao 2 nút "Sao chép" / "Dùng để login"**: Trên màn hình hẹp, text "Dùng để login" bị wrap thành 2 dòng khiến nút phải cao hơn nút trái. Fix: ép `IntrinsicSize.Min` cho Row + `maxLines=1, softWrap=false, overflow=Ellipsis` cho Text + giảm contentPadding/icon size để text vừa khít trong 1 dòng.
