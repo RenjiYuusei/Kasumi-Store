@@ -65,7 +65,7 @@ object AutoRejoinManager {
         "Connection lost",
         "Teleport failed",
         "same account launched",
-        "server.?shut".toRegex().pattern,
+        "server.?shut",
     )
 
     /** Trạng thái runtime của Roblox tại 1 thời điểm cụ thể. */
@@ -150,12 +150,24 @@ object AutoRejoinManager {
      *     - Nếu placeId trùng targetPlaceId → [RobloxState.IN_GAME] (healthy).
      *     - Khác → [RobloxState.IN_GAME_WRONG_PLACE] (user tự teleport,
      *       không can thiệp).
-     *  3. Quét `LOGCAT_LINES` dòng logcat gần nhất tìm pattern disconnect.
+     *  3. Quét logcat từ thời điểm [sinceEpochMs] tìm pattern disconnect.
      *     - Trùng → [RobloxState.DISCONNECTED] (cần rejoin).
      *  4. Mặc định: process sống nhưng chưa vào game →
      *     [RobloxState.FOREGROUND_NO_GAME] (đang loading hoặc ở home).
+     *
+     * @param sinceEpochMs nếu > 0, chỉ quét các dòng logcat phát sinh sau
+     *     thời điểm đó (Unix epoch ms). Cần thiết sau mỗi lần rejoin để
+     *     **không** đọc lại đúng hint disconnect cũ trong buffer logcat —
+     *     đây là nguồn gốc của vòng lặp rejoin vô hạn (force-stop ngay khi
+     *     Roblox còn đang load 20–60s ban đầu). Nếu = 0 → fallback về
+     *     `-t $LOGCAT_LINES` (số dòng) cho tick đầu tiên trước khi user bấm
+     *     Start.
      */
-    fun getStatus(pkg: String, targetPlaceId: String): StatusReport {
+    fun getStatus(
+        pkg: String,
+        targetPlaceId: String,
+        sinceEpochMs: Long = 0L
+    ): StatusReport {
         val pidR = executeAsRoot("pidof $pkg 2>/dev/null | awk '{print \$1}'")
         val pid = pidR.output.trim().toIntOrNull()
         if (pid == null || pid <= 0) {
@@ -177,10 +189,22 @@ object AutoRejoinManager {
             }
         }
 
-        // Logcat -d (dump-and-exit) trả ngay về thay vì follow → an toàn
-        // gọi từ vòng lặp polling.
+        // Logcat filter:
+        //  - sinceEpochMs > 0 → `-T <secs>.<ms>` để chỉ in các dòng phát sinh
+        //    sau thời điểm rejoin gần nhất. Cú pháp `-T <epoch_sec>.<ms>` được
+        //    Android logcat hỗ trợ từ Android 5.0+ (bằng minSdk 24 của app).
+        //  - sinceEpochMs == 0 → tick đầu tiên, dùng `-t LOGCAT_LINES` để giới
+        //    hạn số dòng quét.
+        // Cả 2 chế độ đều `-d` (dump-and-exit) → không follow stdout.
+        val timeFilter = if (sinceEpochMs > 0) {
+            val secs = sinceEpochMs / 1000
+            val millis = (sinceEpochMs % 1000).toString().padStart(3, '0')
+            "-T $secs.$millis"
+        } else {
+            "-t $LOGCAT_LINES"
+        }
         val logcatCmd =
-            "logcat -d -t $LOGCAT_LINES 2>/dev/null | grep -i -E " +
+            "logcat -d $timeFilter 2>/dev/null | grep -i -E " +
                 "'(${DISCONNECT_PATTERNS.joinToString("|")})' | tail -5"
         val logR = executeAsRoot(logcatCmd, timeoutSec = 10L)
         val hint = logR.output.lineSequence().lastOrNull { it.isNotBlank() }?.trim()
