@@ -205,8 +205,7 @@ fun AutoRejoinScreen(
 
 // LogLevel / LogEntry / MAX_LOG_ENTRIES / formatter / appendLog đã chuyển sang
 // [AutoRejoinService] — vòng lặp polling ghi log vào StateFlow chung để UI
-// observe.
-private const val MAX_LOG_ENTRIES_UI = 50
+// observe. Service đã cap log buffer ở 50 entries nên UI không cần `take()`.
 
 @Composable
 private fun AutoRejoinStatusCard(
@@ -528,7 +527,7 @@ private fun LogCard(entries: List<LogEntry>) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                entries.take(MAX_LOG_ENTRIES_UI).forEach { entry ->
+                entries.forEach { entry ->
                     LogRow(entry)
                 }
             }

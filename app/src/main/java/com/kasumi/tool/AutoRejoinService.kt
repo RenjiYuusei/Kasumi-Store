@@ -291,22 +291,33 @@ class AutoRejoinService : Service() {
             Intent(this, AutoRejoinService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val stateLabel = when (s.currentState) {
-            AutoRejoinManager.RobloxState.IN_GAME -> "Đang trong game"
-            AutoRejoinManager.RobloxState.IN_GAME_WRONG_PLACE -> "Trong game khác placeId"
-            AutoRejoinManager.RobloxState.FOREGROUND_NO_GAME -> "Roblox đang load…"
-            AutoRejoinManager.RobloxState.NOT_RUNNING -> "Roblox tắt — đang rejoin"
-            AutoRejoinManager.RobloxState.DISCONNECTED -> "Bị kick/disconnect — rejoin"
-            null -> if (s.running) "Đang khởi tạo…" else "Đã dừng"
-        }
+        val stateLabel = getString(
+            when (s.currentState) {
+                AutoRejoinManager.RobloxState.IN_GAME -> R.string.auto_rejoin_notif_state_in_game
+                AutoRejoinManager.RobloxState.IN_GAME_WRONG_PLACE -> R.string.auto_rejoin_notif_state_in_game_wrong
+                AutoRejoinManager.RobloxState.FOREGROUND_NO_GAME -> R.string.auto_rejoin_notif_state_foreground_no_game
+                AutoRejoinManager.RobloxState.NOT_RUNNING -> R.string.auto_rejoin_notif_state_not_running
+                AutoRejoinManager.RobloxState.DISCONNECTED -> R.string.auto_rejoin_notif_state_disconnected
+                null -> if (s.running)
+                    R.string.auto_rejoin_notif_state_initializing
+                else
+                    R.string.auto_rejoin_notif_state_stopped
+            }
+        )
         val content = buildString {
-            append("Đã rejoin: ${s.rejoinCount} lần")
-            if (s.currentPid != null) append(" • PID ${s.currentPid}")
-            if (!s.placeId.isNullOrBlank()) append(" • placeId ${s.placeId}")
+            append(getString(R.string.auto_rejoin_notif_content_count, s.rejoinCount))
+            if (s.currentPid != null) {
+                append(" • ")
+                append(getString(R.string.auto_rejoin_notif_content_pid, s.currentPid))
+            }
+            if (!s.placeId.isNullOrBlank()) {
+                append(" • ")
+                append(getString(R.string.auto_rejoin_notif_content_place, s.placeId))
+            }
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
-            .setContentTitle("Auto Rejoin Roblox — $stateLabel")
+            .setContentTitle(getString(R.string.auto_rejoin_notif_title_format, stateLabel))
             .setContentText(content)
             .setStyle(NotificationCompat.BigTextStyle().bigText(content))
             .setOngoing(true)
@@ -316,7 +327,7 @@ class AutoRejoinService : Service() {
             .setContentIntent(openAppPi)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Dừng",
+                getString(R.string.auto_rejoin_notif_action_stop),
                 stopPi,
             )
             .build()
@@ -380,10 +391,10 @@ class AutoRejoinService : Service() {
             if (nm.getNotificationChannel(CHANNEL_ID) != null) return
             val ch = NotificationChannel(
                 CHANNEL_ID,
-                "Auto Rejoin Roblox",
+                context.getString(R.string.auto_rejoin_notif_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Thông báo dai khi vòng lặp auto-rejoin Roblox đang chạy ngầm."
+                description = context.getString(R.string.auto_rejoin_notif_channel_desc)
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)

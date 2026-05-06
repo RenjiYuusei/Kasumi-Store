@@ -155,4 +155,20 @@
     <string name="auto_rejoin_snackbar_started">Đã bật auto-rejoin (chạy ngầm như foreground service)</string>
     <string name="auto_rejoin_snackbar_stopped">Đã dừng auto-rejoin</string>
     <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
+
+    <!-- Auto Rejoin: foreground service notification -->
+    <string name="auto_rejoin_notif_channel_name">Auto Rejoin Roblox</string>
+    <string name="auto_rejoin_notif_channel_desc">Thông báo dai khi vòng lặp auto-rejoin Roblox đang chạy ngầm.</string>
+    <string name="auto_rejoin_notif_title_format">Auto Rejoin Roblox — %1$s</string>
+    <string name="auto_rejoin_notif_state_in_game">Đang trong game</string>
+    <string name="auto_rejoin_notif_state_in_game_wrong">Trong game khác placeId</string>
+    <string name="auto_rejoin_notif_state_foreground_no_game">Roblox đang load…</string>
+    <string name="auto_rejoin_notif_state_not_running">Roblox tắt — đang rejoin</string>
+    <string name="auto_rejoin_notif_state_disconnected">Bị kick/disconnect — rejoin</string>
+    <string name="auto_rejoin_notif_state_initializing">Đang khởi tạo…</string>
+    <string name="auto_rejoin_notif_state_stopped">Đã dừng</string>
+    <string name="auto_rejoin_notif_content_count">Đã rejoin: %1$d lần</string>
+    <string name="auto_rejoin_notif_content_pid">PID %1$d</string>
+    <string name="auto_rejoin_notif_content_place">placeId %1$s</string>
+    <string name="auto_rejoin_notif_action_stop">Dừng</string>
 </resources>
