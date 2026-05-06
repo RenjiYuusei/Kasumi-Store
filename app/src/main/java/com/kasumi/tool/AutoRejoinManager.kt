@@ -206,8 +206,12 @@ object AutoRejoinManager {
         } else {
             "-t $LOGCAT_LINES"
         }
+        // `--pid=<pid>` lọc log chỉ của process Roblox — tránh false positive
+        // từ app khác (Wi-Fi stack, game khác, hệ thống) cũng ghi các chuỗi
+        // như "Connection lost" / "Teleport failed". Flag này hỗ trợ từ
+        // Android API 24, khớp với minSdk của app.
         val logcatCmd =
-            "logcat -d $timeFilter 2>/dev/null | grep -i -E " +
+            "logcat -d $timeFilter --pid=$pid 2>/dev/null | grep -i -E " +
                 "'(${DISCONNECT_PATTERNS.joinToString("|")})' | tail -5"
         val logR = executeAsRoot(logcatCmd, timeoutSec = 10L)
         val hint = logR.output.lineSequence().lastOrNull { it.isNotBlank() }?.trim()
