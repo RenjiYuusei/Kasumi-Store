@@ -195,9 +195,13 @@ object AutoRejoinManager {
         //    hạn số dòng quét.
         // Cả 2 chế độ đều `-d` (dump-and-exit) → không follow stdout.
         val timeFilter = if (sinceEpochMs > 0) {
+            // Android logcat `-T <secs>.<frac>` diễn giải `frac` là
+            // microseconds (6 chữ số), không phải milliseconds (3 chữ số).
+            // Pad thêm 3 số `0` để chuyển ms → µs đúng spec — tránh lệch
+            // ~999ms khiến tick đầu sau rejoin có thể đọc sót log.
             val secs = sinceEpochMs / 1000
-            val millis = (sinceEpochMs % 1000).toString().padStart(3, '0')
-            "-T $secs.$millis"
+            val micros = ((sinceEpochMs % 1000) * 1000).toString().padStart(6, '0')
+            "-T $secs.$micros"
         } else {
             "-t $LOGCAT_LINES"
         }
@@ -297,7 +301,7 @@ object AutoRejoinManager {
             "-d ${shellQuote(m1Url)} -p ${shellQuote(pkg)}"
         val r1 = executeAsRoot(m1Cmd)
         attempts += RejoinAttempt("M1 — Experiences deeplink", m1Cmd, r1.exitCode, r1.output, r1.error)
-        if (r1.exitCode == 0 && !r1.output.contains("Error", ignoreCase = true)) return attempts
+        if (isAmStartSuccess(r1)) return attempts
 
         // M2: deeplink legacy
         val m2Url = "roblox://placeId=$placeId"
@@ -305,7 +309,7 @@ object AutoRejoinManager {
             "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
         val r2 = executeAsRoot(m2Cmd)
         attempts += RejoinAttempt("M2 — Legacy deeplink", m2Cmd, r2.exitCode, r2.output, r2.error)
-        if (r2.exitCode == 0 && !r2.output.contains("Error", ignoreCase = true)) return attempts
+        if (isAmStartSuccess(r2)) return attempts
 
         // M3: cold launch (chỉ mở app, không vào game)
         val m3Cmd = "am start -a android.intent.action.MAIN " +
@@ -322,4 +326,16 @@ object AutoRejoinManager {
      */
     private fun shellQuote(s: String): String =
         "'" + s.replace("'", "'\\''") + "'"
+
+    /**
+     * Kiểm tra `am start` thành công thực sự. Một số ROM (MIUI, ColorOS) có
+     * thể trả exit code 0 nhưng in `"Error: Activity class ... does not
+     * exist"` ra **stderr** thay vì stdout — nếu chỉ check stdout, M1 sẽ
+     * được coi là OK và return sớm mà không thử M2/M3, gây thêm 1 chu kỳ
+     * chờ + warmup 30s không cần thiết. Phải kiểm tra cả stdout lẫn stderr.
+     */
+    private fun isAmStartSuccess(r: RawResult): Boolean =
+        r.exitCode == 0 &&
+            !r.output.contains("Error", ignoreCase = true) &&
+            !r.error.contains("Error", ignoreCase = true)
 }
