@@ -1,7 +1,7 @@
 package com.kasumi.tool
 
 import android.content.Context
-import java.net.URLEncoder
+import android.net.Uri
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -169,7 +169,7 @@ object AutoRejoinManager {
         targetPlaceId: String,
         sinceEpochMs: Long = 0L
     ): StatusReport {
-        val pidR = executeAsRoot("pidof $pkg 2>/dev/null | awk '{print \$1}'")
+        val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null | awk '{print \$1}'")
         val pid = pidR.output.trim().toIntOrNull()
         if (pid == null || pid <= 0) {
             return StatusReport(RobloxState.NOT_RUNNING, null, null, null)
@@ -228,7 +228,7 @@ object AutoRejoinManager {
      * khi process đã chết).
      */
     fun forceStop(pkg: String): Boolean {
-        val r = executeAsRoot("am force-stop $pkg")
+        val r = executeAsRoot("am force-stop ${shellQuote(pkg)}")
         return r.exitCode == 0
     }
 
@@ -268,13 +268,18 @@ object AutoRejoinManager {
                 // URL-encode gid để xử lý các ký tự đặc biệt (`%`, `+`,
                 // khoảng trắng, `#`, ...) khi user dán nhầm. Với UUID chuẩn
                 // `[0-9a-f-]` thì encode là no-op (Roblox vẫn parse đúng).
-                // Dùng UTF-8 — `URLEncoder` luôn hỗ trợ charset này, không
-                // ném `UnsupportedEncodingException`.
-                append(URLEncoder.encode(gid, "UTF-8"))
+                //
+                // Dùng `android.net.Uri.encode` (RFC 3986) thay vì
+                // `URLEncoder.encode` (form-encoding): URLEncoder convert
+                // dấu cách thành `+` — Roblox URL parser (không phải HTML
+                // form parser) có thể không decode `+` thành space → drop
+                // private server link silently. Uri.encode tạo `%20` chuẩn
+                // cho query parameter.
+                append(Uri.encode(gid))
             }
         }
         val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
-            "-d ${shellQuote(m1Url)} -p $pkg"
+            "-d ${shellQuote(m1Url)} -p ${shellQuote(pkg)}"
         val r1 = executeAsRoot(m1Cmd)
         attempts += RejoinAttempt("M1 — Experiences deeplink", m1Cmd, r1.exitCode, r1.output, r1.error)
         if (r1.exitCode == 0 && !r1.output.contains("Error", ignoreCase = true)) return attempts
@@ -282,14 +287,14 @@ object AutoRejoinManager {
         // M2: deeplink legacy
         val m2Url = "roblox://placeId=$placeId"
         val m2Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
-            "-d ${shellQuote(m2Url)} -p $pkg"
+            "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
         val r2 = executeAsRoot(m2Cmd)
         attempts += RejoinAttempt("M2 — Legacy deeplink", m2Cmd, r2.exitCode, r2.output, r2.error)
         if (r2.exitCode == 0 && !r2.output.contains("Error", ignoreCase = true)) return attempts
 
         // M3: cold launch (chỉ mở app, không vào game)
         val m3Cmd = "am start -a android.intent.action.MAIN " +
-            "-c android.intent.category.LAUNCHER -p $pkg"
+            "-c android.intent.category.LAUNCHER -p ${shellQuote(pkg)}"
         val r3 = executeAsRoot(m3Cmd)
         attempts += RejoinAttempt("M3 — Cold launch (mở app)", m3Cmd, r3.exitCode, r3.output, r3.error)
         return attempts
