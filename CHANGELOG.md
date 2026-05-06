@@ -10,18 +10,26 @@
     - **Chu kỳ kiểm tra**: slider 5–60 giây, mặc định 15s.
   - **Cơ chế kiểm tra trạng thái** (theo thứ tự early-return):
     1. `pidof <pkg>` — process còn sống không.
-    2. `dumpsys activity activities | grep 'roblox://'` — đang trong game đúng `placeId` hay không (regex `placeId=([0-9]+)` để extract).
-    3. `logcat -d -t 1000 | grep -E '(You have been kicked|Lost connection with reason|Sending disconnect with reason|Disconnection Notification|Connection lost|Teleport failed|same account launched|server.?shut)'` — phát hiện disconnect/kick gần đây.
+    2. `logcat -d -T <epoch> --pid=<pid> | grep -E '(You have been kicked|Lost connection with reason|Sending disconnect with reason|Disconnection Notification|Connection lost|Teleport failed|same account launched|server.?shut)'` — phát hiện disconnect/kick gần đây của ĐÚNG process Roblox. Lọc theo `--pid` + `-T <epoch>` để tránh đọc lại hint cũ + tránh false positive từ app khác. **Phải chạy trước dumpsys**: Roblox dùng kiến trúc single-activity (Unity engine), Activity gốc vẫn còn trong task stack với đúng intent `placeId=<target>` ngay cả sau khi bị kick → nếu check IN_GAME trước, ta sẽ early-return `IN_GAME` và không bao giờ phát hiện disconnect.
+    3. `dumpsys activity activities | grep -F <pkg>` — đang trong game đúng `placeId` hay không (regex `placeId=([0-9]+)` để extract).
   - **Cơ chế rejoin** (3 phương thức, fallback theo thứ tự):
-    - **M1 — Experiences deeplink**: `roblox://experiences/start?placeId=<id>[&gameInstanceId=<gid>]` (ưu tiên).
+    - **M1 — Experiences deeplink**: `roblox://experiences/start?placeId=<id>[&gameInstanceId=<gid>]` (gid encode bằng `Uri.encode` RFC 3986; ưu tiên).
     - **M2 — Legacy deeplink**: `roblox://placeId=<id>` (cho ROM/client cũ).
     - **M3 — Cold launch**: `am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p <pkg>` (chỉ mở app).
-  - **UI**: Status card (root + Roblox), Config card (PlaceId, GameInstanceId, Slider chu kỳ), Control card (Start/Stop, hiển thị state hiện tại + tổng số lần đã rejoin), Log card (50 dòng cuộn, có timestamp + level INFO/OK/WARN/ERR), Warning card (cảnh báo cần app foreground).
+  - **Watchdog FOREGROUND_NO_GAME**: nếu deeplink trả exit 0 nhưng Roblox không load (placeId chết, server đóng, hoặc bị đẩy về home), đếm `noGameStreak`. Sau 8 tick liên tiếp (~2 phút với interval 15s mặc định), force-stop + rejoin để thoát kẹt.
+  - **UI**: Status card (root + Roblox), Config card (PlaceId, GameInstanceId, Slider chu kỳ), Control card (Start/Stop, hiển thị state hiện tại + tổng số lần đã rejoin), Log card (50 dòng cuộn, có timestamp + level INFO/OK/WARN/ERR), Warning card (cảnh báo về vận hành).
   - Yêu cầu: Quyền root (Magisk/KernelSU); một trong 2 bản Roblox đã cài.
 
 ### 🛠️Hạ tầng
-- **`AutoRejoinManager`**: Module mới, độc lập với `RobloxLoginManager` (chỉ delegate `detectActivePackage` để giữ 1 nguồn sự thật khi cả 2 bản Roblox cùng cài). Pattern `executeAsRoot` được copy thay vì internalize để 2 module không phụ thuộc chéo.
-- **`AutoRejoinScreen`**: Vòng lặp polling bind vào `LaunchedEffect(running)` — khi user toggle off / navigate tab khác, coroutine cancel tự động qua scope hierarchy. Log buffer giới hạn 50 entries để tránh phình memory khi loop chạy nhiều giờ.
+- **`AutoRejoinManager`**: Module mới, độc lập với `RobloxLoginManager` (chỉ delegate `detectActivePackage` để giữ 1 nguồn sự thật khi cả 2 bản Roblox cùng cài). Pattern `executeAsRoot` được copy thay vì internalize để 2 module không phụ thuộc chéo. Toàn bộ shell argument đi qua `shellQuote()` (pidof / am force-stop / am start / dumpsys) để defense-in-depth dù package name an toàn.
+- **`AutoRejoinService`** (foreground service, **mới**): vòng lặp polling chạy trong `Service` thay vì Composable để tiếp tục hoạt động khi user switch sang Roblox app. Trên Android 8+, mọi process không có FG service / activity ở foreground sẽ bị OS giới hạn background execution sau ~1–2 phút (aggressive hơn trên MIUI/ColorOS/OneUI) — không thể chạy auto-rejoin nếu loop bind vào `LaunchedEffect`.
+  - Expose `MutableStateFlow<AutoRejoinUiState>` singleton trong companion để UI observe qua `collectAsState()`. Khi Composable bị dispose / recompose, observation tự thiết lập lại từ StateFlow → UI khôi phục đúng state hiện tại.
+  - Persistent notification (channel `kasumi_auto_rejoin`, IMPORTANCE_LOW không kêu/rung) hiển thị state + rejoin count + nút "Dừng" qua `PendingIntent.getService(... ACTION_STOP)`. Tap notification → mở MainActivity. Tất cả nhãn đều qua `getString(R.string.*)` để i18n-ready.
+  - Manifest: `foregroundServiceType="specialUse"` + property `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` (Android 14+). Permissions mới: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS` (runtime request Android 13+ qua `rememberLauncherForActivityResult`).
+  - `START_NOT_STICKY` — không tự restart khi process bị OS kill (an toàn vì restart không có extras sẽ vô nghĩa). `onDestroy` reset `_state.running` để UI không kẹt khi service bị system kill / ADB terminate / OOM mà không đi qua `stopServiceCompletely()`.
+  - Khi `pkg`/`placeId` rỗng trong `handleStart`, vẫn gọi `startForegroundCompat()` 1 nhịp trước `stopSelf()` để thoả mãn Android 8+ contract (nếu không sẽ crash `Context.startForegroundService() did not then call Service.startForeground()`).
+  - `LOG_TIME_FMT` dùng `ThreadLocal<SimpleDateFormat>` — mỗi thread có instance riêng, an toàn cả khi sau này có refactor cho phép `appendLog` chạy từ IO thread.
+- **`AutoRejoinScreen`**: chỉ còn nhiệm vụ detect root + Roblox, nhận input cấu hình, start/stop service qua `AutoRejoinService.start()` / `.stop()` Intent helpers, observe `AutoRejoinService.state` qua `collectAsState()`. Log buffer giới hạn 50 entries (cap ở service, UI render trực tiếp không cần `take()`).
 - **Bump phiên bản**: `1.7.3` → `1.8.0` (versionCode 17 → 18).
 
 ## [1.7.3] - 2026-05-05
