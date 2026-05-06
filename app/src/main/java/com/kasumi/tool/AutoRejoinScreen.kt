@@ -84,6 +84,11 @@ fun AutoRejoinScreen(
     var currentState by remember { mutableStateOf<AutoRejoinManager.RobloxState?>(null) }
     var currentPid by remember { mutableStateOf<Int?>(null) }
     val logEntries = remember { mutableStateListOf<LogEntry>() }
+    // Đếm số tick liên tiếp ở `FOREGROUND_NO_GAME` — Roblox đang mở nhưng
+    // chưa vào game đúng placeId. Sau khi vượt ngưỡng, ta force rejoin để
+    // thoát khỏi tình trạng kẹt vô hạn (deeplink resolved OK nhưng game
+    // không load: placeId chết, server đóng, hoặc Roblox bị đẩy về home).
+    var noGameStreak by remember { mutableIntStateOf(0) }
     // Thời điểm rejoin gần nhất (Unix epoch ms) — truyền vào `getStatus` để
     // logcat chỉ đọc các dòng phát sinh sau thời điểm đó, tránh đọc lại
     // hint disconnect cũ → vòng lặp rejoin vô hạn trong lúc Roblox đang load
@@ -119,6 +124,13 @@ fun AutoRejoinScreen(
         // theo `lastRejoinEpochMs` lo cái phần DISCONNECTED, nên chỉ cần thêm
         // grace cho NOT_RUNNING).
         val warmupMs = 30_000L
+        // Số tick liên tiếp `FOREGROUND_NO_GAME` cho phép trước khi force
+        // rejoin. Với interval mặc định 15s → ~2 phút (8 tick) chờ game load,
+        // đủ cho cả case mạng yếu nhưng đủ ngắn để user không phải tự can
+        // thiệp khi placeId chết / server đóng.
+        val noGameMaxStreak = 8
+        // Reset streak khi loop start (Stop-Start lại từ đầu).
+        noGameStreak = 0
 
         while (isActive && running) {
             val report = withContext(Dispatchers.IO) {
@@ -131,6 +143,7 @@ fun AutoRejoinScreen(
             // Nhừng trạng thái healthy/transient thì chỉ log rồi delay tick kế.
             val needRejoin: Boolean = when (report.state) {
                 AutoRejoinManager.RobloxState.IN_GAME -> {
+                    noGameStreak = 0
                     appendLog(
                         logEntries, LogLevel.OK,
                         "Đang trong game (placeId=${report.currentPlaceId}, pid=${report.pid})."
@@ -138,6 +151,7 @@ fun AutoRejoinScreen(
                     false
                 }
                 AutoRejoinManager.RobloxState.IN_GAME_WRONG_PLACE -> {
+                    noGameStreak = 0
                     appendLog(
                         logEntries, LogLevel.WARN,
                         "Đang ở placeId khác (${report.currentPlaceId}). Bỏ qua — user có thể đã teleport."
@@ -145,17 +159,32 @@ fun AutoRejoinScreen(
                     false
                 }
                 AutoRejoinManager.RobloxState.FOREGROUND_NO_GAME -> {
-                    appendLog(
-                        logEntries, LogLevel.INFO,
-                        "Roblox đang chạy nhưng chưa load vào game (pid=${report.pid}). Chờ tick kế tiếp…"
-                    )
-                    false
+                    noGameStreak += 1
+                    if (noGameStreak >= noGameMaxStreak) {
+                        // Roblox đang mở nhưng game không load nổi sau N tick
+                        // → reset bằng force-stop + rejoin để thoát kẹt.
+                        appendLog(
+                            logEntries, LogLevel.WARN,
+                            "Game không load sau $noGameMaxStreak lần check (~${noGameMaxStreak * intervalSec.toInt()}s). Force rejoin…"
+                        )
+                        withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
+                        noGameStreak = 0
+                        true
+                    } else {
+                        appendLog(
+                            logEntries, LogLevel.INFO,
+                            "Roblox đang chạy nhưng chưa load vào game (pid=${report.pid}, streak=$noGameStreak/$noGameMaxStreak). Chờ tick kế tiếp…"
+                        )
+                        false
+                    }
                 }
                 AutoRejoinManager.RobloxState.NOT_RUNNING -> {
+                    noGameStreak = 0
                     appendLog(logEntries, LogLevel.WARN, "Roblox không chạy. Đang khởi động lại…")
                     true
                 }
                 AutoRejoinManager.RobloxState.DISCONNECTED -> {
+                    noGameStreak = 0
                     appendLog(
                         logEntries, LogLevel.WARN,
                         "Phát hiện disconnect/kick: ${report.disconnectHint?.take(120) ?: "?"}"
@@ -283,8 +312,16 @@ private data class LogEntry(
 /** Giới hạn số dòng log để tránh phình memory khi loop chạy nhiều giờ. */
 private const val MAX_LOG_ENTRIES = 50
 
+/**
+ * Formatter dùng chung cho timestamp log — khởi tạo 1 lần để không tạo object
+ * mới mỗi tick polling khi loop chạy nhiều giờ. `SimpleDateFormat` không
+ * thread-safe, nhưng `appendLog` chỉ được gọi trên main thread (Compose
+ * snapshot updates) nên không cần đồng bộ hóa.
+ */
+private val LOG_TIME_FMT = SimpleDateFormat("HH:mm:ss", Locale.US)
+
 private fun appendLog(list: MutableList<LogEntry>, level: LogLevel, message: String) {
-    val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+    val ts = LOG_TIME_FMT.format(Date())
     list.add(0, LogEntry(ts, level, message))
     while (list.size > MAX_LOG_ENTRIES) {
         list.removeAt(list.size - 1)

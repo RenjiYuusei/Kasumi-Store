@@ -178,8 +178,10 @@ object AutoRejoinManager {
         // dumpsys chỉ ghi placeId vào intent của activity nếu deeplink đã được
         // resolve thành công. Khi user còn ở splash / login / home → grep
         // không match.
+        // `grep -F` match literal: dấu `.` trong tên package (vd `com.roblox.client`)
+        // không bị grep interpret là regex wildcard.
         val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep $pkg | head -10"
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
         val placeIdInDump = Regex("placeId=([0-9]+)").find(dumpR.output)?.groupValues?.getOrNull(1)
         if (!placeIdInDump.isNullOrEmpty()) {
