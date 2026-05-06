@@ -147,11 +147,12 @@
 
     <!-- Auto Rejoin: warning -->
     <string name="auto_rejoin_warning_title">Lưu ý</string>
-    <string name="auto_rejoin_warning_body">Auto-rejoin chạy trong khi ứng dụng còn mở. Nếu chuyển sang app khác hoặc khóa máy lâu, hệ thống có thể tạm dừng vòng lặp. Mỗi lần rejoin sẽ force-stop Roblox để dọn state.</string>
+    <string name="auto_rejoin_warning_body">Auto-rejoin chạy như foreground service: vòng lặp tiếp tục chạy khi bạn switch sang Roblox để treo. Notification dai sẽ hiển thị ở status bar — có nút "Dừng" để tắt nhanh. Mỗi lần rejoin sẽ force-stop Roblox để dọn state.</string>
 
     <!-- Auto Rejoin: snackbars -->
     <string name="auto_rejoin_snackbar_invalid_place_id">Place ID không hợp lệ. Hãy nhập số (1–16 chữ số).</string>
     <string name="auto_rejoin_snackbar_not_ready">Chưa sẵn sàng. Cần root + Roblox đã cài đặt.</string>
-    <string name="auto_rejoin_snackbar_started">Đã bật auto-rejoin</string>
+    <string name="auto_rejoin_snackbar_started">Đã bật auto-rejoin (chạy ngầm như foreground service)</string>
     <string name="auto_rejoin_snackbar_stopped">Đã dừng auto-rejoin</string>
+    <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
 </resources>

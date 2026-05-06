@@ -1,5 +1,10 @@
 package com.kasumi.tool
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,31 +33,32 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
- * Tab "Auto Rejoin Roblox" — vòng lặp polling phát hiện khi tài khoản Roblox
- * bị rớt (kicked / crash / force-stop / disconnect) và tự động re-launch lại
- * đúng PlaceId mà người dùng cấu hình.
+ * Tab "Auto Rejoin Roblox" — UI cho vòng lặp polling auto-rejoin.
  *
- * UI gồm 4 khối:
+ * Vòng lặp **không** chạy trong Composable nữa — đã chuyển sang
+ * [AutoRejoinService] (foreground service) để tiếp tục chạy khi user
+ * switch sang Roblox app. UI chỉ còn nhiệm vụ:
+ *  - Phát hiện root + bản Roblox đã cài.
+ *  - Nhận input (placeId, gameInstanceId, interval).
+ *  - Start/stop service qua Intent helpers.
+ *  - Observe [AutoRejoinService.state] qua [collectAsState] để render
+ *    state hiện tại, log, counter — tự đồng bộ khi service cập nhật
+ *    (kể cả khi user bấm "Dừng" từ notification).
+ *
+ * UI gồm 5 khối:
  *  1. **StatusCard**: hiển thị quyền root + bản Roblox được phát hiện.
  *  2. **ConfigCard**: input PlaceId, optional GameInstanceId, slider chu kỳ
- *     check (5–60s). Disable khi loop đang chạy để tránh user đổi giữa chừng.
- *  3. **ControlCard**: nút Start / Stop, hiển thị state hiện tại + tổng số lần
- *     đã rejoin từ lúc bật.
+ *     check (5–60s). Disable khi service đang chạy để tránh user đổi
+ *     giữa chừng.
+ *  3. **ControlCard**: nút Start / Stop, hiển thị state hiện tại + tổng số
+ *     lần đã rejoin từ lúc bật.
  *  4. **LogCard**: log cuộn các sự kiện gần đây (tối đa 50 dòng).
- *
- * Loop được bind vào `LaunchedEffect(running)` — khi user toggle off hoặc
- * navigate sang tab khác (RobloxLoginScreen sẽ recompose & dispose), loop
- * tự stop nhờ cancellation của coroutine scope.
+ *  5. **WarningCard**: lưu ý về vận hành.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,34 +72,23 @@ fun AutoRejoinScreen(
     val msgNotReady = stringResource(R.string.auto_rejoin_snackbar_not_ready)
     val msgStarted = stringResource(R.string.auto_rejoin_snackbar_started)
     val msgStopped = stringResource(R.string.auto_rejoin_snackbar_stopped)
+    val msgNotifPermDenied = stringResource(R.string.auto_rejoin_snackbar_notif_perm_denied)
 
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var detectedPackage by remember { mutableStateOf<String?>(null) }
     var robloxInstalled by remember { mutableStateOf<Boolean?>(null) }
 
     // Cấu hình dùng `rememberSaveable` để user không mất Place ID / cycle khi
-    // chuyển tab và quay lại (composable bị dispose). State bắt buoc reset
-    // (`running`, log entries, counter, currentState) vẫn dùng `remember` —
-    // vòng lặp phải dừng khi tab bị dispose, nên không cần persist.
+    // chuyển tab và quay lại (composable bị dispose).
     var placeIdInput by rememberSaveable { mutableStateOf("") }
     var gameInstanceInput by rememberSaveable { mutableStateOf("") }
     var intervalSec by rememberSaveable { mutableFloatStateOf(15f) }
 
-    var running by remember { mutableStateOf(false) }
-    var rejoinCount by remember { mutableIntStateOf(0) }
-    var currentState by remember { mutableStateOf<AutoRejoinManager.RobloxState?>(null) }
-    var currentPid by remember { mutableStateOf<Int?>(null) }
-    val logEntries = remember { mutableStateListOf<LogEntry>() }
-    // Đếm số tick liên tiếp ở `FOREGROUND_NO_GAME` — Roblox đang mở nhưng
-    // chưa vào game đúng placeId. Sau khi vượt ngưỡng, ta force rejoin để
-    // thoát khỏi tình trạng kẹt vô hạn (deeplink resolved OK nhưng game
-    // không load: placeId chết, server đóng, hoặc Roblox bị đẩy về home).
-    var noGameStreak by remember { mutableIntStateOf(0) }
-    // Thời điểm rejoin gần nhất (Unix epoch ms) — truyền vào `getStatus` để
-    // logcat chỉ đọc các dòng phát sinh sau thời điểm đó, tránh đọc lại
-    // hint disconnect cũ → vòng lặp rejoin vô hạn trong lúc Roblox đang load
-    // lại. 0 = chưa từng rejoin, fallback về `-t LOGCAT_LINES`.
-    var lastRejoinEpochMs by remember { mutableLongStateOf(0L) }
+    // State runtime của vòng lặp đến từ [AutoRejoinService] (StateFlow
+    // singleton). Khi Composable bị dispose rồi recompose, observation tự
+    // thiết lập lại → UI hiển thị đúng state hiện tại dù user đã chuyển
+    // tab và quay lại nhiều lần.
+    val uiState by AutoRejoinService.state.collectAsState()
 
     val ready = rooted == true && robloxInstalled == true
 
@@ -109,114 +104,28 @@ fun AutoRejoinScreen(
         robloxInstalled = pkg != null
     }
 
-    // Vòng lặp polling. Bind vào `running` — khi user tắt → block thoát ngay.
-    LaunchedEffect(running) {
-        if (!running) return@LaunchedEffect
-        val pkg = detectedPackage ?: return@LaunchedEffect
-        val placeId = placeIdInput.trim()
-        val gid = gameInstanceInput.trim().ifEmpty { null }
-        val intervalMs = (intervalSec.toLong().coerceIn(5L, 60L)) * 1000L
-        // Sau mỗi lần force-stop + rejoin, Roblox cần 20–60s để mở lại và load
-        // game. Trong khoảng đó `pidof` có thể chớp tắt (chỉ trong vài giây
-        // đầu sau force-stop, pre-zygote-fork) khiến logic lại thấy NOT_RUNNING
-        // → rejoin lại → vòng lặp vô hạn. WARMUP_AFTER_REJOIN_MS là grace period
-        // ngắn ở dưới `delay` thường để tải xử sau rejoin (logcat filter
-        // theo `lastRejoinEpochMs` lo cái phần DISCONNECTED, nên chỉ cần thêm
-        // grace cho NOT_RUNNING).
-        val warmupMs = 30_000L
-        // Số tick liên tiếp `FOREGROUND_NO_GAME` cho phép trước khi force
-        // rejoin. Với interval mặc định 15s → ~2 phút (8 tick) chờ game load,
-        // đủ cho cả case mạng yếu nhưng đủ ngắn để user không phải tự can
-        // thiệp khi placeId chết / server đóng.
-        val noGameMaxStreak = 8
-        // Reset streak khi loop start (Stop-Start lại từ đầu).
-        noGameStreak = 0
+    // Helper khởi động service sau khi đã đảm bảo quyền + validate input.
+    fun launchService() {
+        val pkg = detectedPackage ?: return
+        AutoRejoinService.start(
+            context = context,
+            pkg = pkg,
+            placeId = placeIdInput.trim(),
+            gameInstanceId = gameInstanceInput.trim().ifEmpty { null },
+            intervalSec = intervalSec.toInt().coerceIn(5, 60),
+        )
+        onShowSnackbar(msgStarted)
+    }
 
-        while (isActive && running) {
-            val report = withContext(Dispatchers.IO) {
-                AutoRejoinManager.getStatus(pkg, placeId, lastRejoinEpochMs)
-            }
-            currentState = report.state
-            currentPid = report.pid
-
-            // Chia đôi: chỉ những trạng thái "unhealthy" mới trigger rejoin.
-            // Nhừng trạng thái healthy/transient thì chỉ log rồi delay tick kế.
-            val needRejoin: Boolean = when (report.state) {
-                AutoRejoinManager.RobloxState.IN_GAME -> {
-                    noGameStreak = 0
-                    appendLog(
-                        logEntries, LogLevel.OK,
-                        "Đang trong game (placeId=${report.currentPlaceId}, pid=${report.pid})."
-                    )
-                    false
-                }
-                AutoRejoinManager.RobloxState.IN_GAME_WRONG_PLACE -> {
-                    noGameStreak = 0
-                    appendLog(
-                        logEntries, LogLevel.WARN,
-                        "Đang ở placeId khác (${report.currentPlaceId}). Bỏ qua — user có thể đã teleport."
-                    )
-                    false
-                }
-                AutoRejoinManager.RobloxState.FOREGROUND_NO_GAME -> {
-                    noGameStreak += 1
-                    if (noGameStreak >= noGameMaxStreak) {
-                        // Roblox đang mở nhưng game không load nổi sau N tick
-                        // → reset bằng force-stop + rejoin để thoát kẹt.
-                        appendLog(
-                            logEntries, LogLevel.WARN,
-                            "Game không load sau $noGameMaxStreak lần check (~${noGameMaxStreak * intervalSec.toInt()}s). Force rejoin…"
-                        )
-                        withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
-                        noGameStreak = 0
-                        true
-                    } else {
-                        appendLog(
-                            logEntries, LogLevel.INFO,
-                            "Roblox đang chạy nhưng chưa load vào game (pid=${report.pid}, streak=$noGameStreak/$noGameMaxStreak). Chờ tick kế tiếp…"
-                        )
-                        false
-                    }
-                }
-                AutoRejoinManager.RobloxState.NOT_RUNNING -> {
-                    noGameStreak = 0
-                    appendLog(logEntries, LogLevel.WARN, "Roblox không chạy. Đang khởi động lại…")
-                    true
-                }
-                AutoRejoinManager.RobloxState.DISCONNECTED -> {
-                    noGameStreak = 0
-                    appendLog(
-                        logEntries, LogLevel.WARN,
-                        "Phát hiện disconnect/kick: ${report.disconnectHint?.take(120) ?: "?"}"
-                    )
-                    withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
-                    true
-                }
-            }
-
-            if (needRejoin) {
-                val attempts = withContext(Dispatchers.IO) {
-                    AutoRejoinManager.rejoin(pkg, placeId, gid)
-                }
-                rejoinCount += 1
-                // Set timestamp NGÂY SAU khi `rejoin` trả về để logcat filter
-                // ở vòng tick kế tiếp chỉ đọc dòng mới phát sinh.
-                lastRejoinEpochMs = System.currentTimeMillis()
-                attempts.forEach { a ->
-                    val lvl = if (a.success) LogLevel.OK else LogLevel.ERR
-                    val msg = "${a.method}: " +
-                        if (a.success) "OK" else "exit=${a.exitCode} ${a.error.take(80)}"
-                    appendLog(logEntries, lvl, msg)
-                }
-                appendLog(
-                    logEntries, LogLevel.INFO,
-                    "Chờ ${warmupMs / 1000}s để Roblox khởi động + load game trước khi check tiếp…"
-                )
-                delay(warmupMs)
-            } else {
-                delay(intervalMs)
-            }
-        }
+    // POST_NOTIFICATIONS là runtime permission từ Android 13 (API 33). Nếu
+    // user deny, foreground service vẫn chạy nhưng notification sẽ bị OS
+    // suppress → user không thấy trang thái ngoài app + không bấm Dừng từ
+    // notification được. Hiển thị snackbar cảnh báo nhưng vẫn cho tiếp.
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) onShowSnackbar(msgNotifPermDenied)
+        launchService()
     }
 
     Column(
@@ -245,21 +154,21 @@ fun AutoRejoinScreen(
             gameInstanceId = gameInstanceInput,
             // Không `.trim()` tại đây — trim mỗi keystroke sẽ xóa space đang gõ
             // giữa chừng + làm con trỏ nhảy. Trim chỉ được thực hiện khi đọc
-            // giá trị để gửi shell trong `LaunchedEffect(running)` ở trên.
+            // giá trị để gửi service trong [launchService].
             onGameInstanceIdChange = { gameInstanceInput = it },
             intervalSec = intervalSec,
             onIntervalChange = { intervalSec = it },
-            enabled = !running
+            enabled = !uiState.running
         )
 
         ControlCard(
-            running = running,
+            running = uiState.running,
             ready = ready,
-            currentState = currentState,
-            currentPid = currentPid,
-            rejoinCount = rejoinCount,
+            currentState = uiState.currentState,
+            currentPid = uiState.currentPid,
+            rejoinCount = uiState.rejoinCount,
             onToggle = {
-                if (!running) {
+                if (!uiState.running) {
                     if (!ready) {
                         onShowSnackbar(msgNotReady)
                         return@ControlCard
@@ -268,32 +177,25 @@ fun AutoRejoinScreen(
                         onShowSnackbar(msgInvalidPlace)
                         return@ControlCard
                     }
-                    rejoinCount = 0
-                    logEntries.clear()
-                    // Reset timestamp → tick đầu tiên fallback về `-t LINES`
-                    // (xem doc `getStatus` cho luật sinceEpochMs > 0 vs = 0).
-                    lastRejoinEpochMs = 0L
-                    appendLog(
-                        logEntries,
-                        LogLevel.INFO,
-                        "Bắt đầu vòng lặp auto-rejoin cho placeId=${placeIdInput.trim()}"
-                    )
-                    running = true
-                    onShowSnackbar(msgStarted)
+                    // Android 13+: request POST_NOTIFICATIONS rồi mới start.
+                    // Trên Android 12-: launchService() ngay (không cần perm).
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val granted = ContextCompat.checkSelfPermission(
+                            context, Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (granted) launchService()
+                        else notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        launchService()
+                    }
                 } else {
-                    running = false
-                    // Reset state hiển thị về idle — nếu không, UI vẫn show
-                    // PID + trạng thái của tick check cuối, khiến user nhầm
-                    // là vòng lặp chưa dừng.
-                    currentState = null
-                    currentPid = null
-                    appendLog(logEntries, LogLevel.INFO, "Đã dừng vòng lặp.")
+                    AutoRejoinService.stop(context)
                     onShowSnackbar(msgStopped)
                 }
             }
         )
 
-        LogCard(entries = logEntries)
+        LogCard(entries = uiState.logs)
 
         WarningCard()
 
@@ -301,32 +203,10 @@ fun AutoRejoinScreen(
     }
 }
 
-private enum class LogLevel { INFO, OK, WARN, ERR }
-
-private data class LogEntry(
-    val timestamp: String,
-    val level: LogLevel,
-    val message: String
-)
-
-/** Giới hạn số dòng log để tránh phình memory khi loop chạy nhiều giờ. */
-private const val MAX_LOG_ENTRIES = 50
-
-/**
- * Formatter dùng chung cho timestamp log — khởi tạo 1 lần để không tạo object
- * mới mỗi tick polling khi loop chạy nhiều giờ. `SimpleDateFormat` không
- * thread-safe, nhưng `appendLog` chỉ được gọi trên main thread (Compose
- * snapshot updates) nên không cần đồng bộ hóa.
- */
-private val LOG_TIME_FMT = SimpleDateFormat("HH:mm:ss", Locale.US)
-
-private fun appendLog(list: MutableList<LogEntry>, level: LogLevel, message: String) {
-    val ts = LOG_TIME_FMT.format(Date())
-    list.add(0, LogEntry(ts, level, message))
-    while (list.size > MAX_LOG_ENTRIES) {
-        list.removeAt(list.size - 1)
-    }
-}
+// LogLevel / LogEntry / MAX_LOG_ENTRIES / formatter / appendLog đã chuyển sang
+// [AutoRejoinService] — vòng lặp polling ghi log vào StateFlow chung để UI
+// observe.
+private const val MAX_LOG_ENTRIES_UI = 50
 
 @Composable
 private fun AutoRejoinStatusCard(
@@ -648,7 +528,7 @@ private fun LogCard(entries: List<LogEntry>) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                entries.take(MAX_LOG_ENTRIES).forEach { entry ->
+                entries.take(MAX_LOG_ENTRIES_UI).forEach { entry ->
                     LogRow(entry)
                 }
             }
