@@ -147,12 +147,22 @@ object AutoRejoinManager {
      *
      * Thứ tự kiểm tra (early return):
      *  1. `pidof` rỗng → process chết → [RobloxState.NOT_RUNNING].
-     *  2. `dumpsys activity activities | grep placeId=` → đang trong game.
+     *  2. Quét logcat từ thời điểm [sinceEpochMs] tìm pattern disconnect
+     *     (lọc theo `--pid=<pid>` của Roblox).
+     *     - Trùng → [RobloxState.DISCONNECTED] (cần rejoin).
+     *
+     *     **Lưu ý**: bước này phải chạy TRƯỚC dumpsys. Roblox dùng kiến trúc
+     *     single-activity (Unity engine), nên sau khi bị kick, Activity gốc
+     *     vẫn còn trong task stack với đúng intent
+     *     `roblox://experiences/start?placeId=<target>` — `dumpsys` vẫn match
+     *     placeId. Nếu check IN_GAME trước, ta sẽ early-return `IN_GAME` và
+     *     không bao giờ phát hiện disconnect → tính năng coi như chỉ detect
+     *     được `NOT_RUNNING` (process chết hoàn toàn). Logcat-first cho phép
+     *     ưu tiên DISCONNECTED hơn IN_GAME khi cả 2 dấu hiệu cùng tồn tại.
+     *  3. `dumpsys activity activities | grep placeId=` → đang trong game.
      *     - Nếu placeId trùng targetPlaceId → [RobloxState.IN_GAME] (healthy).
      *     - Khác → [RobloxState.IN_GAME_WRONG_PLACE] (user tự teleport,
      *       không can thiệp).
-     *  3. Quét logcat từ thời điểm [sinceEpochMs] tìm pattern disconnect.
-     *     - Trùng → [RobloxState.DISCONNECTED] (cần rejoin).
      *  4. Mặc định: process sống nhưng chưa vào game →
      *     [RobloxState.FOREGROUND_NO_GAME] (đang loading hoặc ở home).
      *
@@ -162,7 +172,9 @@ object AutoRejoinManager {
      *     đây là nguồn gốc của vòng lặp rejoin vô hạn (force-stop ngay khi
      *     Roblox còn đang load 20–60s ban đầu). Nếu = 0 → fallback về
      *     `-t $LOGCAT_LINES` (số dòng) cho tick đầu tiên trước khi user bấm
-     *     Start.
+     *     Start. Kết hợp với `--pid=<pid>` ở dưới: sau rejoin, PID Roblox
+     *     mới khác → log của process cũ tự động bị loại, không cần epoch để
+     *     phòng stale event của process trước.
      */
     fun getStatus(
         pkg: String,
@@ -173,23 +185,6 @@ object AutoRejoinManager {
         val pid = pidR.output.trim().toIntOrNull()
         if (pid == null || pid <= 0) {
             return StatusReport(RobloxState.NOT_RUNNING, null, null, null)
-        }
-
-        // dumpsys chỉ ghi placeId vào intent của activity nếu deeplink đã được
-        // resolve thành công. Khi user còn ở splash / login / home → grep
-        // không match.
-        // `grep -F` match literal: dấu `.` trong tên package (vd `com.roblox.client`)
-        // không bị grep interpret là regex wildcard.
-        val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
-        )
-        val placeIdInDump = Regex("placeId=([0-9]+)").find(dumpR.output)?.groupValues?.getOrNull(1)
-        if (!placeIdInDump.isNullOrEmpty()) {
-            return if (placeIdInDump == targetPlaceId) {
-                StatusReport(RobloxState.IN_GAME, pid, placeIdInDump, null)
-            } else {
-                StatusReport(RobloxState.IN_GAME_WRONG_PLACE, pid, placeIdInDump, null)
-            }
         }
 
         // Logcat filter:
@@ -216,7 +211,27 @@ object AutoRejoinManager {
         val logR = executeAsRoot(logcatCmd, timeoutSec = 10L)
         val hint = logR.output.lineSequence().lastOrNull { it.isNotBlank() }?.trim()
         if (!hint.isNullOrEmpty()) {
+            // Disconnect-first: ưu tiên DISCONNECTED hơn IN_GAME để tránh
+            // bị che bởi intent placeId còn sót trong activity stack sau
+            // khi Roblox client kick user (single-activity Unity).
             return StatusReport(RobloxState.DISCONNECTED, pid, null, hint)
+        }
+
+        // dumpsys chỉ ghi placeId vào intent của activity nếu deeplink đã được
+        // resolve thành công. Khi user còn ở splash / login / home → grep
+        // không match.
+        // `grep -F` match literal: dấu `.` trong tên package (vd `com.roblox.client`)
+        // không bị grep interpret là regex wildcard.
+        val dumpR = executeAsRoot(
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+        )
+        val placeIdInDump = Regex("placeId=([0-9]+)").find(dumpR.output)?.groupValues?.getOrNull(1)
+        if (!placeIdInDump.isNullOrEmpty()) {
+            return if (placeIdInDump == targetPlaceId) {
+                StatusReport(RobloxState.IN_GAME, pid, placeIdInDump, null)
+            } else {
+                StatusReport(RobloxState.IN_GAME_WRONG_PLACE, pid, placeIdInDump, null)
+            }
         }
 
         return StatusReport(RobloxState.FOREGROUND_NO_GAME, pid, null, null)

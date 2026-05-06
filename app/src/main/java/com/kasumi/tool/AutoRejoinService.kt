@@ -268,7 +268,10 @@ class AutoRejoinService : Service() {
     }
 
     private fun appendLog(level: LogLevel, message: String) {
-        val ts = LOG_TIME_FMT.format(Date())
+        // ThreadLocal.get() trả về `SimpleDateFormat?` về mặt nullability vì
+        // initialValue có thể bị `?.let` override; với khai báo của ta dưới
+        // companion thì không bao giờ null, nhưng `!!` để Kotlin happy.
+        val ts = LOG_TIME_FMT.get()!!.format(Date())
         _state.update { current ->
             val newLogs = (listOf(LogEntry(ts, level, message)) + current.logs)
                 .take(MAX_LOG_ENTRIES)
@@ -362,7 +365,15 @@ class AutoRejoinService : Service() {
         const val EXTRA_GAME_INSTANCE_ID = "gameInstanceId"
         const val EXTRA_INTERVAL_MS = "intervalMs"
 
-        private val LOG_TIME_FMT = SimpleDateFormat("HH:mm:ss", Locale.US)
+        // SimpleDateFormat KHÔNG thread-safe theo Java doc. Đặt trong
+        // ThreadLocal để mỗi thread có instance riêng — an toàn cả khi sau
+        // này có refactor cho phép appendLog chạy từ IO thread (thay vì chỉ
+        // main như hiện tại). Object instance được lazy-init ở lần get()
+        // đầu tiên trên mỗi thread.
+        private val LOG_TIME_FMT: ThreadLocal<SimpleDateFormat> =
+            object : ThreadLocal<SimpleDateFormat>() {
+                override fun initialValue() = SimpleDateFormat("HH:mm:ss", Locale.US)
+            }
 
         private val _state = MutableStateFlow(AutoRejoinUiState())
 
