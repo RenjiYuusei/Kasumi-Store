@@ -181,9 +181,14 @@ class AutoRejoinService : Service() {
         // rejoin (~2 phút với interval 15s mặc định).
         val noGameMaxStreak = 8
         var noGameStreak = 0
-        // Timestamp rejoin gần nhất (Unix epoch ms) — truyền vào getStatus
-        // để logcat filter theo timestamp, tránh đọc lại hint disconnect cũ.
-        var lastRejoinEpochMs = 0L
+        // Timestamp mốc cho logcat filter (Unix epoch ms). Khởi tạo bằng
+        // thời điểm service start để tick đầu tiên dùng `-T <epoch>` thay
+        // vì `-t LOGCAT_LINES` — tránh case: Roblox đang chạy với cùng PID,
+        // bị kick vài phút trước, user tự rejoin tay (không restart process)
+        // rồi mới bật auto-rejoin → tick đầu sẽ thấy disconnect event cũ với
+        // `--pid=<PID hiện tại>` và force-stop nhầm Roblox đang chạy ngon.
+        // Mỗi lần rejoin sau đó cập nhật lại để bỏ qua hint trước rejoin.
+        var lastRejoinEpochMs = System.currentTimeMillis()
 
         while (currentCoroutineContext().isActive) {
             val report = withContext(Dispatchers.IO) {
