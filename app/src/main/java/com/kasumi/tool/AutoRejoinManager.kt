@@ -1,6 +1,7 @@
 package com.kasumi.tool
 
 import android.content.Context
+import java.net.URLEncoder
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -258,11 +259,12 @@ object AutoRejoinManager {
             append(placeId)
             if (gid != null) {
                 append("&gameInstanceId=")
-                // gameInstanceId có thể chứa dấu `-` / chữ thường → Roblox
-                // chấp nhận trực tiếp, không cần URLEncode (đã được kiểm chứng
-                // trên client 2.6xx). Vẫn quote toàn bộ url khi shell-escape
-                // ở dưới để tránh `&` bị shell hiểu nhầm.
-                append(gid)
+                // URL-encode gid để xử lý các ký tự đặc biệt (`%`, `+`,
+                // khoảng trắng, `#`, ...) khi user dán nhầm. Với UUID chuẩn
+                // `[0-9a-f-]` thì encode là no-op (Roblox vẫn parse đúng).
+                // Dùng UTF-8 — `URLEncoder` luôn hỗ trợ charset này, không
+                // ném `UnsupportedEncodingException`.
+                append(URLEncoder.encode(gid, "UTF-8"))
             }
         }
         val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +

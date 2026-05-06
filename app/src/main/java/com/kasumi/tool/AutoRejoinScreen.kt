@@ -253,6 +253,11 @@ fun AutoRejoinScreen(
                     onShowSnackbar(msgStarted)
                 } else {
                     running = false
+                    // Reset state hiển thị về idle — nếu không, UI vẫn show
+                    // PID + trạng thái của tick check cuối, khiến user nhầm
+                    // là vòng lặp chưa dừng.
+                    currentState = null
+                    currentPid = null
                     appendLog(logEntries, LogLevel.INFO, "Đã dừng vòng lặp.")
                     onShowSnackbar(msgStopped)
                 }
