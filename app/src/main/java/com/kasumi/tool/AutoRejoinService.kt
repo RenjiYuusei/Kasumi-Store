@@ -80,6 +80,9 @@ class AutoRejoinService : Service() {
             else -> {
                 // Service được restart bởi system (vd sau khi process bị
                 // kill) mà không có extras → không thể tiếp tục an toàn.
+                // Vẫn phải `startForeground()` 1 nhịp để thoả mãn Android 8+
+                // contract khi entry point là startForegroundService().
+                startForegroundCompat(buildNotification(state.value))
                 stopServiceCompletely()
             }
         }
@@ -90,6 +93,14 @@ class AutoRejoinService : Service() {
         super.onDestroy()
         loopJob?.cancel()
         serviceScope.cancel()
+        // Reset state ngay cả khi service bị system / ADB terminate không đi
+        // qua [stopServiceCompletely] (vd OOM kill, `am stopservice`). Nếu
+        // không reset, _state.running vẫn = true → UI hiển thị nút "Dừng"
+        // dù service đã chết, user buộc phải bấm "Dừng" trước khi khởi
+        // động lại.
+        _state.update {
+            it.copy(running = false, currentState = null, currentPid = null)
+        }
     }
 
     private fun handleStart(intent: Intent) {
@@ -100,6 +111,12 @@ class AutoRejoinService : Service() {
             .coerceIn(5_000L, 60_000L)
 
         if (pkg.isNullOrBlank() || placeId.isNullOrBlank()) {
+            // Android 8+ bắt buộc mọi service được khởi động bằng
+            // startForegroundService() phải gọi startForeground() trong vòng
+            // 5s — nếu không sẽ crash `Context.startForegroundService() did
+            // not then call Service.startForeground()`. Ngay cả trong nhánh
+            // lỗi ta vẫn phải vào foreground 1 nhịp rồi mới stopSelf().
+            startForegroundCompat(buildNotification(state.value))
             stopServiceCompletely()
             return
         }
