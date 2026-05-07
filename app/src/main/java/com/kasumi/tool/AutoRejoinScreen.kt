@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
@@ -36,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Tab "Auto Rejoin Roblox" — UI cho vòng lặp polling auto-rejoin.
@@ -73,10 +76,17 @@ fun AutoRejoinScreen(
     val msgStarted = stringResource(R.string.auto_rejoin_snackbar_started)
     val msgStopped = stringResource(R.string.auto_rejoin_snackbar_stopped)
     val msgNotifPermDenied = stringResource(R.string.auto_rejoin_snackbar_notif_perm_denied)
+    val msgDetectRunning = stringResource(R.string.auto_rejoin_snackbar_detect_running)
+    val msgDetectNoGame = stringResource(R.string.auto_rejoin_snackbar_detect_no_game)
+    val msgDetectNoRoot = stringResource(R.string.auto_rejoin_snackbar_detect_no_root)
+    val msgDetectSuccessFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success)
+
+    val coroutineScope = rememberCoroutineScope()
 
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var detectedPackage by remember { mutableStateOf<String?>(null) }
     var robloxInstalled by remember { mutableStateOf<Boolean?>(null) }
+    var isDetecting by remember { mutableStateOf(false) }
 
     // Cấu hình dùng `rememberSaveable` để user không mất Place ID / cycle khi
     // chuyển tab và quay lại (composable bị dispose).
@@ -102,6 +112,44 @@ fun AutoRejoinScreen(
         val pkg = pkgDeferred.await()
         detectedPackage = pkg
         robloxInstalled = pkg != null
+    }
+
+    // Handler cho nút "Tự dò từ Roblox" — đọc dumpsys của process Roblox
+    // hiện tại để extract placeId + gameInstanceId, rồi tự fill vào input.
+    // Giúp user không phải tìm Place ID rồi paste tay.
+    //
+    // Edge cases:
+    //  - Chưa root → snackbar `msgDetectNoRoot` (button cũng disabled từ
+    //    UI nhưng giữ guard để defensive).
+    //  - Roblox chưa vào game (đang ở splash / home) → dumpsys không có
+    //    `placeId=` → snackbar `msgDetectNoGame`.
+    //  - Tìm thấy → fill placeIdInput + gameInstanceInput nếu có,
+    //    snackbar success kèm placeId.
+    fun runAutoDetect() {
+        if (rooted != true) {
+            onShowSnackbar(msgDetectNoRoot)
+            return
+        }
+        val pkg = detectedPackage ?: run {
+            onShowSnackbar(msgNotReady)
+            return
+        }
+        if (isDetecting) return
+        isDetecting = true
+        onShowSnackbar(msgDetectRunning)
+        coroutineScope.launch {
+            val detected = withContext(Dispatchers.IO) {
+                AutoRejoinManager.detectCurrentGame(pkg)
+            }
+            isDetecting = false
+            if (detected.hasPlaceId) {
+                placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
+                gameInstanceInput = detected.gameInstanceId.orEmpty()
+                onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+            } else {
+                onShowSnackbar(msgDetectNoGame)
+            }
+        }
     }
 
     // Helper khởi động service sau khi đã đảm bảo quyền + validate input.
@@ -158,7 +206,10 @@ fun AutoRejoinScreen(
             onGameInstanceIdChange = { gameInstanceInput = it },
             intervalSec = intervalSec,
             onIntervalChange = { intervalSec = it },
-            enabled = !uiState.running
+            enabled = !uiState.running,
+            onAutoDetect = ::runAutoDetect,
+            isDetecting = isDetecting,
+            canDetect = ready,
         )
 
         ControlCard(
@@ -323,6 +374,9 @@ private fun ConfigCard(
     intervalSec: Float,
     onIntervalChange: (Float) -> Unit,
     enabled: Boolean,
+    onAutoDetect: () -> Unit,
+    isDetecting: Boolean,
+    canDetect: Boolean,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -359,6 +413,39 @@ private fun ConfigCard(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp)
+            )
+
+            // Nút "Tự dò từ Roblox" — đọc dumpsys của process Roblox đang
+            // chạy để extract placeId + gameInstanceId, tự fill vào input.
+            // User mở Roblox → vào game muốn auto-rejoin → switch về app
+            // → bấm nút này → khỏi cần tìm placeId rồi paste tay.
+            //
+            // Disable khi:
+            //  - service đang chạy (`enabled = false` từ uiState.running) —
+            //    không cho đổi placeId giữa chừng.
+            //  - chưa root / chưa cài Roblox (`canDetect = false`).
+            //  - đang detect dở (`isDetecting`) — tránh spam call dumpsys.
+            FilledTonalButton(
+                onClick = onAutoDetect,
+                enabled = enabled && canDetect && !isDetecting,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isDetecting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.auto_rejoin_config_detect_button))
+            }
+            Text(
+                text = stringResource(R.string.auto_rejoin_config_detect_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             OutlinedTextField(

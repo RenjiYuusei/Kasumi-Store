@@ -8,6 +8,7 @@
     - **Place ID** (bắt buộc): chỉ chấp nhận chuỗi số (1–16 chữ số), validate trước khi start.
     - **Game Instance ID** (tùy chọn): dùng cho VIP server / Private server — gắn vào URL deeplink dạng `&gameInstanceId=…`.
     - **Chu kỳ kiểm tra**: slider 5–60 giây, mặc định 15s.
+    - **Nút "Tự dò từ Roblox"**: bấm 1 lần khi Roblox đang ở trong game → app đọc `dumpsys activity activities` của process Roblox → extract `placeId` + `gameInstanceId` từ intent URI rồi tự fill vào ô input. Không cần Google placeId rồi paste tay nữa. `gameInstanceId` được decode bằng `Uri.decode` để hiển thị raw cho user (service sẽ tự encode lại khi build deeplink). Disable khi service đang chạy / chưa root / chưa cài Roblox / đang detect dở.
   - **Cơ chế kiểm tra trạng thái** (theo thứ tự early-return):
     1. `pidof <pkg>` — process còn sống không.
     2. `logcat -d -T <epoch> --pid=<pid> | grep -E '(You have been kicked|Lost connection with reason|Sending disconnect with reason|Disconnection Notification|Connection lost|Teleport failed|same account launched|server.?shut)'` — phát hiện disconnect/kick gần đây của ĐÚNG process Roblox. Lọc theo `--pid` + `-T <epoch>` để tránh đọc lại hint cũ + tránh false positive từ app khác. **Phải chạy trước dumpsys**: Roblox dùng kiến trúc single-activity (Unity engine), Activity gốc vẫn còn trong task stack với đúng intent `placeId=<target>` ngay cả sau khi bị kick → nếu check IN_GAME trước, ta sẽ early-return `IN_GAME` và không bao giờ phát hiện disconnect.

@@ -242,6 +242,48 @@ object AutoRejoinManager {
     }
 
     /**
+     * Kết quả khi user bấm "Tự dò" — extract Place ID hiện tại mà Roblox
+     * đang treo từ activity stack. Cả 2 trường có thể null nếu Roblox không
+     * chạy hoặc chưa load vào game (đang ở splash / home / login).
+     */
+    data class DetectedGame(
+        val placeId: String?,
+        val gameInstanceId: String?,
+    ) {
+        val hasPlaceId: Boolean get() = !placeId.isNullOrEmpty()
+    }
+
+    /**
+     * Tự dò Place ID + Game Instance ID hiện tại mà Roblox đang treo. Đọc
+     * từ output `dumpsys activity activities` của process Roblox — chỉ khả
+     * dụng khi user đã vào game (deeplink đã resolve thành công và intent
+     * còn trong task stack).
+     *
+     * Hữu ích cho UI "Tự dò": user mở Roblox, vào game → bấm 1 nút →
+     * placeId tự fill vào input thay vì phải google placeId rồi paste.
+     *
+     * @return [DetectedGame] với placeId/gameInstanceId nếu tìm thấy. Trả
+     *     về cả 2 = null nếu Roblox chưa vào game hoặc dumpsys lỗi (no root,
+     *     binder timeout, ...).
+     */
+    fun detectCurrentGame(pkg: String): DetectedGame {
+        val r = executeAsRoot(
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+        )
+        val output = r.output
+        val placeId = Regex("placeId=([0-9]+)").find(output)?.groupValues?.getOrNull(1)
+        // gameInstanceId trong dumpsys URL có thể là UUID `[0-9a-f-]` hoặc
+        // chuỗi đã URL-encode chứa `%XX`. Stop tại các terminator: `&`
+        // (next param), whitespace, `}` (intent end), `"`, `]`, `)`.
+        val gidRaw = Regex("gameInstanceId=([^&\\s}\"\\])]+)")
+            .find(output)?.groupValues?.getOrNull(1)
+        // Decode lại để hiển thị raw cho user. Nếu sau này user start service,
+        // service sẽ tự encode lại bằng [Uri.encode] khi build M1 deeplink.
+        val gid = gidRaw?.let { Uri.decode(it) }
+        return DetectedGame(placeId, gid)
+    }
+
+    /**
      * Force-stop Roblox để dọn state trước khi rejoin. Idempotent: gọi nhiều
      * lần liên tiếp không gây lỗi (Android `am force-stop` tự handle no-op
      * khi process đã chết).
