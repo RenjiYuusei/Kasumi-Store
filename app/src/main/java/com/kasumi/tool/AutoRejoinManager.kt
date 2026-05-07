@@ -254,33 +254,80 @@ object AutoRejoinManager {
     }
 
     /**
-     * Tự dò Place ID + Game Instance ID hiện tại mà Roblox đang treo. Đọc
-     * từ output `dumpsys activity activities` của process Roblox — chỉ khả
-     * dụng khi user đã vào game (deeplink đã resolve thành công và intent
-     * còn trong task stack).
+     * Tự dò Place ID + Game Instance ID hiện tại mà Roblox đang treo.
      *
      * Hữu ích cho UI "Tự dò": user mở Roblox, vào game → bấm 1 nút →
-     * placeId tự fill vào input thay vì phải google placeId rồi paste.
+     * placeId tự fill vào input thay vì phải tìm placeId rồi paste tay.
+     *
+     * Thử 2 nguồn theo thứ tự:
+     *  1. **`dumpsys activity activities`** — chỉ khả dụng khi Roblox được
+     *     launch qua deeplink `roblox://...` (URI gốc còn trong task stack).
+     *     Khi user mở Roblox bằng tay (icon launcher) rồi navigate vào game
+     *     qua menu trong app, launch intent **KHÔNG** chứa URI → dumpsys
+     *     không match.
+     *  2. **`logcat --pid=<roblox_pid>`** — fallback hoạt động bất kể cách
+     *     launch. Roblox client log placeId qua `FLog::PlaceLauncher`,
+     *     `JoinGameJob`, network logs (JSON `"placeId":...`), URL load,
+     *     v.v. Lấy 10000 dòng gần nhất, match toàn bộ pattern, ưu tiên
+     *     match cuối cùng (theo thứ tự thời gian → game user đang chơi).
      *
      * @return [DetectedGame] với placeId/gameInstanceId nếu tìm thấy. Trả
-     *     về cả 2 = null nếu Roblox chưa vào game hoặc dumpsys lỗi (no root,
-     *     binder timeout, ...).
+     *     về cả 2 = null nếu Roblox không chạy / chưa từng vào game / lỗi
+     *     root.
      */
     fun detectCurrentGame(pkg: String): DetectedGame {
-        val r = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+        // Step 1: lấy PID Roblox để filter logcat ở step 2.
+        val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null | awk '{print \$1}'")
+        val pid = pidR.output.trim().toIntOrNull()
+        if (pid == null || pid <= 0) {
+            return DetectedGame(null, null)
+        }
+
+        // Step 2: thử dumpsys (deeplink intent path).
+        val dumpR = executeAsRoot(
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | head -10"
         )
-        val output = r.output
-        val placeId = Regex("placeId=([0-9]+)").find(output)?.groupValues?.getOrNull(1)
-        // gameInstanceId trong dumpsys URL có thể là UUID `[0-9a-f-]` hoặc
-        // chuỗi đã URL-encode chứa `%XX`. Stop tại các terminator: `&`
-        // (next param), whitespace, `}` (intent end), `"`, `]`, `)`.
-        val gidRaw = Regex("gameInstanceId=([^&\\s}\"\\])]+)")
-            .find(output)?.groupValues?.getOrNull(1)
-        // Decode lại để hiển thị raw cho user. Nếu sau này user start service,
-        // service sẽ tự encode lại bằng [Uri.encode] khi build M1 deeplink.
-        val gid = gidRaw?.let { Uri.decode(it) }
-        return DetectedGame(placeId, gid)
+        val placeIdFromDump = Regex("placeId=([0-9]+)")
+            .find(dumpR.output)?.groupValues?.getOrNull(1)
+        if (!placeIdFromDump.isNullOrEmpty()) {
+            // gameInstanceId trong dumpsys URL có thể là UUID `[0-9a-f-]`
+            // hoặc chuỗi đã URL-encode chứa `%XX`. Stop tại các terminator:
+            // `&`, whitespace, `}`, `"`, `]`, `)`.
+            val gidFromDump = Regex("gameInstanceId=([^&\\s}\"\\])]+)")
+                .find(dumpR.output)?.groupValues?.getOrNull(1)
+                ?.let { Uri.decode(it) }
+            return DetectedGame(placeIdFromDump, gidFromDump)
+        }
+
+        // Step 3: logcat fallback. Roblox FLog/Network/JoinGame messages
+        // log placeId trong nhiều format khác nhau:
+        //   - `[FLog::PlaceLauncher] placeId=920587237`
+        //   - `JoinGameJob ... placeId 920587237`
+        //   - JSON: `"placeId":920587237` hoặc `"placeId":"920587237"`
+        // Regex case-insensitive, cho phép `=`, `:`, hoặc whitespace giữa
+        // key và value, optional double-quote bao quanh.
+        // Place ID hợp lệ là 4–16 chữ số (Roblox hiện cao nhất ~13 digits).
+        val logR = executeAsRoot(
+            "logcat -d -t 10000 --pid=$pid 2>/dev/null",
+            timeoutSec = 15L
+        )
+        val placeIdRegex = Regex("(?i)\\bplaceid\"?\\s*[=:]\\s*\"?([0-9]{4,16})")
+        // Lấy tất cả match, ưu tiên match cuối cùng (theo thứ tự dòng →
+        // theo thời gian, vì logcat output theo chronological order).
+        val placeIdFromLog = placeIdRegex.findAll(logR.output)
+            .map { it.groupValues[1] }
+            .lastOrNull()
+        if (!placeIdFromLog.isNullOrEmpty()) {
+            // gameInstanceId thường là UUID 36 ký tự `[0-9a-f-]` hoặc hex
+            // string. Format chấp nhận tương tự placeId.
+            val gidRegex = Regex("(?i)\\bgameinstanceid\"?\\s*[=:]\\s*\"?([0-9a-fA-F-]{8,64})")
+            val gidFromLog = gidRegex.findAll(logR.output)
+                .map { it.groupValues[1] }
+                .lastOrNull()
+            return DetectedGame(placeIdFromLog, gidFromLog)
+        }
+
+        return DetectedGame(null, null)
     }
 
     /**

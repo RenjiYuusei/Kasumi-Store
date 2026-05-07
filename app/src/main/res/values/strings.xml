@@ -159,7 +159,7 @@
     <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
     <string name="auto_rejoin_snackbar_detect_running">Đang dò Place ID hiện tại từ Roblox…</string>
     <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID: %1$s</string>
-    <string name="auto_rejoin_snackbar_detect_no_game">Chưa vào game. Mở Roblox và join game muốn auto-rejoin trước rồi bấm lại.</string>
+    <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy đảm bảo Roblox đang chạy và đã vào game (đã thử dumpsys + logcat). Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
     <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền root để dò Place ID.</string>
 
     <!-- Auto Rejoin: foreground service notification -->
