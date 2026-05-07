@@ -9,6 +9,15 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
+    <!-- Auto Rejoin: cần foreground service để vòng lặp polling tiếp tục
+         chạy khi user switch sang Roblox app. SPECIAL_USE phù hợp vì
+         use-case (giám sát process Roblox để rejoin sau kick/disconnect)
+         không khớp với type sẵn có (location/mediaPlayback/dataSync/...). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Android 13+ runtime permission để hiển thị notification của FG service. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".KasumiApplication"
         android:allowBackup="true"
@@ -36,5 +45,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="com.kasumi.tool.AutoRejoinService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Continuously monitors the Roblox client process on rooted devices and re-launches it via deeplink after kicks/disconnects/crashes; requires polling while the user is actively playing in another app and therefore cannot use any of the predefined foregroundServiceType categories." />
+        </service>
     </application>
 </manifest>

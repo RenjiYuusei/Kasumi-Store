@@ -42,10 +42,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material3.*
@@ -395,6 +397,30 @@ class MainActivity : ComponentActivity() {
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     )
+                    NavigationBarItem(
+                        icon = {
+                            val scale by animateFloatAsState(
+                                targetValue = if (selectedTab == 3) 1.2f else 1.0f,
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                                label = "scale"
+                            )
+                            Icon(
+                                if (selectedTab == 3) Icons.Default.Replay else Icons.Outlined.Replay,
+                                contentDescription = stringResource(R.string.tab_auto_rejoin),
+                                modifier = Modifier.scale(scale)
+                            )
+                        },
+                        label = { Text(stringResource(R.string.tab_auto_rejoin), fontWeight = if (selectedTab == 3) FontWeight.SemiBold else FontWeight.Normal) },
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3; searchQuery = "" },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
             }
         ) { innerPadding ->
@@ -407,7 +433,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (selectedTab != 2) {
+                if (selectedTab == 0 || selectedTab == 1) {
                     KasumiSearchBar(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
@@ -424,7 +450,10 @@ class MainActivity : ComponentActivity() {
                     }, onDownloadRequest = { script ->
                         scriptToDownload = script
                     })
-                    else -> RobloxLoginScreen(onShowSnackbar = { msg ->
+                    2 -> RobloxLoginScreen(onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    })
+                    else -> AutoRejoinScreen(onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
                 }
