@@ -283,9 +283,12 @@ object AutoRejoinManager {
             return DetectedGame(null, null)
         }
 
-        // Step 2: thử dumpsys (deeplink intent path).
+        // Step 2: thử dumpsys (deeplink intent path). `grep -F ${pkg}` để
+        // tránh match nhầm intent của bản Roblox còn lại (khi user cài cả
+        // global + VNG, activity stack có thể giữ URI của phiên trước cho
+        // bản kia → return placeId sai cho tính năng "Tự dò").
         val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | head -10"
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
         val placeIdFromDump = Regex("placeId=([0-9]+)")
             .find(dumpR.output)?.groupValues?.getOrNull(1)
