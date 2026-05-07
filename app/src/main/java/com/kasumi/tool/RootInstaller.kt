@@ -494,8 +494,19 @@ object RootInstaller {
     }
 
     private fun fallbackInstallMultiple(files: List<File>): Pair<Boolean, String> {
+        val tmpDir = "/data/local/tmp/splits"
+        // Helper: chạy `rm -rf` đồng bộ để dọn tmpDir, không leak zombie process.
+        fun cleanup() {
+            try {
+                ProcessBuilder("su", "-c", "rm -rf $tmpDir")
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor()
+            } catch (_: Exception) {
+                // best-effort cleanup, ignore failures
+            }
+        }
         return try {
-            val tmpDir = "/data/local/tmp/splits"
             ProcessBuilder("su", "-c", "rm -rf $tmpDir && mkdir -p $tmpDir && chmod 777 $tmpDir")
                 .redirectErrorStream(true)
                 .start()
@@ -514,7 +525,10 @@ object RootInstaller {
             }
             pExt.waitFor()
             if (paths.isNotEmpty()) {
-                ProcessBuilder("su", "-c", "chmod 644 $tmpDir/*").start().waitFor()
+                ProcessBuilder("su", "-c", "chmod 644 $tmpDir/*")
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor()
             }
             val cmd = listOf("su", "-c", "pm install-multiple -r ${paths.joinToString(" ")}")
             val p = ProcessBuilder(cmd)
@@ -522,10 +536,10 @@ object RootInstaller {
                 .start()
             val out = p.inputStream.bufferedReader().readText()
             val procExit = p.waitFor()
-            // cleanup
-            ProcessBuilder("su", "-c", "rm -rf $tmpDir").start()
+            cleanup()
             (procExit == 0) to out
         } catch (e: Exception) {
+            cleanup()
             false to (e.message ?: "unknown error")
         }
     }

@@ -52,7 +52,6 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,8 +113,15 @@ class MainActivity : ComponentActivity() {
     }
     private val gson = Gson()
 
-    private val DEFAULT_SOURCE_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
-    private val DEFAULT_SCRIPTS_URL = "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
+    companion object {
+        private const val DEFAULT_SOURCE_URL =
+            "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
+        private const val DEFAULT_SCRIPTS_URL =
+            "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
+        private const val PATH_DELTA_LEGACY = "/storage/emulated/0/Delta"
+        private const val PATH_DELTA_VNG =
+            "/storage/emulated/0/Android/data/com.roblox.client.vnggames/files/gloop/external/Delta"
+    }
 
     // Data states
     private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
@@ -134,7 +140,7 @@ class MainActivity : ComponentActivity() {
                 val message = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)
                 when (status) {
                     android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                        val confirmIntent = if (Build.VERSION.SDK_INT >= 33) {
+                        val confirmIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                              intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
                         } else {
                              @Suppress("DEPRECATION")
@@ -167,7 +173,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"), Context.RECEIVER_EXPORTED)
         } else {
             registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"))
@@ -1248,15 +1254,17 @@ class MainActivity : ComponentActivity() {
 
 
     private fun normalizeUrl(raw: String): String {
-        var url = raw
-        if (url.contains("dropbox.com")) {
-            var u2 = url
-            u2 = u2.replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
-            u2 = u2.replace("://dropbox.com", "://dl.dropboxusercontent.com")
-            u2 = if (u2.contains("dl=0")) u2.replace("dl=0", "dl=1") else if (u2.contains("dl=")) u2 else u2 + (if (u2.contains("?")) "&dl=1" else "?dl=1")
-            return u2
+        if (!raw.contains("dropbox.com")) return raw
+        var u = raw
+            .replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
+            .replace("://dropbox.com", "://dl.dropboxusercontent.com")
+        u = when {
+            u.contains("dl=0") -> u.replace("dl=0", "dl=1")
+            u.contains("dl=") -> u
+            u.contains("?") -> "$u&dl=1"
+            else -> "$u?dl=1"
         }
-        return url
+        return u
     }
 
     private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
@@ -1336,13 +1344,12 @@ class MainActivity : ComponentActivity() {
                     
                     val rooted = RootInstaller.isDeviceRooted()
                      if (rooted) {
-                        val resSplit: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
-                        val (ok, msg) = resSplit
-                        if (ok) {
-                            onShowSnackbar("Cài đặt thành công")
-                        } else {
-                            installSplitsNormally(splits, onShowSnackbar)
-                        }
+                            val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
+                            if (ok) {
+                                onShowSnackbar("Cài đặt thành công")
+                            } else {
+                                installSplitsNormally(splits, onShowSnackbar)
+                            }
                     } else {
                         installSplitsNormally(splits, onShowSnackbar)
                     }
@@ -1351,8 +1358,7 @@ class MainActivity : ComponentActivity() {
 
                  val rooted = RootInstaller.isDeviceRooted()
                 if (rooted) {
-                    val resApk: Pair<Boolean, String> = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
-                    val (ok, msg) = resApk
+                    val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
                     if (ok) {
                         onShowSnackbar("Cài đặt thành công")
                     } else {
@@ -1434,11 +1440,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun formatFileSize(bytes: Long): String {
+        // Locale.US ensures '.' decimal separator regardless of system locale
+        // (vd: locale Việt sẽ ra "1,5 KB" làm vỡ phần text "1,5 KB · cached").
         return when {
             bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format("%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-            else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+            bytes < 1024 * 1024 -> String.format(Locale.US, "%.1f KB", bytes / 1024.0)
+            bytes < 1024 * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
+            else -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         }
     }
 
@@ -1529,30 +1537,29 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    private val PATH_DELTA_LEGACY = "/storage/emulated/0/Delta"
-    private val PATH_DELTA_VNG = "/storage/emulated/0/Android/data/com.roblox.client.vnggames/files/gloop/external/Delta"
-
     private fun getDeltaDir(): File {
         val vng = File(PATH_DELTA_VNG)
         if (vng.exists()) return vng
         return File(PATH_DELTA_LEGACY)
     }
 
-private suspend fun loadScriptsFromLocal() {
-        val context = this@MainActivity
+    private suspend fun loadScriptsFromLocal() {
+        // Cache strings & deltaDir trên Main thread trước khi nhảy sang IO
+        // để tránh gọi getString() từ background (an toàn nhưng không cần thiết).
+        val autoString = getString(R.string.local_auto)
+        val manualString = getString(R.string.local_manual)
         withContext(Dispatchers.IO) {
+            val deltaDir = getDeltaDir()
             val newLocals = mutableListOf<ScriptItem>()
-            val autoExecuteDir = File(getDeltaDir(), "Autoexecute")
-            val scriptsDir = File(getDeltaDir(), "Scripts")
+            val autoExecuteDir = File(deltaDir, "Autoexecute")
+            val scriptsDir = File(deltaDir, "Scripts")
 
-            val autoString = context.getString(R.string.local_auto)
             autoExecuteDir.listFiles()?.forEach {
                 if (it.isFile) {
                     newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, autoString, null, it.absolutePath))
                 }
             }
 
-            val manualString = context.getString(R.string.local_manual)
             scriptsDir.listFiles()?.forEach {
                 if (it.isFile) {
                     newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, manualString, null, it.absolutePath))
@@ -1653,7 +1660,9 @@ private suspend fun loadScriptsFromLocal() {
                         try {
                             val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
                             packageName = JSONObject(manifest).optString("package_name")
-                        } catch (e: Exception) {}
+                        } catch (e: Exception) {
+                            Log.w("Kasumi", "Failed to parse manifest.json: ${entry.name}", e)
+                        }
                         continue
                     }
                     if (entryName.endsWith(".apk")) {
@@ -1772,7 +1781,7 @@ private suspend fun loadScriptsFromLocal() {
                 val pi = android.app.PendingIntent.getBroadcast(
                     this, sessionId,
                     intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE else 0)
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.app.PendingIntent.FLAG_MUTABLE else 0)
                 )
                 session.commit(pi.intentSender)
                 onShowSnackbar("Đang tiến hành cài đặt…")
