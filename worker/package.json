@@ -1,0 +1,15 @@
+{
+  "name": "kasumi-store-proxy",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy holding the GitHub PAT so the Android APK does not need to ship any token.",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

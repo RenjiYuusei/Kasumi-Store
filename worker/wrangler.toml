@@ -1,0 +1,19 @@
+name = "kasumi-store-proxy"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+# Đổi sau khi tạo PAT mới — fine-grained, scope "Contents: Read" duy nhất repo này.
+# Owner / repo / branch để Worker biết cần gọi GitHub Contents API ở đâu.
+[vars]
+GITHUB_OWNER = "RenjiYuusei"
+GITHUB_REPO = "Kasumi-Store"
+GITHUB_REF = "main"
+
+# Secret KHÔNG khai báo ở đây. Set bằng:
+#   wrangler secret put GITHUB_TOKEN
+#   wrangler secret put SHARED_SECRET   (optional, ngăn người ngoài abuse worker)
+#
+# Sau khi deploy, URL sẽ là:
+#   https://kasumi-store-proxy.<your-cf-account>.workers.dev/apps.json
+#   https://kasumi-store-proxy.<your-cf-account>.workers.dev/scripts.json
+# Cập nhật hai URL này vào app/secrets.properties.
