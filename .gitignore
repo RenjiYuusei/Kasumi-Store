@@ -9,6 +9,12 @@
 # Local configuration file (sdk path, etc)
 local.properties
 
+# Local override for the SecureStrings codegen URLs / shared secrets.
+# Copy app/secrets.properties.example -> app/secrets.properties để chỉnh
+# riêng từng máy. Gradle dùng file local nếu có, không thì fallback về
+# .example đã commit.
+app/secrets.properties
+
 # Android Studio generated files and folders
 captures/
 .externalNativeBuild/

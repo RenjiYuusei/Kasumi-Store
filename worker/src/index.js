@@ -86,14 +86,20 @@ export default {
 };
 
 /**
+ * Constant-time string compare. Luôn duyệt qua đủ `Math.max(len(a), len(b))`
+ * ký tự để không leak độ dài chuỗi qua thời gian phản hồi; chênh lệch độ
+ * dài cũng được OR vào `diff` để mismatch độ dài bị phát hiện.
+ *
  * @param {string} a
  * @param {string} b
  */
 function constantTimeEquals(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < len; i++) {
+    const ca = i < a.length ? a.charCodeAt(i) : 0;
+    const cb = i < b.length ? b.charCodeAt(i) : 0;
+    diff |= ca ^ cb;
   }
   return diff === 0;
 }

@@ -92,13 +92,24 @@ Secrets (set bằng `wrangler secret put ...`, KHÔNG commit):
 
 ## App side
 
-Sau khi deploy thành công, mở `app/secrets.properties` (gitignored
-nếu bạn không muốn commit) và đổi:
+Sau khi deploy thành công:
+
+```bash
+# Tạo file local override (file này đã được gitignore)
+cp app/secrets.properties.example app/secrets.properties
+```
+
+Mở `app/secrets.properties` và đổi:
 
 ```properties
 appsUrl=https://kasumi-store-proxy.<your-account>.workers.dev/apps.json
 scriptsUrl=https://kasumi-store-proxy.<your-account>.workers.dev/scripts.json
 ```
+
+> Build cũng tự fallback về `app/secrets.properties.example` nếu bạn
+> không tạo bản local — tiện cho CI/contributor không cần URL Worker
+> riêng. KHÔNG sửa giá trị thật vào file `.example` (file này được
+> commit).
 
 Build lại app:
 

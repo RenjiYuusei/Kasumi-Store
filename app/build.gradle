@@ -20,8 +20,14 @@ def generateSecureStringsTask = tasks.register('generateSecureStrings') {
     group = 'build setup'
     description = 'Sinh SecureStrings.kt với khoá AES-256 ngẫu nhiên cho mỗi build.'
 
-    def secretsFile = file('secrets.properties')
-    inputs.file(secretsFile).optional(true)
+    def localSecretsFile = file('secrets.properties')
+    def exampleSecretsFile = file('secrets.properties.example')
+    // Khai báo dạng files() + filter để chấp nhận trường hợp local override
+    // chưa tồn tại (gitignored, dev-local). Always-rerun phía dưới khiến
+    // input tracking không bắt buộc, nhưng vẫn để cho rõ ràng.
+    inputs.files(provider {
+        [localSecretsFile, exampleSecretsFile].findAll { it.exists() }
+    }).withPropertyName('secretsFiles')
     inputs.property('envApps', providers.environmentVariable('KASUMI_APPS_URL').orElse(''))
     inputs.property('envScripts', providers.environmentVariable('KASUMI_SCRIPTS_URL').orElse(''))
     outputs.dir(secureStringsOutputDir)
@@ -30,16 +36,21 @@ def generateSecureStringsTask = tasks.register('generateSecureStrings') {
 
     doLast {
         Properties props = new Properties()
-        if (secretsFile.exists()) {
-            secretsFile.withInputStream { props.load(it) }
+        // Ưu tiên app/secrets.properties (gitignored, dev-local) → fallback
+        // app/secrets.properties.example (committed, default).
+        File chosen = localSecretsFile.exists() ? localSecretsFile :
+                      exampleSecretsFile.exists() ? exampleSecretsFile : null
+        if (chosen != null) {
+            chosen.withInputStream { props.load(it) }
         }
         String appsUrl = (System.getenv('KASUMI_APPS_URL') ?: props.getProperty('appsUrl') ?: '').trim()
         String scriptsUrl = (System.getenv('KASUMI_SCRIPTS_URL') ?: props.getProperty('scriptsUrl') ?: '').trim()
 
         if (!appsUrl || !scriptsUrl) {
             throw new GradleException(
-                "Thiếu URL nguồn cho SecureStrings. Hãy set 'appsUrl'/'scriptsUrl' trong " +
-                "app/secrets.properties hoặc env KASUMI_APPS_URL / KASUMI_SCRIPTS_URL."
+                "Thiếu URL nguồn cho SecureStrings. Set 'appsUrl'/'scriptsUrl' trong " +
+                "app/secrets.properties (copy từ app/secrets.properties.example) " +
+                "hoặc env KASUMI_APPS_URL / KASUMI_SCRIPTS_URL."
             )
         }
 
