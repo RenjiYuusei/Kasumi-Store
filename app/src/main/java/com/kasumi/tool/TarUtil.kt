@@ -70,13 +70,12 @@ object TarUtil {
 
         header[155] = ' '.code.toByte()
         // header[154] is already 0 (\0) from ByteArray initialization
-        var tempSum = sum
-        check(tempSum < 0x40000) { "TAR checksum $tempSum exceeds 6-digit octal range" }
+        check(sum < 0x40000) { "TAR checksum $sum exceeds 6-digit octal range" }
         for (i in 153 downTo 148) {
-            header[i] = ((tempSum % 8) + '0'.code).toByte()
-            tempSum /= 8
+            header[i] = ((sum % 8) + '0'.code).toByte()
+            sum /= 8
         }
-        check(tempSum == 0L) { "tempSum should be 0 after writing 6 octal digits, but was $tempSum" }
+        check(sum == 0L) { "sum should be 0 after writing 6 octal digits, but was $sum" }
 
         out.write(header)
 
