@@ -1,5 +1,6 @@
 package com.kasumi.tool
 
+import android.util.Log
 import java.io.File
 import java.io.BufferedWriter
 import java.io.BufferedReader
@@ -502,8 +503,11 @@ object RootInstaller {
                     .redirectErrorStream(true)
                     .start()
                     .waitFor()
-            } catch (_: Exception) {
-                // best-effort cleanup, ignore failures
+            } catch (e: Exception) {
+                // best-effort cleanup; log để có thể debug khi su không khả
+                // dụng / process bị kill (file ở $tmpDir sẽ leak nhưng không
+                // làm fail flow chính).
+                Log.w("RootInstaller", "cleanup $tmpDir failed: ${e.message}")
             }
         }
         return try {
