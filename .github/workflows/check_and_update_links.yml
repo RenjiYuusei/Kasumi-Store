@@ -1,0 +1,44 @@
+name: Check and Update Dead Links
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-update-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 apksearch oss2 cloudscraper androguard
+
+      - name: Check app links
+        run: python tools/check_app_links.py
+
+      - name: Run app update script
+        run: python tools/update_apps.py
+
+      - name: Run delta update script
+        run: python tools/update_delta.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add source/apps.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: Check and update dead links [skip ci]"
+            git push
+          fi
