@@ -229,7 +229,7 @@ object AutoRejoinManager {
         val dumpR = executeAsRoot(
             "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
-        val placeIdInDump = Regex("placeId=([0-9]+)").find(dumpR.output)?.groupValues?.getOrNull(1)
+        val placeIdInDump = extractPlaceId(dumpR.output)
         if (!placeIdInDump.isNullOrEmpty()) {
             return if (placeIdInDump == targetPlaceId) {
                 StatusReport(RobloxState.IN_GAME, pid, placeIdInDump, null)
@@ -288,49 +288,68 @@ object AutoRejoinManager {
         // global + VNG, activity stack có thể giữ URI của phiên trước cho
         // bản kia → return placeId sai cho tính năng "Tự dò").
         val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -20"
         )
-        val placeIdFromDump = Regex("placeId=([0-9]+)")
-            .find(dumpR.output)?.groupValues?.getOrNull(1)
+        val placeIdFromDump = extractPlaceId(dumpR.output)
+        val gidFromDump = extractGameInstanceId(dumpR.output)
         if (!placeIdFromDump.isNullOrEmpty()) {
-            // gameInstanceId trong dumpsys URL có thể là UUID `[0-9a-f-]`
-            // hoặc chuỗi đã URL-encode chứa `%XX`. Stop tại các terminator:
-            // `&`, whitespace, `}`, `"`, `]`, `)`.
-            val gidFromDump = Regex("gameInstanceId=([^&\\s}\"\\])]+)")
-                .find(dumpR.output)?.groupValues?.getOrNull(1)
-                ?.let { Uri.decode(it) }
             return DetectedGame(placeIdFromDump, gidFromDump)
         }
 
         // Step 3: logcat fallback. Roblox FLog/Network/JoinGame messages
-        // log placeId trong nhiều format khác nhau:
+        // log placeId + server instance trong nhiều format khác nhau:
         //   - `[FLog::PlaceLauncher] placeId=920587237`
         //   - `JoinGameJob ... placeId 920587237`
         //   - JSON: `"placeId":920587237` hoặc `"placeId":"920587237"`
-        // Regex case-insensitive, cho phép `=`, `:`, hoặc whitespace giữa
-        // key và value, optional double-quote bao quanh.
-        // Place ID hợp lệ là 4–16 chữ số (Roblox hiện cao nhất ~13 digits).
+        //   - server instance có thể là `gameInstanceId`, `jobId`,
+        //     `serverInstanceId`, hoặc query param trong URL.
+        // Ưu tiên match cuối cùng (theo thứ tự logcat chronological → game
+        // user đang chơi hiện tại).
         val logR = executeAsRoot(
-            "logcat -d -t 10000 --pid=$pid 2>/dev/null",
+            "logcat -d -t 20000 --pid=$pid 2>/dev/null",
             timeoutSec = 15L
         )
-        val placeIdRegex = Regex("(?i)\\bplaceid\"?\\s*[=:]\\s*\"?([0-9]{4,16})")
-        // Lấy tất cả match, ưu tiên match cuối cùng (theo thứ tự dòng →
-        // theo thời gian, vì logcat output theo chronological order).
-        val placeIdFromLog = placeIdRegex.findAll(logR.output)
-            .map { it.groupValues[1] }
-            .lastOrNull()
-        if (!placeIdFromLog.isNullOrEmpty()) {
-            // gameInstanceId thường là UUID 36 ký tự `[0-9a-f-]` hoặc hex
-            // string. Format chấp nhận tương tự placeId.
-            val gidRegex = Regex("(?i)\\bgameinstanceid\"?\\s*[=:]\\s*\"?([0-9a-fA-F-]{8,64})")
-            val gidFromLog = gidRegex.findAll(logR.output)
-                .map { it.groupValues[1] }
-                .lastOrNull()
+        val placeIdFromLog = extractPlaceId(logR.output)
+        val gidFromLog = extractGameInstanceId(logR.output)
+        if (!placeIdFromLog.isNullOrEmpty() || !gidFromLog.isNullOrEmpty()) {
             return DetectedGame(placeIdFromLog, gidFromLog)
         }
 
         return DetectedGame(null, null)
+    }
+
+    /**
+     * Extract Place ID từ dumpsys/logcat. Hỗ trợ cả query param
+     * `placeId=...`, JSON `"placeId":...`, và log text `placeId 123`.
+     */
+    private fun extractPlaceId(text: String): String? {
+        val regex = Regex("(?i)\\bplaceid\\b\"?\\s*(?:=|:|%3[dD]|\\s)\\s*\"?([0-9]{4,16})")
+        return regex.findAll(text).map { it.groupValues[1] }.lastOrNull()
+    }
+
+    /**
+     * Extract server instance id hiện tại của Roblox. Roblox thường gọi cùng
+     * giá trị này là `gameInstanceId` trong deeplink và `jobId` trong client
+     * logs/API; một số bản ghi lại dùng `serverInstanceId` hoặc `instanceId`.
+     */
+    private fun extractGameInstanceId(text: String): String? {
+        val queryParamRegex = Regex("(?i)(?:gameInstanceId|jobId|serverInstanceId|instanceId)(?:=|%3[dD])([^&\\s}\"\\])]+)")
+        val fromQuery = queryParamRegex.findAll(text)
+            .mapNotNull { it.groupValues.getOrNull(1)?.let(Uri::decode)?.sanitizeGameInstanceId() }
+            .lastOrNull()
+        if (!fromQuery.isNullOrEmpty()) return fromQuery
+
+        val keyValueRegex = Regex(
+            "(?i)\\b(?:gameInstanceId|jobId|serverInstanceId|instanceId)\\b\"?\\s*(?:=|:|\\s)\\s*\"?([0-9a-fA-F-]{8,64})"
+        )
+        return keyValueRegex.findAll(text)
+            .mapNotNull { it.groupValues.getOrNull(1)?.sanitizeGameInstanceId() }
+            .lastOrNull()
+    }
+
+    private fun String.sanitizeGameInstanceId(): String? {
+        val trimmed = trim().trim('\'', '"', ',', ';')
+        return trimmed.takeIf { it.length in 8..128 && it.any { c -> c.isLetterOrDigit() } }
     }
 
     /**

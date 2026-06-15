@@ -80,6 +80,7 @@ fun AutoRejoinScreen(
     val msgDetectNoGame = stringResource(R.string.auto_rejoin_snackbar_detect_no_game)
     val msgDetectNoRoot = stringResource(R.string.auto_rejoin_snackbar_detect_no_root)
     val msgDetectSuccessFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success)
+    val msgDetectSuccessWithInstanceFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success_with_instance)
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -145,7 +146,16 @@ fun AutoRejoinScreen(
             if (detected.hasPlaceId) {
                 placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
                 gameInstanceInput = detected.gameInstanceId.orEmpty()
-                onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                if (detected.gameInstanceId.isNullOrBlank()) {
+                    onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                } else {
+                    onShowSnackbar(
+                        msgDetectSuccessWithInstanceFmt.format(
+                            detected.placeId,
+                            detected.gameInstanceId,
+                        )
+                    )
+                }
             } else {
                 onShowSnackbar(msgDetectNoGame)
             }

@@ -127,7 +127,7 @@
     <string name="auto_rejoin_config_interval">Chu kỳ kiểm tra</string>
     <string name="auto_rejoin_config_interval_value">%1$d giây</string>
     <string name="auto_rejoin_config_detect_button">Tự dò từ Roblox</string>
-    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để lấy Place ID tự động.</string>
+    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào đúng server cần auto-rejoin → bấm để tự lấy Place ID và Game Instance ID.</string>
 
     <!-- Auto Rejoin: control card -->
     <string name="auto_rejoin_control_title">Điều khiển</string>
@@ -157,9 +157,10 @@
     <string name="auto_rejoin_snackbar_started">Đã bật auto-rejoin (chạy ngầm như foreground service)</string>
     <string name="auto_rejoin_snackbar_stopped">Đã dừng auto-rejoin</string>
     <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
-    <string name="auto_rejoin_snackbar_detect_running">Đang dò Place ID hiện tại từ Roblox…</string>
+    <string name="auto_rejoin_snackbar_detect_running">Đang dò Place ID và Instance ID hiện tại từ Roblox…</string>
     <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID: %1$s</string>
-    <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy đảm bảo Roblox đang chạy và đã vào game (đã thử dumpsys + logcat). Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
+    <string name="auto_rejoin_snackbar_detect_success_with_instance">Đã lấy Place ID: %1$s và Instance ID: %2$s</string>
+    <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID/Instance ID. Hãy đảm bảo Roblox đang chạy và đã vào server game (đã thử dumpsys + logcat). Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
     <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền root để dò Place ID.</string>
 
     <!-- Auto Rejoin: foreground service notification -->
