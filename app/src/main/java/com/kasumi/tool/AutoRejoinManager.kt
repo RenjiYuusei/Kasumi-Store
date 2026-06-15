@@ -333,7 +333,7 @@ object AutoRejoinManager {
      * logs/API; một số bản ghi lại dùng `serverInstanceId` hoặc `instanceId`.
      */
     private fun extractGameInstanceId(text: String): String? {
-        val queryParamRegex = Regex("(?i)(?:gameInstanceId|jobId|serverInstanceId|instanceId)(?:=|%3[dD])([^&\\s}\"\\])]+)")
+        val queryParamRegex = Regex("(?i)(?:gameInstanceId|jobId|serverInstanceId)(?:=|%3[dD])([^&\\s}\"\\])]+)")
         val fromQuery = queryParamRegex.findAll(text)
             .mapNotNull { it.groupValues.getOrNull(1)?.let(Uri::decode)?.sanitizeGameInstanceId() }
             .lastOrNull()
