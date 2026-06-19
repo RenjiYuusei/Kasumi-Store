@@ -2,7 +2,7 @@
 
 Ứng dụng quản lý và tải xuống APK/Script cho giả lập và thiết bị Android, hỗ trợ cài đặt nâng cao và quản lý script cho Roblox/Delta.
 
-**Phiên bản:** 1.8.0
+**Phiên bản:** 1.8.5
 **Ngôn ngữ:** Kotlin
 **Giao diện:** Jetpack Compose (Material 3)
 

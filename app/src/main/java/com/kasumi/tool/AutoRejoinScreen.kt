@@ -80,6 +80,7 @@ fun AutoRejoinScreen(
     val msgDetectNoGame = stringResource(R.string.auto_rejoin_snackbar_detect_no_game)
     val msgDetectNoRoot = stringResource(R.string.auto_rejoin_snackbar_detect_no_root)
     val msgDetectSuccessFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success)
+    val msgDetectSuccessPrivateFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success_private)
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -144,8 +145,17 @@ fun AutoRejoinScreen(
             isDetecting = false
             if (detected.hasPlaceId) {
                 placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
-                gameInstanceInput = detected.gameInstanceId.orEmpty()
-                onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                if (detected.isPrivateServer && !detected.gameInstanceId.isNullOrBlank()) {
+                    // svv (server riêng / VIP): fill cả Game Instance ID để
+                    // rejoin đúng server riêng.
+                    gameInstanceInput = detected.gameInstanceId
+                    onShowSnackbar(msgDetectSuccessPrivateFmt.format(detected.placeId))
+                } else {
+                    // svth (server thường): chỉ lấy Place ID, xoá Instance ID
+                    // cũ (nếu có) để rejoin bằng matchmaking công khai.
+                    gameInstanceInput = ""
+                    onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                }
             } else {
                 onShowSnackbar(msgDetectNoGame)
             }
