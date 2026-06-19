@@ -5,10 +5,10 @@
 - **Auto Rejoin — Tự dò ID server riêng (svv)**: Nút "Tự dò từ Roblox" giờ phân biệt được **server riêng / VIP server (svv)** và **server thường (svth)**:
   - **Đang ở server riêng (svv)**: tự dò **cả `placeId` và `gameInstanceId`** → fill vào ô input để rejoin thẳng vào đúng server riêng đang chơi.
   - **Đang ở server thường (svth)**: **chỉ lấy `placeId`** (tự xoá Game Instance ID cũ nếu có) → rejoin bằng matchmaking công khai, tránh cố join 1 instance đã đầy / đã đóng.
-- **Cách nhận biết server riêng**: thêm `AutoRejoinManager.looksLikePrivateServer()` — quét output `dumpsys` / `logcat` tìm các dấu hiệu chỉ có ở reserved server: `accessCode`, `linkCode`, `privateServerLinkCode`, request type `RequestPrivateGame`, hoặc `privateServerId` khác `0`.
+- **Cách nhận biết server riêng**: tín hiệu CHÍNH là **có tìm thấy `gameInstanceId` hay không** (vì đó cũng là thứ duy nhất cho phép rejoin đúng 1 server cụ thể) — server thường (matchmaking) launch chỉ có `placeId`, server riêng/VIP/follow bạn launch kèm `gameInstanceId`. `AutoRejoinManager.looksLikePrivateServer()` là tín hiệu PHỤ, quét `dumpsys` / `logcat` tìm `accessCode`, `linkCode`, `privateServerLinkCode`, `RequestPrivateGame`, `joinGamePostPrivateServer`, hoặc `privateServerId` khác `0`.
 
 ### 🐛 Sửa lỗi / Cải thiện
-- **Giảm false positive khi dò ở logcat**: chỉ xét dấu hiệu server riêng trong cửa sổ ±4000 ký tự quanh lần join **gần nhất** (thay vì cả buffer 10000 dòng) — tránh nhầm `accessCode` còn sót của 1 phiên private server cũ khi user đã chuyển sang server thường.
+- **Fix báo nhầm svv → svth + không lấy được Instance ID**: bản trước chỉ coi là svv khi thấy marker text như `accessCode`, và ở logcat chỉ quét 1 cửa sổ nhỏ quanh lần `placeId` cuối. Nhưng launch URI của private server mang sẵn `gameInstanceId` mà KHÔNG kèm marker; lúc bấm nút thì `placeId` mới nhất trong log lại là telemetry gameplay (cách xa dòng join chứa marker) → marker bị bỏ sót, Instance ID bị drop. Đã đổi sang lấy `gameInstanceId` làm tín hiệu chính + quét marker trên **toàn bộ** buffer logcat, ưu tiên `gameInstanceId` từ launch URI hiện tại (dumpsys) trước khi fallback sang logcat.
 - **`DetectedGame`**: thêm cờ `isPrivateServer` để UI hiển thị đúng thông báo (server riêng vs server thường) sau khi tự dò.
 
 ### 🔢 Phiên bản
