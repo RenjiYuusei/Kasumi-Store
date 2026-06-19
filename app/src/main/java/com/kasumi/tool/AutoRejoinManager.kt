@@ -255,23 +255,12 @@ object AutoRejoinManager {
     data class DetectedGame(
         val placeId: String?,
         val gameInstanceId: String?,
+        val accessCode: String? = null,
         val isPrivateServer: Boolean = false,
     ) {
         val hasPlaceId: Boolean get() = !placeId.isNullOrEmpty()
     }
 
-    /**
-     * Các pattern đánh dấu Roblox đang ở **server riêng / VIP server (svv)**.
-     *
-     * Roblox chỉ ghi các field này khi join 1 reserved server (private/VIP):
-     *  - `accessCode` / `linkCode` / `privateServerLinkCode`: mã truy cập của
-     *    private server (share link / VIP server).
-     *  - `RequestPrivateGame`: request type của PlaceLauncher dành riêng cho
-     *    private server — server thường (public) dùng `RequestGame` /
-     *    `RequestGameJob`.
-     *
-     * Nếu **không** thấy dấu hiệu nào → đang ở server thường ("svth").
-     */
     /** Regex bắt `placeId=<id>` trong launch URI (deeplink hoặc URL web). */
     private val PLACE_URL_REGEX = Regex("(?i)placeid=([0-9]{3,16})")
 
@@ -287,50 +276,60 @@ object AutoRejoinManager {
         Regex("(?i)gameinstanceid\"?\\s*[=:]?\\s*\"?([0-9a-fA-F]{8}-[0-9a-fA-F-]{4,55})")
 
     /**
-     * Tự dò Place ID (+ Game Instance ID nếu đang ở **server riêng / VIP
-     * server**) hiện tại mà Roblox đang treo.
+     * Regex bắt `accessCode` (mã truy cập **server riêng / VIP**, 1 GUID)
+     * trong URL join. Khớp cả `accessCode=` và `reservedServerAccessCode=`.
      *
-     * Hữu ích cho UI "Tự dò": user mở Roblox, vào game → bấm 1 nút →
-     * placeId (và instanceId nếu là svv) tự fill vào input thay vì phải tìm
-     * rồi paste tay.
+     * Đây là dấu hiệu svv QUAN TRỌNG NHẤT: server riêng join qua danh sách
+     * private server có URL dạng
+     * `…/games/start?placeId=…&accessCode=<uuid>&joinAttemptOrigin=privateServerListJoin`
+     * — thường **KHÔNG** kèm `gameInstanceId`. Server thường (matchmaking)
+     * KHÔNG bao giờ có accessCode.
+     */
+    private val ACCESS_CODE_REGEX =
+        Regex("(?i)accesscode\"?\\s*[=:]?\\s*\"?([0-9a-fA-F]{8}-[0-9a-fA-F-]{4,55})")
+
+    /**
+     * Tự dò Place ID (+ định danh server riêng nếu đang ở **svv**) hiện tại
+     * mà Roblox đang treo.
+     *
+     * Hữu ích cho UI "Tự dò": user mở Roblox, vào game → bấm 1 nút → các ô
+     * input tự fill thay vì phải tìm rồi paste tay.
      *
      * ### Phân biệt server riêng (svv) vs server thường (svth)
-     * Tín hiệu DUY NHẤT để quyết định là **có tìm thấy `gameInstanceId` hay
-     * không** — vì đó cũng chính là thứ duy nhất cho phép rejoin đúng 1
-     * server cụ thể:
-     *  - **svv** (server riêng / VIP / follow bạn): URL join mang theo
-     *    `gameInstanceId` (id của reserved server đang chạy) → trả cả
-     *    `placeId` + `gameInstanceId` để rejoin thẳng vào đúng server.
-     *  - **svth** (server thường, matchmaking): URL join chỉ có `placeId`,
-     *    KHÔNG có `gameInstanceId` → chỉ trả `placeId`. Giữ gameInstanceId
-     *    của svth là vô nghĩa vì instance đó có thể đã đầy / đã đóng khi
-     *    rejoin; để trống cho Roblox tự matchmaking vào 1 server bất kỳ.
+     * Server riêng được join qua URL có **`accessCode`** (mã truy cập VIP /
+     * private server) và/hoặc **`gameInstanceId`** (id reserved server đang
+     * chạy). Cả 2 đều cho phép rejoin đúng server đó. Server thường
+     * (matchmaking) KHÔNG có 2 field này:
+     *  - **svv**: trả `placeId` + `accessCode` (và `gameInstanceId` nếu có)
+     *    → rejoin thẳng vào đúng server riêng.
+     *  - **svth**: chỉ trả `placeId` → để Roblox tự matchmaking.
      *
      * ### Nguồn dữ liệu
      *  1. **`dumpsys activity activities`** — deeplink `roblox://...` còn
      *     trong task stack (khi Roblox được launch qua deeplink). `grep -F
      *     ${pkg}` tránh nhầm bản global vs VNG.
      *  2. **logcat — dòng "join URL" MỚI NHẤT**. Roblox log mỗi lần join qua
-     *     2 dạng URL (đều nằm gọn trên 1 dòng):
-     *       `https://www.roblox.com/games/start?placeId=...&gameInstanceId=...&accessCode=...`
-     *       `roblox://experiences/start?placeId=...&gameInstanceId=...`
+     *     URL (nằm gọn trên 1 dòng), do component `rbx.web`:
+     *       `https://www.roblox.com/games/start?placeId=…&accessCode=…&joinAttemptOrigin=privateServerListJoin`
+     *       `https://www.roblox.com/games/start?placeId=…&gameInstanceId=…`
+     *       `roblox://experiences/start?placeId=…&gameInstanceId=…`
      *     Lấy dòng CUỐI có `placeId=` (mới nhất → server hiện tại) rồi parse
-     *     `placeId` + `gameInstanceId` TỪ CÙNG 1 DÒNG.
+     *     `placeId` + `accessCode` + `gameInstanceId` TỪ CÙNG 1 DÒNG.
+     *  3. Nếu vẫn chưa có `placeId` (svth thường không log URL join qua
+     *     rbx.web) → quét logcat tìm `placeId` chung (chỉ placeId, svth).
      *
      * ### Vì sao KHÔNG lọc `--pid` (root nguyên nhân bug cũ)
      * URL join được log bởi component `rbx.web`, có thể chạy ở **process con
      * khác pid** với main process (`pidof` trả pid của main). Bản trước lọc
-     * `logcat --pid=<main>` → loại MẤT đúng dòng chứa `gameInstanceId` →
-     * báo nhầm svv thành svth và không lấy được instance id. Bản này grep
-     * thẳng theo URL join, không lọc pid.
+     * `logcat --pid=<main>` → loại MẤT đúng dòng chứa accessCode /
+     * gameInstanceId → báo nhầm svv thành svth. Bản này grep thẳng theo URL
+     * join, không lọc pid.
      *
-     * Parse `placeId` + `gid` từ cùng 1 dòng cũng tránh được lỗi ghép
-     * `placeId` mới với `gid` cũ: nếu user chuyển private → public mà không
-     * kill app (cùng pid, buffer còn `gameInstanceId` cũ), dòng join mới
-     * nhất là server public (không gid) → kết quả đúng là svth.
+     * Parse các field từ cùng 1 dòng join mới nhất cũng tránh lỗi ghép field
+     * cũ với placeId mới (chuyển private → public cùng phiên không kill app).
      *
-     * @return [DetectedGame] với placeId (+ gameInstanceId nếu svv) nếu tìm
-     *     thấy. Trả về cả 2 = null nếu Roblox không chạy / chưa từng vào
+     * @return [DetectedGame] với placeId (+ accessCode/gameInstanceId nếu
+     *     svv). Trả về placeId = null nếu Roblox không chạy / chưa từng vào
      *     game / lỗi root.
      */
     fun detectCurrentGame(pkg: String): DetectedGame {
@@ -345,18 +344,19 @@ object AutoRejoinManager {
             "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
         var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
-        // gameInstanceId trong dumpsys URL có thể đã URL-encode (`%XX`) →
+        // gameInstanceId/accessCode trong dumpsys URL có thể đã URL-encode →
         // decode về raw để hiển thị / dùng lại.
         var gid = GID_DUMP_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
-            ?.let { Uri.decode(it) }
+            ?.let { Uri.decode(it) }?.takeIf { it.isNotBlank() }
+        var accessCode = ACCESS_CODE_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
 
         // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên). Chỉ chạy
-        // khi dumpsys chưa đủ placeId hoặc gid.
-        if (placeId.isNullOrEmpty() || gid.isNullOrEmpty()) {
+        // khi dumpsys chưa đủ định danh.
+        if (placeId.isNullOrEmpty() || (gid.isNullOrEmpty() && accessCode.isNullOrEmpty())) {
             val logR = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | " +
-                    "grep -iE 'games/start|gameinstanceid|roblox://' | tail -80",
+                    "grep -iE 'games/start|gameinstanceid|accesscode|roblox://' | tail -80",
                 timeoutSec = 15L
             )
             // Dòng CUỐI có placeId= là lần join mới nhất → server hiện tại.
@@ -370,21 +370,39 @@ object AutoRejoinManager {
                     gid = GID_LOG_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
                         ?.takeIf { it.isNotBlank() }
                 }
+                if (accessCode.isNullOrEmpty()) {
+                    accessCode = ACCESS_CODE_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+                        ?.takeIf { it.isNotBlank() }
+                }
             }
+        }
+
+        // Step 4: svth fallback — không tìm thấy URL join (svth thường không
+        // log qua rbx.web) nhưng placeId vẫn nằm đâu đó trong logcat. Quét
+        // chung placeId (chỉ placeId; không gid/accessCode → đúng là svth).
+        if (placeId.isNullOrEmpty()) {
+            val logR2 = executeAsRoot(
+                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
+                timeoutSec = 15L
+            )
+            val placeIdRegex = Regex("(?i)\\bplaceid\"?\\s*[=:]?\\s*\"?([0-9]{4,16})")
+            placeId = placeIdRegex.findAll(logR2.output).map { it.groupValues[1] }.lastOrNull()
         }
 
         if (placeId.isNullOrEmpty()) {
             return DetectedGame(null, null)
         }
 
-        // svv ⟺ tìm được gameInstanceId (rejoin được đúng instance cụ thể).
-        // Không có gid → server thường, chỉ trả placeId để Roblox tự
-        // matchmaking vào 1 server công khai bất kỳ.
-        return if (!gid.isNullOrEmpty()) {
-            DetectedGame(placeId, gid, isPrivateServer = true)
-        } else {
-            DetectedGame(placeId, null, isPrivateServer = false)
-        }
+        // svv ⟺ có accessCode HOẶC gameInstanceId (rejoin được đúng server
+        // cụ thể). Không có cả hai → server thường, chỉ trả placeId để Roblox
+        // tự matchmaking vào 1 server công khai bất kỳ.
+        val isPrivate = !accessCode.isNullOrEmpty() || !gid.isNullOrEmpty()
+        return DetectedGame(
+            placeId = placeId,
+            gameInstanceId = gid.takeIf { isPrivate },
+            accessCode = accessCode.takeIf { isPrivate },
+            isPrivateServer = isPrivate,
+        )
     }
 
     /**
@@ -414,33 +432,40 @@ object AutoRejoinManager {
      *
      * @param pkg package Roblox (`com.roblox.client` hoặc VNG).
      * @param placeId placeId mục tiêu — phải đã pass [isValidPlaceId].
-     * @param gameInstanceId tùy chọn: link tới private server / VIP server.
+     * @param gameInstanceId tùy chọn: id reserved server (private/VIP server).
+     * @param accessCode tùy chọn: mã truy cập server riêng / VIP — Roblox
+     *     deeplink chấp nhận `&accessCode=` để rejoin thẳng vào server riêng
+     *     (xem create.roblox.com/docs deeplinks). Server riêng join từ danh
+     *     sách private server thường chỉ có accessCode (không gameInstanceId).
      */
     fun rejoin(
         pkg: String,
         placeId: String,
-        gameInstanceId: String? = null
+        gameInstanceId: String? = null,
+        accessCode: String? = null
     ): List<RejoinAttempt> {
         val attempts = mutableListOf<RejoinAttempt>()
 
-        // M1: deeplink dạng experiences (mới)
         val gid = gameInstanceId?.takeIf { it.isNotBlank() }
+        val code = accessCode?.takeIf { it.isNotBlank() }
+
+        // M1: deeplink dạng experiences (mới). Gắn kèm gameInstanceId và/hoặc
+        // accessCode nếu có để rejoin đúng server riêng (svv).
         val m1Url = buildString {
             append("roblox://experiences/start?placeId=")
             append(placeId)
+            // URL-encode các tham số để xử lý ký tự đặc biệt (`%`, `+`,
+            // khoảng trắng, `#`, ...) khi user dán nhầm. Với UUID chuẩn
+            // `[0-9a-f-]` thì encode là no-op. Dùng `android.net.Uri.encode`
+            // (RFC 3986) thay vì `URLEncoder.encode` (form-encoding): tránh
+            // convert dấu cách thành `+` mà Roblox URL parser không decode.
             if (gid != null) {
                 append("&gameInstanceId=")
-                // URL-encode gid để xử lý các ký tự đặc biệt (`%`, `+`,
-                // khoảng trắng, `#`, ...) khi user dán nhầm. Với UUID chuẩn
-                // `[0-9a-f-]` thì encode là no-op (Roblox vẫn parse đúng).
-                //
-                // Dùng `android.net.Uri.encode` (RFC 3986) thay vì
-                // `URLEncoder.encode` (form-encoding): URLEncoder convert
-                // dấu cách thành `+` — Roblox URL parser (không phải HTML
-                // form parser) có thể không decode `+` thành space → drop
-                // private server link silently. Uri.encode tạo `%20` chuẩn
-                // cho query parameter.
                 append(Uri.encode(gid))
+            }
+            if (code != null) {
+                append("&accessCode=")
+                append(Uri.encode(code))
             }
         }
         val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
@@ -449,8 +474,19 @@ object AutoRejoinManager {
         attempts += RejoinAttempt("M1 — Experiences deeplink", m1Cmd, r1.exitCode, r1.output, r1.error)
         if (isAmStartSuccess(r1)) return attempts
 
-        // M2: deeplink legacy
-        val m2Url = "roblox://placeId=$placeId"
+        // M2: deeplink legacy. Cũng gắn accessCode/gameInstanceId nếu có.
+        val m2Url = buildString {
+            append("roblox://placeId=")
+            append(placeId)
+            if (gid != null) {
+                append("&gameInstanceId=")
+                append(Uri.encode(gid))
+            }
+            if (code != null) {
+                append("&accessCode=")
+                append(Uri.encode(code))
+            }
+        }
         val m2Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
             "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
         val r2 = executeAsRoot(m2Cmd)

@@ -107,6 +107,7 @@ class AutoRejoinService : Service() {
         val pkg = intent.getStringExtra(EXTRA_PKG)
         val placeId = intent.getStringExtra(EXTRA_PLACE_ID)
         val gid = intent.getStringExtra(EXTRA_GAME_INSTANCE_ID)?.takeIf { it.isNotBlank() }
+        val accessCode = intent.getStringExtra(EXTRA_ACCESS_CODE)?.takeIf { it.isNotBlank() }
         val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 15_000L)
             .coerceIn(5_000L, 60_000L)
 
@@ -132,6 +133,7 @@ class AutoRejoinService : Service() {
                 pkg = pkg,
                 placeId = placeId,
                 gameInstanceId = gid,
+                accessCode = accessCode,
                 intervalMs = intervalMs,
             )
         }
@@ -139,7 +141,7 @@ class AutoRejoinService : Service() {
 
         loopJob?.cancel()
         loopJob = serviceScope.launch {
-            runPollingLoop(pkg, placeId, gid, intervalMs)
+            runPollingLoop(pkg, placeId, gid, accessCode, intervalMs)
         }
     }
 
@@ -171,6 +173,7 @@ class AutoRejoinService : Service() {
         pkg: String,
         placeId: String,
         gid: String?,
+        accessCode: String?,
         intervalMs: Long,
     ) {
         // Sau mỗi lần force-stop + rejoin, Roblox cần 20–60s để mở lại và
@@ -250,7 +253,7 @@ class AutoRejoinService : Service() {
 
             if (needRejoin) {
                 val attempts = withContext(Dispatchers.IO) {
-                    AutoRejoinManager.rejoin(pkg, placeId, gid)
+                    AutoRejoinManager.rejoin(pkg, placeId, gid, accessCode)
                 }
                 lastRejoinEpochMs = System.currentTimeMillis()
                 _state.update { it.copy(rejoinCount = it.rejoinCount + 1) }
@@ -368,6 +371,7 @@ class AutoRejoinService : Service() {
         const val EXTRA_PKG = "pkg"
         const val EXTRA_PLACE_ID = "placeId"
         const val EXTRA_GAME_INSTANCE_ID = "gameInstanceId"
+        const val EXTRA_ACCESS_CODE = "accessCode"
         const val EXTRA_INTERVAL_MS = "intervalMs"
 
         // SimpleDateFormat KHÔNG thread-safe theo Java doc. Đặt trong
@@ -399,6 +403,7 @@ class AutoRejoinService : Service() {
             pkg: String,
             placeId: String,
             gameInstanceId: String?,
+            accessCode: String?,
             intervalSec: Int,
         ) {
             val intent = Intent(context, AutoRejoinService::class.java).apply {
@@ -406,6 +411,7 @@ class AutoRejoinService : Service() {
                 putExtra(EXTRA_PKG, pkg)
                 putExtra(EXTRA_PLACE_ID, placeId)
                 putExtra(EXTRA_GAME_INSTANCE_ID, gameInstanceId)
+                putExtra(EXTRA_ACCESS_CODE, accessCode)
                 putExtra(EXTRA_INTERVAL_MS, intervalSec.toLong() * 1000L)
             }
             ContextCompat.startForegroundService(context, intent)
@@ -450,6 +456,7 @@ data class AutoRejoinUiState(
     val pkg: String? = null,
     val placeId: String? = null,
     val gameInstanceId: String? = null,
+    val accessCode: String? = null,
     val intervalMs: Long = 15_000L,
     val currentState: AutoRejoinManager.RobloxState? = null,
     val currentPid: Int? = null,

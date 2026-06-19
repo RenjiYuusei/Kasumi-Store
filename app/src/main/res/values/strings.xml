@@ -124,10 +124,12 @@
     <string name="auto_rejoin_config_place_id_hint">Ví dụ: 920587237</string>
     <string name="auto_rejoin_config_game_instance">Game Instance ID (tùy chọn)</string>
     <string name="auto_rejoin_config_game_instance_hint">Để trống nếu không dùng VIP/Private server</string>
+    <string name="auto_rejoin_config_access_code">Access Code (server riêng/VIP, tùy chọn)</string>
+    <string name="auto_rejoin_config_access_code_hint">Mã truy cập server riêng — tự điền khi "Tự dò" trong svv</string>
     <string name="auto_rejoin_config_interval">Chu kỳ kiểm tra</string>
     <string name="auto_rejoin_config_interval_value">%1$d giây</string>
     <string name="auto_rejoin_config_detect_button">Tự dò từ Roblox</string>
-    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để tự lấy Place ID. Nếu đang ở server riêng/VIP (svv), tự dò luôn cả Game Instance ID để rejoin đúng server riêng; ở server thường (svth) chỉ lấy Place ID.</string>
+    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để tự lấy Place ID. Nếu đang ở server riêng/VIP (svv), tự dò luôn Access Code (và Game Instance ID nếu có) để rejoin đúng server riêng; ở server thường (svth) chỉ lấy Place ID.</string>
 
     <!-- Auto Rejoin: control card -->
     <string name="auto_rejoin_control_title">Điều khiển</string>
@@ -159,7 +161,7 @@
     <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
     <string name="auto_rejoin_snackbar_detect_running">Đang dò Place ID hiện tại từ Roblox…</string>
     <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID (server thường): %1$s</string>
-    <string name="auto_rejoin_snackbar_detect_success_private">Đã lấy Place ID + Instance ID (server riêng/VIP): %1$s</string>
+    <string name="auto_rejoin_snackbar_detect_success_private">Đã lấy Place ID + định danh server riêng/VIP: %1$s</string>
     <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy đảm bảo Roblox đang chạy và đã vào game (đã thử dumpsys + logcat). Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
     <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền root để dò Place ID.</string>
 

@@ -5,13 +5,14 @@
 - **Auto Rejoin — Tự dò ID server riêng (svv)**: Nút "Tự dò từ Roblox" giờ phân biệt được **server riêng / VIP server (svv)** và **server thường (svth)**:
   - **Đang ở server riêng (svv)**: tự dò **cả `placeId` và `gameInstanceId`** → fill vào ô input để rejoin thẳng vào đúng server riêng đang chơi.
   - **Đang ở server thường (svth)**: **chỉ lấy `placeId`** (tự xoá Game Instance ID cũ nếu có) → rejoin bằng matchmaking công khai, tránh cố join 1 instance đã đầy / đã đóng.
-- **Cách nhận biết server riêng**: tín hiệu DUY NHẤT là **có tìm thấy `gameInstanceId` hay không** — vì đó cũng là thứ duy nhất cho phép rejoin đúng 1 server cụ thể. Server thường (matchmaking) URL join chỉ có `placeId`; server riêng/VIP/follow bạn URL join kèm `gameInstanceId`. `detectCurrentGame()` lấy dòng "join URL" **mới nhất** trong logcat rồi parse `placeId` + `gameInstanceId` từ **cùng 1 dòng**.
+- **Cách nhận biết server riêng**: server riêng được join qua URL có **`accessCode`** (mã truy cập VIP/private server) và/hoặc **`gameInstanceId`**. `detectCurrentGame()` lấy dòng "join URL" **mới nhất** trong logcat (do `rbx.web` log) rồi parse `placeId` + `accessCode` + `gameInstanceId` từ **cùng 1 dòng**. Có accessCode hoặc gameInstanceId ⇒ svv; không có cả hai ⇒ svth.
+- **Rejoin server riêng bằng accessCode**: `rejoin()` nay gắn `&accessCode=` (và `&gameInstanceId=` nếu có) vào deeplink `roblox://…` — đúng format Roblox hỗ trợ (theo create.roblox.com/docs deeplinks). Thêm ô nhập **Access Code** trong tab Auto Rejoin, tự điền khi "Tự dò" trong svv.
 
 ### 🐛 Sửa lỗi / Cải thiện
-- **Fix báo nhầm svv → svth + không lấy được Instance ID**: nguyên nhân gốc là lọc `logcat --pid=<main>`. URL join (`https://www.roblox.com/games/start?placeId=…&gameInstanceId=…&accessCode=…`) được log bởi component `rbx.web` chạy ở **process con khác pid** với main process → bộ lọc `--pid` loại MẤT đúng dòng chứa `gameInstanceId`, khiến luôn rơi vào nhánh svth. Đã **bỏ lọc `--pid`**, grep thẳng theo URL join và parse `placeId` + `gameInstanceId` từ cùng 1 dòng join mới nhất.
-- **Tránh lấy `gameInstanceId` lỗi thời**: parse `placeId` + `gid` từ **cùng 1 dòng join mới nhất** thay vì quét cả buffer → khi user chuyển private → public mà không kill app (cùng pid, buffer còn `gameInstanceId` cũ), dòng join mới nhất là server public không có gid → kết quả đúng là svth.
-- **Đơn giản hoá quyết định svv/svth**: bỏ helper `looksLikePrivateServer()` + danh sách marker (gồm 1 pattern regex lỏng `isPrivateServer.?.?true`) vì giờ chỉ cần xét sự hiện diện của `gameInstanceId`. Bỏ luôn biến trung gian `isPrivate` thừa.
-- **`DetectedGame`**: thêm cờ `isPrivateServer` để UI hiển thị đúng thông báo (server riêng vs server thường) sau khi tự dò.
+- **Fix báo nhầm svv → svth + không lấy được định danh server riêng**: hai nguyên nhân gốc. (1) URL join được log bởi component `rbx.web` chạy ở **process con khác pid** với main → bộ lọc `logcat --pid=<main>` của bản trước loại MẤT đúng dòng join. (2) Server riêng (join từ danh sách private server) có URL dạng `…/games/start?placeId=…&accessCode=…&joinAttemptOrigin=privateServerListJoin` — thường **KHÔNG kèm `gameInstanceId`**, mà code cũ chỉ dò `gameInstanceId`. Đã **bỏ lọc `--pid`**, grep thẳng theo URL join, và nhận diện svv qua **`accessCode`** (không chỉ gameInstanceId).
+- **Tránh định danh lỗi thời**: parse `placeId` + `accessCode` + `gameInstanceId` từ **cùng 1 dòng join mới nhất**; có thêm fallback quét `placeId` chung cho svth (server thường thường không log URL join qua `rbx.web`).
+- **Đơn giản hoá**: bỏ helper `looksLikePrivateServer()` + list marker (gồm pattern regex lỏng `isPrivateServer.?.?true`) và biến trung gian `isPrivate` thừa — quyết định svv/svth giờ chỉ dựa vào sự hiện diện của `accessCode`/`gameInstanceId`.
+- **`DetectedGame`**: thêm `accessCode` + cờ `isPrivateServer` để UI hiển thị đúng và rejoin đúng server riêng.
 
 ### 🔢 Phiên bản
 - **Bump phiên bản**: `1.8.0` → `1.8.5` (versionCode 18 → 19).
