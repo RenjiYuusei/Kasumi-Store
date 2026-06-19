@@ -272,50 +272,19 @@ object AutoRejoinManager {
      *
      * Nếu **không** thấy dấu hiệu nào → đang ở server thường ("svth").
      */
-    private val PRIVATE_SERVER_PATTERNS = listOf(
-        "accessCode",
-        "linkCode",
-        "privateServerLinkCode",
-        "RequestPrivateGame",
-        "joinGamePostPrivateServer",
-        "reservedServerAccessCode",
-        "isPrivateServer.?.?true",
-    )
+    /** Regex bắt `placeId=<id>` trong launch URI (deeplink hoặc URL web). */
+    private val PLACE_URL_REGEX = Regex("(?i)placeid=([0-9]{3,16})")
 
     /** Regex bắt `gameInstanceId=<uuid>` trong launch URI của dumpsys. */
     private val GID_DUMP_REGEX = Regex("gameInstanceId=([^&\\s}\"\\])]+)")
 
     /**
-     * Regex bắt `gameInstanceId` trong logcat. Roblox log nó ở nhiều format:
-     * `gameInstanceId=<uuid>`, `"gameInstanceId":"<uuid>"`, `gameInstanceId <uuid>`.
-     * gameInstanceId là 1 GUID (36 ký tự `[0-9a-f-]`), nới rộng 8–64 để an toàn.
+     * Regex bắt `gameInstanceId` (1 GUID `xxxxxxxx-xxxx-...`) trong 1 dòng
+     * logcat / URL join. Cho phép separator `=`, `:`, whitespace + optional
+     * dấu nháy bao quanh (`"gameInstanceId":"<uuid>"`).
      */
     private val GID_LOG_REGEX =
-        Regex("(?i)\\bgameinstanceid\"?\\s*[=:]?\\s*\"?([0-9a-fA-F]{8}-[0-9a-fA-F-]{4,55})")
-
-    /**
-     * Phát hiện dấu hiệu **server riêng / VIP server (svv)** trong 1 đoạn
-     * output (dumpsys deeplink hoặc logcat).
-     *
-     * Logic:
-     *  1. Match bất kỳ pattern nào trong [PRIVATE_SERVER_PATTERNS] (accessCode,
-     *     linkCode, privateServerLinkCode, RequestPrivateGame,
-     *     joinGamePostPrivateServer, ...).
-     *  2. Hoặc `privateServerId` có giá trị khác `0`/rỗng — server thường log
-     *     `privateServerId=0` (hoặc không log), server riêng log id thật.
-     *
-     * @return `true` nếu là server riêng, `false` nếu là server thường.
-     */
-    private fun looksLikePrivateServer(text: String): Boolean {
-        val markerRegex = Regex(
-            "(?i)(" + PRIVATE_SERVER_PATTERNS.joinToString("|") + ")"
-        )
-        if (markerRegex.containsMatchIn(text)) return true
-        // privateServerId chỉ tính là private khi có giá trị khác 0/rỗng.
-        val psid = Regex("(?i)\\bprivateserverid\"?\\s*[=:]\\s*\"?([0-9]+)")
-            .find(text)?.groupValues?.getOrNull(1)
-        return !psid.isNullOrEmpty() && psid != "0"
-    }
+        Regex("(?i)gameinstanceid\"?\\s*[=:]?\\s*\"?([0-9a-fA-F]{8}-[0-9a-fA-F-]{4,55})")
 
     /**
      * Tự dò Place ID (+ Game Instance ID nếu đang ở **server riêng / VIP
@@ -326,90 +295,81 @@ object AutoRejoinManager {
      * rồi paste tay.
      *
      * ### Phân biệt server riêng (svv) vs server thường (svth)
-     *  - **Server riêng / VIP server (svv)**: dò ra cả `placeId` **và**
-     *    `gameInstanceId` → rejoin được vào đúng server riêng đó.
-     *  - **Server thường (svth)**: CHỈ dò `placeId`, bỏ qua `gameInstanceId`.
-     *    Lý do: instance của server công khai có thể đã đầy / đã đóng khi
-     *    rejoin, nên rejoin bằng placeId để Roblox tự matchmaking vào 1
-     *    server công khai bất kỳ. Nếu giữ gameInstanceId của svth, deeplink
-     *    sẽ cố join đúng instance cũ và thường thất bại.
+     * Tín hiệu DUY NHẤT để quyết định là **có tìm thấy `gameInstanceId` hay
+     * không** — vì đó cũng chính là thứ duy nhất cho phép rejoin đúng 1
+     * server cụ thể:
+     *  - **svv** (server riêng / VIP / follow bạn): URL join mang theo
+     *    `gameInstanceId` (id của reserved server đang chạy) → trả cả
+     *    `placeId` + `gameInstanceId` để rejoin thẳng vào đúng server.
+     *  - **svth** (server thường, matchmaking): URL join chỉ có `placeId`,
+     *    KHÔNG có `gameInstanceId` → chỉ trả `placeId`. Giữ gameInstanceId
+     *    của svth là vô nghĩa vì instance đó có thể đã đầy / đã đóng khi
+     *    rejoin; để trống cho Roblox tự matchmaking vào 1 server bất kỳ.
      *
-     * ### Cách quyết định svv (đã sửa ở 1.8.5)
-     * Tín hiệu CHÍNH là **có tìm thấy `gameInstanceId` hay không** — vì đó
-     * cũng chính là thứ duy nhất cho phép rejoin đúng 1 server cụ thể:
-     *  - Join server thường (matchmaking) → launch URI chỉ có `placeId`,
-     *    KHÔNG có `gameInstanceId`.
-     *  - Join server riêng / VIP / follow bạn → launch URI có
-     *    `gameInstanceId` (id của reserved server đang chạy).
-     * [looksLikePrivateServer] chỉ là tín hiệu PHỤ (accessCode / linkCode /
-     * RequestPrivateGame...) để xác nhận thêm khi cần.
+     * ### Nguồn dữ liệu
+     *  1. **`dumpsys activity activities`** — deeplink `roblox://...` còn
+     *     trong task stack (khi Roblox được launch qua deeplink). `grep -F
+     *     ${pkg}` tránh nhầm bản global vs VNG.
+     *  2. **logcat — dòng "join URL" MỚI NHẤT**. Roblox log mỗi lần join qua
+     *     2 dạng URL (đều nằm gọn trên 1 dòng):
+     *       `https://www.roblox.com/games/start?placeId=...&gameInstanceId=...&accessCode=...`
+     *       `roblox://experiences/start?placeId=...&gameInstanceId=...`
+     *     Lấy dòng CUỐI có `placeId=` (mới nhất → server hiện tại) rồi parse
+     *     `placeId` + `gameInstanceId` TỪ CÙNG 1 DÒNG.
      *
-     * **Lý do bản trước báo nhầm svv → svth**: code cũ chỉ coi là svv khi
-     * thấy marker text như `accessCode`, và ở logcat chỉ quét 1 cửa sổ nhỏ
-     * quanh lần `placeId` cuối. Nhưng launch URI của private server mang sẵn
-     * `gameInstanceId` mà KHÔNG kèm marker; còn lúc bấm nút thì `placeId` mới
-     * nhất trong log là telemetry gameplay, cách xa dòng join ban đầu chứa
-     * marker → marker bị bỏ sót, instanceId bị drop. Bản này lấy `gid` làm
-     * tín hiệu chính + quét marker trên TOÀN bộ buffer.
+     * ### Vì sao KHÔNG lọc `--pid` (root nguyên nhân bug cũ)
+     * URL join được log bởi component `rbx.web`, có thể chạy ở **process con
+     * khác pid** với main process (`pidof` trả pid của main). Bản trước lọc
+     * `logcat --pid=<main>` → loại MẤT đúng dòng chứa `gameInstanceId` →
+     * báo nhầm svv thành svth và không lấy được instance id. Bản này grep
+     * thẳng theo URL join, không lọc pid.
      *
-     * Thử 2 nguồn theo thứ tự:
-     *  1. **`dumpsys activity activities`** — launch URI `roblox://...` còn
-     *     trong task stack (khi Roblox được launch qua deeplink). Đây là
-     *     nguồn ĐÁNG TIN nhất cho `gameInstanceId` vì nó phản ánh đúng phiên
-     *     join hiện tại.
-     *  2. **`logcat --pid=<roblox_pid>`** — fallback / bổ sung khi dumpsys
-     *     thiếu placeId hoặc gameInstanceId (vd user mở Roblox bằng tay rồi
-     *     navigate vào server qua menu trong app → launch intent không chứa
-     *     URI). Quét toàn bộ buffer, ưu tiên match cuối cùng (mới nhất).
+     * Parse `placeId` + `gid` từ cùng 1 dòng cũng tránh được lỗi ghép
+     * `placeId` mới với `gid` cũ: nếu user chuyển private → public mà không
+     * kill app (cùng pid, buffer còn `gameInstanceId` cũ), dòng join mới
+     * nhất là server public (không gid) → kết quả đúng là svth.
      *
      * @return [DetectedGame] với placeId (+ gameInstanceId nếu svv) nếu tìm
      *     thấy. Trả về cả 2 = null nếu Roblox không chạy / chưa từng vào
      *     game / lỗi root.
      */
     fun detectCurrentGame(pkg: String): DetectedGame {
-        // Step 1: lấy PID Roblox để filter logcat ở step 3.
-        val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null | awk '{print \$1}'")
-        val pid = pidR.output.trim().toIntOrNull()
-        if (pid == null || pid <= 0) {
+        // Step 1: Roblox phải đang chạy (pidof rỗng → process chết).
+        val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null")
+        if (pidR.output.trim().isEmpty()) {
             return DetectedGame(null, null)
         }
 
-        // Step 2: dumpsys (deeplink intent path). `grep -F ${pkg}` để tránh
-        // match nhầm intent của bản Roblox còn lại (khi user cài cả global +
-        // VNG, activity stack có thể giữ URI của phiên trước cho bản kia).
+        // Step 2: dumpsys — deeplink roblox:// còn trong task stack.
         val dumpR = executeAsRoot(
             "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
-        var placeId = Regex("placeId=([0-9]+)")
-            .find(dumpR.output)?.groupValues?.getOrNull(1)
-        // gameInstanceId trong dumpsys URL có thể là UUID `[0-9a-f-]` hoặc đã
-        // URL-encode chứa `%XX` → decode về raw để hiển thị / dùng lại.
+        var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
+        // gameInstanceId trong dumpsys URL có thể đã URL-encode (`%XX`) →
+        // decode về raw để hiển thị / dùng lại.
         var gid = GID_DUMP_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
             ?.let { Uri.decode(it) }
             ?.takeIf { it.isNotBlank() }
-        var privateMarker = looksLikePrivateServer(dumpR.output)
 
-        // Step 3: logcat — đọc khi còn thiếu bất kỳ tín hiệu nào (placeId,
-        // gid, hoặc marker). Quét TOÀN BỘ buffer (không windowing như bản cũ).
-        if (placeId.isNullOrEmpty() || gid.isNullOrEmpty() || !privateMarker) {
+        // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên). Chỉ chạy
+        // khi dumpsys chưa đủ placeId hoặc gid.
+        if (placeId.isNullOrEmpty() || gid.isNullOrEmpty()) {
             val logR = executeAsRoot(
-                "logcat -d -t 10000 --pid=$pid 2>/dev/null",
+                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | " +
+                    "grep -iE 'games/start|gameinstanceid|roblox://' | tail -80",
                 timeoutSec = 15L
             )
-            val logOut = logR.output
-            if (placeId.isNullOrEmpty()) {
-                // Roblox log placeId nhiều format: `placeId=920587237`,
-                // `placeId 920587237`, `"placeId":920587237`. Ưu tiên match
-                // cuối cùng (mới nhất theo thứ tự thời gian của logcat).
-                val placeIdRegex = Regex("(?i)\\bplaceid\"?\\s*[=:]?\\s*\"?([0-9]{4,16})")
-                placeId = placeIdRegex.findAll(logOut).map { it.groupValues[1] }.lastOrNull()
-            }
-            if (gid.isNullOrEmpty()) {
-                gid = GID_LOG_REGEX.findAll(logOut).map { it.groupValues[1] }.lastOrNull()
-                    ?.takeIf { it.isNotBlank() }
-            }
-            if (!privateMarker) {
-                privateMarker = looksLikePrivateServer(logOut)
+            // Dòng CUỐI có placeId= là lần join mới nhất → server hiện tại.
+            val joinLine = logR.output.lineSequence()
+                .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
+            if (joinLine != null) {
+                if (placeId.isNullOrEmpty()) {
+                    placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+                }
+                if (gid.isNullOrEmpty()) {
+                    gid = GID_LOG_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+                        ?.takeIf { it.isNotBlank() }
+                }
             }
         }
 
@@ -417,12 +377,10 @@ object AutoRejoinManager {
             return DetectedGame(null, null)
         }
 
-        // svv ⟺ tìm được gameInstanceId (rejoin được đúng instance), hoặc có
-        // marker private rõ ràng. Nếu là svv mà có gid → trả cả 2. Nếu không
-        // có gid (server thường, hoặc chỉ có marker nhưng không bắt được gid
-        // → không thể rejoin instance cụ thể) → coi là svth, chỉ trả placeId.
-        val isPrivate = !gid.isNullOrEmpty() || privateMarker
-        return if (isPrivate && !gid.isNullOrEmpty()) {
+        // svv ⟺ tìm được gameInstanceId (rejoin được đúng instance cụ thể).
+        // Không có gid → server thường, chỉ trả placeId để Roblox tự
+        // matchmaking vào 1 server công khai bất kỳ.
+        return if (!gid.isNullOrEmpty()) {
             DetectedGame(placeId, gid, isPrivateServer = true)
         } else {
             DetectedGame(placeId, null, isPrivateServer = false)
