@@ -6,6 +6,9 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
+/**
+ * Quản lý vòng lặp Auto-Rejoin cho ứng dụng Roblox.
+ */
 object AutoRejoinManager {
 
     private const val SU_TIMEOUT_SEC = 15L
@@ -119,7 +122,7 @@ object AutoRejoinManager {
 
     private val PLACE_URL_REGEX = Regex("(?i)placeid=([0-9]{3,16})")
 
-        fun detectCurrentGame(pkg: String): DetectedGame {
+    fun detectCurrentGame(pkg: String): DetectedGame {
         // Step 1: Roblox phải đang chạy (pidof rỗng → process chết).
         val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null")
         if (pidR.output.trim().isEmpty()) {
@@ -146,36 +149,6 @@ object AutoRejoinManager {
         }
 
         // Step 4: svth fallback
-        if (placeId.isNullOrEmpty()) {
-            val logR2 = executeAsRoot(
-                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
-                timeoutSec = 15L
-            )
-            val placeIdRegex = Regex("(?i)\bplaceid\"?\s*[=:]?\s*\"?([0-9]{4,16})")
-            placeId = placeIdRegex.findAll(logR2.output).map { it.groupValues[1] }.lastOrNull()
-        }
-
-        return DetectedGame(placeId)
-    }
-
-        val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
-        )
-        var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
-
-        val logR = executeAsRoot(
-            "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | tail -80",
-            timeoutSec = 15L
-        )
-        val joinLine = logR.output.lineSequence()
-            .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
-        if (joinLine != null) {
-            val newPlaceId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
-            if (!newPlaceId.isNullOrEmpty()) {
-                placeId = newPlaceId
-            }
-        }
-
         if (placeId.isNullOrEmpty()) {
             val logR2 = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
@@ -231,7 +204,7 @@ object AutoRejoinManager {
     }
 
     private fun shellQuote(s: String): String =
-        "'" + s.replace("'", "'\''") + "'"
+        "'" + s.replace("'", "'\\''") + "'"
 
     private fun isAmStartSuccess(r: RawResult): Boolean =
         r.exitCode == 0 &&
