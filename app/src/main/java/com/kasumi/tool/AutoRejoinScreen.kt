@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
  * [AutoRejoinService] (foreground service) để tiếp tục chạy khi user
  * switch sang Roblox app. UI chỉ còn nhiệm vụ:
  *  - Phát hiện root + bản Roblox đã cài.
- *  - Nhận input (placeId, gameInstanceId, interval).
+ *  - Nhận input (placeId, interval).
  *  - Start/stop service qua Intent helpers.
  *  - Observe [AutoRejoinService.state] qua [collectAsState] để render
  *    state hiện tại, log, counter — tự đồng bộ khi service cập nhật
@@ -88,7 +88,7 @@ fun AutoRejoinScreen(
     var isDetecting by remember { mutableStateOf(false) }
 
     var placeIdInput by rememberSaveable { mutableStateOf("") }
-    var intervalSec by rememberSaveable { mutableFloatStateOf(5f) }
+    var intervalSec by rememberSaveable { mutableFloatStateOf(15f) }
 
     val uiState by AutoRejoinService.state.collectAsState()
 
@@ -375,7 +375,7 @@ private fun ConfigCard(
             )
 
             // Nút "Tự dò từ Roblox" — đọc dumpsys của process Roblox đang
-            // chạy để extract placeId + gameInstanceId, tự fill vào input.
+            // chạy để extract placeId + tự fill vào input.
             // User mở Roblox → vào game muốn auto-rejoin → switch về app
             // → bấm nút này → khỏi cần tìm placeId rồi paste tay.
             //

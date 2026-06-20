@@ -119,11 +119,44 @@ object AutoRejoinManager {
 
     private val PLACE_URL_REGEX = Regex("(?i)placeid=([0-9]{3,16})")
 
-    fun detectCurrentGame(pkg: String): DetectedGame {
+        fun detectCurrentGame(pkg: String): DetectedGame {
+        // Step 1: Roblox phải đang chạy (pidof rỗng → process chết).
         val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null")
         if (pidR.output.trim().isEmpty()) {
             return DetectedGame(null)
         }
+
+        // Step 2: dumpsys — deeplink roblox:// còn trong task stack.
+        val dumpR = executeAsRoot(
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+        )
+        var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
+
+        // Step 3: logcat — dòng join URL mới nhất. Chỉ chạy khi dumpsys chưa có.
+        if (placeId.isNullOrEmpty()) {
+            val logR = executeAsRoot(
+                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | tail -80",
+                timeoutSec = 15L
+            )
+            val joinLine = logR.output.lineSequence()
+                .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
+            if (joinLine != null) {
+                placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+            }
+        }
+
+        // Step 4: svth fallback
+        if (placeId.isNullOrEmpty()) {
+            val logR2 = executeAsRoot(
+                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
+                timeoutSec = 15L
+            )
+            val placeIdRegex = Regex("(?i)\bplaceid\"?\s*[=:]?\s*\"?([0-9]{4,16})")
+            placeId = placeIdRegex.findAll(logR2.output).map { it.groupValues[1] }.lastOrNull()
+        }
+
+        return DetectedGame(placeId)
+    }
 
         val dumpR = executeAsRoot(
             "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"

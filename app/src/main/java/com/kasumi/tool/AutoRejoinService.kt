@@ -106,7 +106,7 @@ class AutoRejoinService : Service() {
     private fun handleStart(intent: Intent) {
         val pkg = intent.getStringExtra(EXTRA_PKG)
         val placeId = intent.getStringExtra(EXTRA_PLACE_ID)
-        val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 5_000L)
+        val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 15_000L)
             .coerceIn(5_000L, 60_000L)
 
         if (pkg.isNullOrBlank() || placeId.isNullOrBlank()) {
@@ -174,7 +174,7 @@ class AutoRejoinService : Service() {
         // Sau mỗi lần force-stop + rejoin, Roblox cần 20–60s để mở lại và
         // load game. Trong khoảng đó pidof có thể chớp tắt → false positive
         // NOT_RUNNING → vòng lặp vô hạn. Grace period 30s.
-        val warmupMs = 15_000L
+        val warmupMs = 30_000L
         // Số tick liên tiếp `FOREGROUND_NO_GAME` cho phép trước khi force
         // rejoin (~2 phút với interval 15s mặc định).
         val noGameMaxStreak = 8
@@ -444,7 +444,7 @@ data class AutoRejoinUiState(
     val running: Boolean = false,
     val pkg: String? = null,
     val placeId: String? = null,
-    val intervalMs: Long = 5_000L,
+    val intervalMs: Long = 15_000L,
     val currentState: AutoRejoinManager.RobloxState? = null,
     val currentPid: Int? = null,
     val rejoinCount: Int = 0,
