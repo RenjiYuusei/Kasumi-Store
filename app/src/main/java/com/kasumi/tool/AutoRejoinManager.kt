@@ -332,7 +332,7 @@ object AutoRejoinManager {
      *     svv). Trả về placeId = null nếu Roblox không chạy / chưa từng vào
      *     game / lỗi root.
      */
-    fun detectCurrentGame(pkg: String): DetectedGame {
+            fun detectCurrentGame(pkg: String): DetectedGame {
         // Step 1: Roblox phải đang chạy (pidof rỗng → process chết).
         val pidR = executeAsRoot("pidof ${shellQuote(pkg)} 2>/dev/null")
         if (pidR.output.trim().isEmpty()) {
@@ -351,9 +351,9 @@ object AutoRejoinManager {
         var accessCode = ACCESS_CODE_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
 
-        // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên). Chỉ chạy
-        // khi dumpsys chưa đủ định danh.
-        if (placeId.isNullOrEmpty() || (gid.isNullOrEmpty() && accessCode.isNullOrEmpty())) {
+        // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên).
+        var isSvvByLog = false
+        if (true) { // Always check logcat to prioritize latest join
             val logR = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | " +
                     "grep -iE 'games/start|gameinstanceid|accesscode|roblox://' | tail -80",
@@ -363,16 +363,17 @@ object AutoRejoinManager {
             val joinLine = logR.output.lineSequence()
                 .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
             if (joinLine != null) {
-                if (placeId.isNullOrEmpty()) {
-                    placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
-                }
-                if (gid.isNullOrEmpty()) {
+                val newPlaceId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+                if (!newPlaceId.isNullOrEmpty()) {
+                    // Ưu tiên hoàn toàn thông tin từ logcat vì đây là lần join
+                    // mới nhất, tránh dùng placeId cũ từ dumpsys task stack.
+                    placeId = newPlaceId
                     gid = GID_LOG_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
                         ?.takeIf { it.isNotBlank() }
-                }
-                if (accessCode.isNullOrEmpty()) {
                     accessCode = ACCESS_CODE_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
                         ?.takeIf { it.isNotBlank() }
+                    // svv ⟺ có rbx.web (Roblox log join qua web/deeplink)
+                    isSvvByLog = joinLine.contains("rbx.web", ignoreCase = true)
                 }
             }
         }
@@ -393,10 +394,9 @@ object AutoRejoinManager {
             return DetectedGame(null, null)
         }
 
-        // svv ⟺ có accessCode HOẶC gameInstanceId (rejoin được đúng server
-        // cụ thể). Không có cả hai → server thường, chỉ trả placeId để Roblox
-        // tự matchmaking vào 1 server công khai bất kỳ.
-        val isPrivate = !accessCode.isNullOrEmpty() || !gid.isNullOrEmpty()
+        // svv ⟺ có rbx.web tag HOẶC có accessCode. Loại bỏ gid (instanceId)
+        // khỏi điều kiện nhận diện svv theo yêu cầu user.
+        val isPrivate = isSvvByLog || !accessCode.isNullOrEmpty()
         return DetectedGame(
             placeId = placeId,
             gameInstanceId = gid.takeIf { isPrivate },
@@ -405,11 +405,6 @@ object AutoRejoinManager {
         )
     }
 
-    /**
-     * Force-stop Roblox để dọn state trước khi rejoin. Idempotent: gọi nhiều
-     * lần liên tiếp không gây lỗi (Android `am force-stop` tự handle no-op
-     * khi process đã chết).
-     */
     fun forceStop(pkg: String): Boolean {
         val r = executeAsRoot("am force-stop ${shellQuote(pkg)}")
         return r.exitCode == 0
