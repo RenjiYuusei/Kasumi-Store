@@ -106,9 +106,7 @@ class AutoRejoinService : Service() {
     private fun handleStart(intent: Intent) {
         val pkg = intent.getStringExtra(EXTRA_PKG)
         val placeId = intent.getStringExtra(EXTRA_PLACE_ID)
-        val gid = intent.getStringExtra(EXTRA_GAME_INSTANCE_ID)?.takeIf { it.isNotBlank() }
-        val accessCode = intent.getStringExtra(EXTRA_ACCESS_CODE)?.takeIf { it.isNotBlank() }
-        val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 15_000L)
+        val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 5_000L)
             .coerceIn(5_000L, 60_000L)
 
         if (pkg.isNullOrBlank() || placeId.isNullOrBlank()) {
@@ -132,8 +130,7 @@ class AutoRejoinService : Service() {
                 running = true,
                 pkg = pkg,
                 placeId = placeId,
-                gameInstanceId = gid,
-                accessCode = accessCode,
+
                 intervalMs = intervalMs,
             )
         }
@@ -141,7 +138,7 @@ class AutoRejoinService : Service() {
 
         loopJob?.cancel()
         loopJob = serviceScope.launch {
-            runPollingLoop(pkg, placeId, gid, accessCode, intervalMs)
+            runPollingLoop(pkg, placeId, intervalMs)
         }
     }
 
@@ -172,14 +169,12 @@ class AutoRejoinService : Service() {
     private suspend fun runPollingLoop(
         pkg: String,
         placeId: String,
-        gid: String?,
-        accessCode: String?,
         intervalMs: Long,
     ) {
         // Sau mỗi lần force-stop + rejoin, Roblox cần 20–60s để mở lại và
         // load game. Trong khoảng đó pidof có thể chớp tắt → false positive
         // NOT_RUNNING → vòng lặp vô hạn. Grace period 30s.
-        val warmupMs = 30_000L
+        val warmupMs = 15_000L
         // Số tick liên tiếp `FOREGROUND_NO_GAME` cho phép trước khi force
         // rejoin (~2 phút với interval 15s mặc định).
         val noGameMaxStreak = 8
@@ -253,7 +248,7 @@ class AutoRejoinService : Service() {
 
             if (needRejoin) {
                 val attempts = withContext(Dispatchers.IO) {
-                    AutoRejoinManager.rejoin(pkg, placeId, gid, accessCode)
+                    AutoRejoinManager.rejoin(pkg, placeId)
                 }
                 lastRejoinEpochMs = System.currentTimeMillis()
                 _state.update { it.copy(rejoinCount = it.rejoinCount + 1) }
@@ -370,8 +365,6 @@ class AutoRejoinService : Service() {
         const val ACTION_STOP = "com.kasumi.tool.action.AUTO_REJOIN_STOP"
         const val EXTRA_PKG = "pkg"
         const val EXTRA_PLACE_ID = "placeId"
-        const val EXTRA_GAME_INSTANCE_ID = "gameInstanceId"
-        const val EXTRA_ACCESS_CODE = "accessCode"
         const val EXTRA_INTERVAL_MS = "intervalMs"
 
         // SimpleDateFormat KHÔNG thread-safe theo Java doc. Đặt trong
@@ -402,8 +395,6 @@ class AutoRejoinService : Service() {
             context: Context,
             pkg: String,
             placeId: String,
-            gameInstanceId: String?,
-            accessCode: String?,
             intervalSec: Int,
         ) {
             val intent = Intent(context, AutoRejoinService::class.java).apply {
@@ -455,9 +446,7 @@ data class AutoRejoinUiState(
     val running: Boolean = false,
     val pkg: String? = null,
     val placeId: String? = null,
-    val gameInstanceId: String? = null,
-    val accessCode: String? = null,
-    val intervalMs: Long = 15_000L,
+    val intervalMs: Long = 5_000L,
     val currentState: AutoRejoinManager.RobloxState? = null,
     val currentPid: Int? = null,
     val rejoinCount: Int = 0,
