@@ -93,6 +93,7 @@ fun AutoRejoinScreen(
     // chuyển tab và quay lại (composable bị dispose).
     var placeIdInput by rememberSaveable { mutableStateOf("") }
     var gameInstanceInput by rememberSaveable { mutableStateOf("") }
+    var accessCodeInput by rememberSaveable { mutableStateOf("") }
     var intervalSec by rememberSaveable { mutableFloatStateOf(15f) }
 
     // State runtime của vòng lặp đến từ [AutoRejoinService] (StateFlow
@@ -145,15 +146,17 @@ fun AutoRejoinScreen(
             isDetecting = false
             if (detected.hasPlaceId) {
                 placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
-                if (detected.isPrivateServer && !detected.gameInstanceId.isNullOrBlank()) {
-                    // svv (server riêng / VIP): fill cả Game Instance ID để
-                    // rejoin đúng server riêng.
-                    gameInstanceInput = detected.gameInstanceId
+                if (detected.isPrivateServer) {
+                    // svv (server riêng / VIP): fill accessCode và/hoặc
+                    // gameInstanceId để rejoin đúng server riêng.
+                    gameInstanceInput = detected.gameInstanceId.orEmpty()
+                    accessCodeInput = detected.accessCode.orEmpty()
                     onShowSnackbar(msgDetectSuccessPrivateFmt.format(detected.placeId))
                 } else {
-                    // svth (server thường): chỉ lấy Place ID, xoá Instance ID
-                    // cũ (nếu có) để rejoin bằng matchmaking công khai.
+                    // svth (server thường): chỉ lấy Place ID, xoá định danh
+                    // server riêng cũ (nếu có) để rejoin bằng matchmaking.
                     gameInstanceInput = ""
+                    accessCodeInput = ""
                     onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
                 }
             } else {
@@ -170,6 +173,7 @@ fun AutoRejoinScreen(
             pkg = pkg,
             placeId = placeIdInput.trim(),
             gameInstanceId = gameInstanceInput.trim().ifEmpty { null },
+            accessCode = accessCodeInput.trim().ifEmpty { null },
             intervalSec = intervalSec.toInt().coerceIn(5, 60),
         )
         onShowSnackbar(msgStarted)
@@ -214,6 +218,8 @@ fun AutoRejoinScreen(
             // giữa chừng + làm con trỏ nhảy. Trim chỉ được thực hiện khi đọc
             // giá trị để gửi service trong [launchService].
             onGameInstanceIdChange = { gameInstanceInput = it },
+            accessCode = accessCodeInput,
+            onAccessCodeChange = { accessCodeInput = it },
             intervalSec = intervalSec,
             onIntervalChange = { intervalSec = it },
             enabled = !uiState.running,
@@ -381,6 +387,8 @@ private fun ConfigCard(
     onPlaceIdChange: (String) -> Unit,
     gameInstanceId: String,
     onGameInstanceIdChange: (String) -> Unit,
+    accessCode: String,
+    onAccessCodeChange: (String) -> Unit,
     intervalSec: Float,
     onIntervalChange: (Float) -> Unit,
     enabled: Boolean,
@@ -465,6 +473,17 @@ private fun ConfigCard(
                 singleLine = true,
                 label = { Text(stringResource(R.string.auto_rejoin_config_game_instance)) },
                 placeholder = { Text(stringResource(R.string.auto_rejoin_config_game_instance_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            OutlinedTextField(
+                value = accessCode,
+                onValueChange = onAccessCodeChange,
+                enabled = enabled,
+                singleLine = true,
+                label = { Text(stringResource(R.string.auto_rejoin_config_access_code)) },
+                placeholder = { Text(stringResource(R.string.auto_rejoin_config_access_code_hint)) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp)
             )
