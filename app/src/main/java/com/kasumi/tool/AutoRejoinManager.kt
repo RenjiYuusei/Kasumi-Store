@@ -351,28 +351,41 @@ object AutoRejoinManager {
         var accessCode = ACCESS_CODE_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
 
-        // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên). Chỉ chạy
-        // khi dumpsys chưa đủ định danh.
-        if (placeId.isNullOrEmpty() || (gid.isNullOrEmpty() && accessCode.isNullOrEmpty())) {
+        // Step 3: logcat — dòng join URL mới nhất (xem doc ở trên). Luôn quét
+        // logcat nếu chưa có accessCode (để chắc chắn svv/svth).
+        if (placeId.isNullOrEmpty() || accessCode.isNullOrEmpty()) {
             val logR = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | " +
-                    "grep -iE 'games/start|gameinstanceid|accesscode|roblox://' | tail -80",
+                    "grep -iE 'rbx\\.web|games/start|gameinstanceid|accesscode|roblox://' | tail -80",
                 timeoutSec = 15L
             )
-            // Dòng CUỐI có placeId= là lần join mới nhất → server hiện tại.
-            val joinLine = logR.output.lineSequence()
-                .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
-            if (joinLine != null) {
-                if (placeId.isNullOrEmpty()) {
-                    placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+            val logLines = logR.output.lineSequence().toList()
+            // 1. Tìm placeId mới nhất từ logcat nếu dumpsys chưa có.
+            if (placeId.isNullOrEmpty()) {
+                placeId = logLines.lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
+                    ?.let { PLACE_URL_REGEX.find(it)?.groupValues?.getOrNull(1) }
+            }
+
+            // 2. Tìm metadata (accessCode/gid) từ dòng join URL tốt nhất.
+            // "Tốt nhất" = dòng mới nhất có cùng placeId và chứa accessCode hoặc log từ rbx.web.
+            if (!placeId.isNullOrEmpty()) {
+                val bestLine = logLines.lastOrNull { line ->
+                    PLACE_URL_REGEX.find(line)?.groupValues?.getOrNull(1) == placeId &&
+                        (ACCESS_CODE_REGEX.containsMatchIn(line) || line.contains("rbx.web", ignoreCase = true))
+                } ?: logLines.lastOrNull { line ->
+                    // Fallback: dòng cuối cùng có placeId này.
+                    PLACE_URL_REGEX.find(line)?.groupValues?.getOrNull(1) == placeId
                 }
-                if (gid.isNullOrEmpty()) {
-                    gid = GID_LOG_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
-                        ?.takeIf { it.isNotBlank() }
-                }
-                if (accessCode.isNullOrEmpty()) {
-                    accessCode = ACCESS_CODE_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
-                        ?.takeIf { it.isNotBlank() }
+
+                if (bestLine != null) {
+                    if (gid.isNullOrEmpty()) {
+                        gid = GID_LOG_REGEX.find(bestLine)?.groupValues?.getOrNull(1)
+                            ?.takeIf { it.isNotBlank() }
+                    }
+                    if (accessCode.isNullOrEmpty()) {
+                        accessCode = ACCESS_CODE_REGEX.find(bestLine)?.groupValues?.getOrNull(1)
+                            ?.takeIf { it.isNotBlank() }
+                    }
                 }
             }
         }
@@ -393,14 +406,14 @@ object AutoRejoinManager {
             return DetectedGame(null, null)
         }
 
-        // svv ⟺ có accessCode HOẶC gameInstanceId (rejoin được đúng server
-        // cụ thể). Không có cả hai → server thường, chỉ trả placeId để Roblox
-        // tự matchmaking vào 1 server công khai bất kỳ.
-        val isPrivate = !accessCode.isNullOrEmpty() || !gid.isNullOrEmpty()
+        // svv ⟺ có accessCode (dấu hiệu server riêng/VIP). gameInstanceId
+        // chỉ là định danh instance, không đủ để coi là svv nếu thiếu
+        // accessCode (ví dụ svth cũng có gid trong dumpsys).
+        val isPrivate = !accessCode.isNullOrEmpty()
         return DetectedGame(
             placeId = placeId,
-            gameInstanceId = gid.takeIf { isPrivate },
-            accessCode = accessCode.takeIf { isPrivate },
+            gameInstanceId = gid,
+            accessCode = accessCode,
             isPrivateServer = isPrivate,
         )
     }
