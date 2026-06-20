@@ -401,8 +401,6 @@ class AutoRejoinService : Service() {
                 action = ACTION_START
                 putExtra(EXTRA_PKG, pkg)
                 putExtra(EXTRA_PLACE_ID, placeId)
-                putExtra(EXTRA_GAME_INSTANCE_ID, gameInstanceId)
-                putExtra(EXTRA_ACCESS_CODE, accessCode)
                 putExtra(EXTRA_INTERVAL_MS, intervalSec.toLong() * 1000L)
             }
             ContextCompat.startForegroundService(context, intent)
