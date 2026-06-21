@@ -129,7 +129,7 @@
     <string name="auto_rejoin_config_interval">Chu kỳ kiểm tra</string>
     <string name="auto_rejoin_config_interval_value">%1$d giây</string>
     <string name="auto_rejoin_config_detect_button">Tự dò từ Roblox</string>
-    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để tự lấy Place ID. Nếu đang ở server riêng/VIP (svv), tự dò luôn Access Code (và Game Instance ID nếu có) để rejoin đúng server riêng; ở server thường (svth) chỉ lấy Place ID.</string>
+    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để tự lấy Place ID.</string>
 
     <!-- Auto Rejoin: control card -->
     <string name="auto_rejoin_control_title">Điều khiển</string>
@@ -147,7 +147,7 @@
 
     <!-- Auto Rejoin: log card -->
     <string name="auto_rejoin_log_title">Nhật ký sự kiện</string>
-    <string name="auto_rejoin_log_empty">Chưa có sự kiện nào. Bấm "Bắt đầu" để chạy.</string>
+    <string name="auto_rejoin_log_empty">Chưa có sự kiện nào bấm "Bắt đầu" để chạy.</string>
 
     <!-- Auto Rejoin: warning -->
     <string name="auto_rejoin_warning_title">Lưu ý</string>
