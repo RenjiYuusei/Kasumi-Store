@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
  * [AutoRejoinService] (foreground service) để tiếp tục chạy khi user
  * switch sang Roblox app. UI chỉ còn nhiệm vụ:
  *  - Phát hiện root + bản Roblox đã cài.
- *  - Nhận input (placeId, gameInstanceId, interval).
+ *  - Nhận input (placeId, interval).
  *  - Start/stop service qua Intent helpers.
  *  - Observe [AutoRejoinService.state] qua [collectAsState] để render
  *    state hiện tại, log, counter — tự đồng bộ khi service cập nhật
@@ -70,7 +70,6 @@ fun AutoRejoinScreen(
 ) {
     val context = LocalContext.current
 
-    // Strings cần dùng trong lambda non-Composable
     val msgInvalidPlace = stringResource(R.string.auto_rejoin_snackbar_invalid_place_id)
     val msgNotReady = stringResource(R.string.auto_rejoin_snackbar_not_ready)
     val msgStarted = stringResource(R.string.auto_rejoin_snackbar_started)
@@ -80,7 +79,6 @@ fun AutoRejoinScreen(
     val msgDetectNoGame = stringResource(R.string.auto_rejoin_snackbar_detect_no_game)
     val msgDetectNoRoot = stringResource(R.string.auto_rejoin_snackbar_detect_no_root)
     val msgDetectSuccessFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success)
-    val msgDetectSuccessPrivateFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success_private)
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -89,23 +87,14 @@ fun AutoRejoinScreen(
     var robloxInstalled by remember { mutableStateOf<Boolean?>(null) }
     var isDetecting by remember { mutableStateOf(false) }
 
-    // Cấu hình dùng `rememberSaveable` để user không mất Place ID / cycle khi
-    // chuyển tab và quay lại (composable bị dispose).
     var placeIdInput by rememberSaveable { mutableStateOf("") }
-    var gameInstanceInput by rememberSaveable { mutableStateOf("") }
-    var accessCodeInput by rememberSaveable { mutableStateOf("") }
     var intervalSec by rememberSaveable { mutableFloatStateOf(15f) }
 
-    // State runtime của vòng lặp đến từ [AutoRejoinService] (StateFlow
-    // singleton). Khi Composable bị dispose rồi recompose, observation tự
-    // thiết lập lại → UI hiển thị đúng state hiện tại dù user đã chuyển
-    // tab và quay lại nhiều lần.
     val uiState by AutoRejoinService.state.collectAsState()
 
     val ready = rooted == true && robloxInstalled == true
 
     LaunchedEffect(Unit) {
-        // Detect root + Roblox song song để rút ngắn trạng thái "đang kiểm tra".
         val rootedDeferred = async(Dispatchers.IO) { RootInstaller.isDeviceRooted() }
         val pkgDeferred = async(Dispatchers.IO) {
             AutoRejoinManager.detectActivePackage(context)
@@ -116,17 +105,6 @@ fun AutoRejoinScreen(
         robloxInstalled = pkg != null
     }
 
-    // Handler cho nút "Tự dò từ Roblox" — đọc dumpsys của process Roblox
-    // hiện tại để extract placeId + gameInstanceId, rồi tự fill vào input.
-    // Giúp user không phải tìm Place ID rồi paste tay.
-    //
-    // Edge cases:
-    //  - Chưa root → snackbar `msgDetectNoRoot` (button cũng disabled từ
-    //    UI nhưng giữ guard để defensive).
-    //  - Roblox chưa vào game (đang ở splash / home) → dumpsys không có
-    //    `placeId=` → snackbar `msgDetectNoGame`.
-    //  - Tìm thấy → fill placeIdInput + gameInstanceInput nếu có,
-    //    snackbar success kèm placeId.
     fun runAutoDetect() {
         if (rooted != true) {
             onShowSnackbar(msgDetectNoRoot)
@@ -146,43 +124,24 @@ fun AutoRejoinScreen(
             isDetecting = false
             if (detected.hasPlaceId) {
                 placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
-                if (detected.isPrivateServer) {
-                    // svv (server riêng / VIP): fill accessCode và/hoặc
-                    // gameInstanceId để rejoin đúng server riêng.
-                    gameInstanceInput = detected.gameInstanceId.orEmpty()
-                    accessCodeInput = detected.accessCode.orEmpty()
-                    onShowSnackbar(msgDetectSuccessPrivateFmt.format(detected.placeId))
-                } else {
-                    // svth (server thường): chỉ lấy Place ID, xoá định danh
-                    // server riêng cũ (nếu có) để rejoin bằng matchmaking.
-                    gameInstanceInput = ""
-                    accessCodeInput = ""
-                    onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
-                }
+                onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
             } else {
                 onShowSnackbar(msgDetectNoGame)
             }
         }
     }
 
-    // Helper khởi động service sau khi đã đảm bảo quyền + validate input.
     fun launchService() {
         val pkg = detectedPackage ?: return
         AutoRejoinService.start(
             context = context,
             pkg = pkg,
             placeId = placeIdInput.trim(),
-            gameInstanceId = gameInstanceInput.trim().ifEmpty { null },
-            accessCode = accessCodeInput.trim().ifEmpty { null },
             intervalSec = intervalSec.toInt().coerceIn(5, 60),
         )
         onShowSnackbar(msgStarted)
     }
 
-    // POST_NOTIFICATIONS là runtime permission từ Android 13 (API 33). Nếu
-    // user deny, foreground service vẫn chạy nhưng notification sẽ bị OS
-    // suppress → user không thấy trang thái ngoài app + không bấm Dừng từ
-    // notification được. Hiển thị snackbar cảnh báo nhưng vẫn cho tiếp.
     val notifPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -213,13 +172,6 @@ fun AutoRejoinScreen(
         ConfigCard(
             placeId = placeIdInput,
             onPlaceIdChange = { placeIdInput = it.filter { c -> c.isDigit() }.take(16) },
-            gameInstanceId = gameInstanceInput,
-            // Không `.trim()` tại đây — trim mỗi keystroke sẽ xóa space đang gõ
-            // giữa chừng + làm con trỏ nhảy. Trim chỉ được thực hiện khi đọc
-            // giá trị để gửi service trong [launchService].
-            onGameInstanceIdChange = { gameInstanceInput = it },
-            accessCode = accessCodeInput,
-            onAccessCodeChange = { accessCodeInput = it },
             intervalSec = intervalSec,
             onIntervalChange = { intervalSec = it },
             enabled = !uiState.running,
@@ -244,8 +196,6 @@ fun AutoRejoinScreen(
                         onShowSnackbar(msgInvalidPlace)
                         return@ControlCard
                     }
-                    // Android 13+: request POST_NOTIFICATIONS rồi mới start.
-                    // Trên Android 12-: launchService() ngay (không cần perm).
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         val granted = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.POST_NOTIFICATIONS
@@ -269,11 +219,6 @@ fun AutoRejoinScreen(
         Spacer(modifier = Modifier.height(80.dp))
     }
 }
-
-// LogLevel / LogEntry / MAX_LOG_ENTRIES / formatter / appendLog đã chuyển sang
-// [AutoRejoinService] — vòng lặp polling ghi log vào StateFlow chung để UI
-// observe. Service đã cap log buffer ở 50 entries nên UI không cần `take()`.
-
 @Composable
 private fun AutoRejoinStatusCard(
     rooted: Boolean?,
@@ -385,10 +330,6 @@ private fun CheckRow(
 private fun ConfigCard(
     placeId: String,
     onPlaceIdChange: (String) -> Unit,
-    gameInstanceId: String,
-    onGameInstanceIdChange: (String) -> Unit,
-    accessCode: String,
-    onAccessCodeChange: (String) -> Unit,
     intervalSec: Float,
     onIntervalChange: (Float) -> Unit,
     enabled: Boolean,
@@ -434,7 +375,7 @@ private fun ConfigCard(
             )
 
             // Nút "Tự dò từ Roblox" — đọc dumpsys của process Roblox đang
-            // chạy để extract placeId + gameInstanceId, tự fill vào input.
+            // chạy để extract placeId + tự fill vào input.
             // User mở Roblox → vào game muốn auto-rejoin → switch về app
             // → bấm nút này → khỏi cần tìm placeId rồi paste tay.
             //
@@ -465,29 +406,6 @@ private fun ConfigCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
-            OutlinedTextField(
-                value = gameInstanceId,
-                onValueChange = onGameInstanceIdChange,
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.auto_rejoin_config_game_instance)) },
-                placeholder = { Text(stringResource(R.string.auto_rejoin_config_game_instance_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
-            )
-
-            OutlinedTextField(
-                value = accessCode,
-                onValueChange = onAccessCodeChange,
-                enabled = enabled,
-                singleLine = true,
-                label = { Text(stringResource(R.string.auto_rejoin_config_access_code)) },
-                placeholder = { Text(stringResource(R.string.auto_rejoin_config_access_code_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
-            )
-
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -509,7 +427,7 @@ private fun ConfigCard(
                     value = intervalSec,
                     onValueChange = onIntervalChange,
                     valueRange = 5f..60f,
-                    steps = 10,
+                    steps = 10, // 5, 10, 15, ..., 60
                     enabled = enabled
                 )
             }
