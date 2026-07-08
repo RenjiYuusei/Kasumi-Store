@@ -16,9 +16,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -36,20 +33,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.outlined.Apps
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.automirrored.filled.Login
-import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -74,7 +66,6 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.kasumi.tool.ui.theme.KasumiTheme
 import java.io.BufferedReader
 import java.io.BufferedWriter
@@ -101,12 +92,6 @@ import org.json.JSONObject
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
 
-    private data class RemoteScript(
-        @SerializedName("name")     val name: String? = null,
-        @SerializedName("gameName") val gameName: String? = null,
-        @SerializedName("url")      val url: String? = null
-    )
-
     private val saveMutex = Mutex()
     private val client: OkHttpClient by lazy {
         (application as KasumiApplication).okHttpClient
@@ -116,18 +101,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val DEFAULT_SOURCE_URL =
             "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
-        private const val DEFAULT_SCRIPTS_URL =
-            "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/scripts.json"
-        private const val PATH_DELTA_LEGACY = "/storage/emulated/0/Delta"
-        private const val PATH_DELTA_VNG =
-            "/storage/emulated/0/Android/data/com.roblox.client.vnggames/files/gloop/external/Delta"
     }
 
     // Data states
     private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
-    // Store original online scripts separately to preserve metadata
-    private var onlineScriptsList = listOf<ScriptItem>()
-    private var scriptsList by mutableStateOf<List<ScriptItem>>(emptyList())
     private var isLoading by mutableStateOf(false)
     private var sortMode by mutableStateOf(SortMode.NAME_ASC)
     private val fileStats = mutableStateMapOf<String, FileStats>()
@@ -183,8 +160,6 @@ class MainActivity : ComponentActivity() {
             loadItems()
             setBusy(true)
             refreshPreloadedApps()
-            loadScriptsFromOnline()
-            loadScriptsFromLocal()
             setBusy(false)
         }
 
@@ -209,10 +184,11 @@ class MainActivity : ComponentActivity() {
         var searchQuery by remember { mutableStateOf("") }
         var showSortDialog by remember { mutableStateOf(false) }
         var showAboutDialog by remember { mutableStateOf(false) }
-        var scriptToDownload by remember { mutableStateOf<ScriptItem?>(null) }
 
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
         val snackbarHostState = remember { SnackbarHostState() }
+        val drawerState = rememberDrawerState(DrawerValue.Closed)
+        val scope = rememberCoroutineScope()
 
         // Compute file stats in background to avoid I/O in UI
         LaunchedEffect(appsList) {
@@ -220,80 +196,61 @@ class MainActivity : ComponentActivity() {
             statsVersion++
         }
 
-        if (scriptToDownload != null) {
-            val script = scriptToDownload!!
-            AlertDialog(
-                onDismissRequest = { scriptToDownload = null },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(24.dp),
-                title = {
-                    Column {
-                        Text(
-                            script.name,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            stringResource(R.string.select_folder),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
+        val destinations = listOf(
+            NavDestination(0, stringResource(R.string.tab_apps), Icons.Default.Apps),
+            NavDestination(1, stringResource(R.string.tab_roblox_login), Icons.AutoMirrored.Filled.Login),
+            NavDestination(2, stringResource(R.string.tab_auto_rejoin), Icons.Default.Replay)
+        )
+
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                    Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(24.dp)
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Spacer(Modifier.height(8.dp))
+                    destinations.forEach { dest ->
+                        NavigationDrawerItem(
+                            icon = { Icon(dest.icon, contentDescription = dest.title) },
+                            label = { Text(dest.title) },
+                            selected = selectedTab == dest.index,
                             onClick = {
-                                scriptToDownload = null
-                                downloadScript(script, "Autoexecute", { msg ->
-                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                                })
+                                selectedTab = dest.index
+                                searchQuery = ""
+                                scope.launch { drawerState.close() }
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                stringResource(R.string.auto_execute_desc),
-                                modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            colors = NavigationDrawerItemDefaults.colors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                scriptToDownload = null
-                                downloadScript(script, "Scripts", { msg ->
-                                    lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                                })
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                stringResource(R.string.manual_desc),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { scriptToDownload = null }) {
-                        Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
                     }
                 }
-            )
-        }
-
+            }
+        ) {
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 LargeTopAppBar(
                     scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu))
+                        }
+                    },
                     title = {
                         Text(
-                            stringResource(R.string.app_name),
+                            destinations[selectedTab].title,
                             fontWeight = FontWeight.Bold
                         )
                     },
@@ -325,110 +282,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             },
-            bottomBar = {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 0.dp
-                ) {
-                    NavigationBarItem(
-                        icon = {
-                            val scale by animateFloatAsState(
-                                targetValue = if (selectedTab == 0) 1.2f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "scale"
-                            )
-                            Icon(
-                                if (selectedTab == 0) Icons.Default.Apps else Icons.Outlined.Apps,
-                                contentDescription = "Apps",
-                                modifier = Modifier.scale(scale)
-                            )
-                        },
-                        label = { Text("Ứng dụng", fontWeight = if (selectedTab == 0) FontWeight.SemiBold else FontWeight.Normal) },
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0; searchQuery = "" },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                    NavigationBarItem(
-                        icon = {
-                            val scale by animateFloatAsState(
-                                targetValue = if (selectedTab == 1) 1.2f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "scale"
-                            )
-                            Icon(
-                                if (selectedTab == 1) Icons.Default.Code else Icons.Outlined.Code,
-                                contentDescription = "Script",
-                                modifier = Modifier.scale(scale)
-                            )
-                        },
-                        label = { Text("Script", fontWeight = if (selectedTab == 1) FontWeight.SemiBold else FontWeight.Normal) },
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1; searchQuery = "" },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                    NavigationBarItem(
-                        icon = {
-                            val scale by animateFloatAsState(
-                                targetValue = if (selectedTab == 2) 1.2f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "scale"
-                            )
-                            Icon(
-                                if (selectedTab == 2) Icons.AutoMirrored.Filled.Login else Icons.AutoMirrored.Outlined.Login,
-                                contentDescription = stringResource(R.string.tab_roblox_login),
-                                modifier = Modifier.scale(scale)
-                            )
-                        },
-                        label = { Text(stringResource(R.string.tab_roblox_login), fontWeight = if (selectedTab == 2) FontWeight.SemiBold else FontWeight.Normal) },
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2; searchQuery = "" },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                    NavigationBarItem(
-                        icon = {
-                            val scale by animateFloatAsState(
-                                targetValue = if (selectedTab == 3) 1.2f else 1.0f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                                label = "scale"
-                            )
-                            Icon(
-                                if (selectedTab == 3) Icons.Default.Replay else Icons.Outlined.Replay,
-                                contentDescription = stringResource(R.string.tab_auto_rejoin),
-                                modifier = Modifier.scale(scale)
-                            )
-                        },
-                        label = { Text(stringResource(R.string.tab_auto_rejoin), fontWeight = if (selectedTab == 3) FontWeight.SemiBold else FontWeight.Normal) },
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3; searchQuery = "" },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
-            }
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {
                 AnimatedVisibility(visible = isLoading) {
@@ -439,11 +292,11 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (selectedTab == 0 || selectedTab == 1) {
+                if (selectedTab == 0) {
                     KasumiSearchBar(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
-                        hint = if (selectedTab == 0) stringResource(R.string.search_hint) else stringResource(R.string.search_scripts_hint)
+                        hint = stringResource(R.string.search_hint)
                     )
                 }
 
@@ -451,12 +304,7 @@ class MainActivity : ComponentActivity() {
                     0 -> AppsListContent(searchQuery, onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
-                    1 -> ScriptsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    }, onDownloadRequest = { script ->
-                        scriptToDownload = script
-                    })
-                    2 -> RobloxLoginScreen(onShowSnackbar = { msg ->
+                    1 -> RobloxLoginScreen(onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
                     else -> AutoRejoinScreen(onShowSnackbar = { msg ->
@@ -478,6 +326,7 @@ class MainActivity : ComponentActivity() {
             if (showAboutDialog) {
                 AboutDialog(onDismiss = { showAboutDialog = false })
             }
+        }
         }
     }
 
@@ -981,186 +830,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    @Composable
-    fun ScriptsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit, onDownloadRequest: (ScriptItem) -> Unit) {
-        val scope = rememberCoroutineScope()
-        val filteredScripts = remember(scriptsList, searchQuery) {
-            val q = searchQuery.trim()
-             if (q.isEmpty()) {
-                scriptsList
-            } else {
-                scriptsList.filter {
-                    it.name.contains(q, ignoreCase = true) ||
-                            it.gameName.contains(q, ignoreCase = true)
-                }
-            }
-        }
-
-        var pullRefreshing by remember { mutableStateOf(false) }
-
-        @OptIn(ExperimentalMaterial3Api::class)
-        PullToRefreshBox(
-            isRefreshing = pullRefreshing,
-            onRefresh = {
-                scope.launch {
-                    pullRefreshing = true
-                    try {
-                        loadScriptsFromOnline()
-                        loadScriptsFromLocal()
-                        onShowSnackbar("Đã làm mới script")
-                    } finally {
-                        pullRefreshing = false
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item {
-                    Text(
-                        text = stringResource(R.string.scripts_count, filteredScripts.size),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                if (filteredScripts.isEmpty()) {
-                    item {
-                        EmptyState(
-                            icon = Icons.Default.Code,
-                            title = stringResource(R.string.no_scripts_title),
-                            subtitle = stringResource(R.string.no_scripts_subtitle)
-                        )
-                    }
-                } else {
-                    itemsIndexed(filteredScripts, key = { _, script -> script.id }) { index, script ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
-                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
-                        ) {
-                            ScriptItemRow(
-                                script = script,
-                                onDownload = { onDownloadRequest(script) },
-                                onCopy = { copyScript(it, onShowSnackbar) },
-                                onDelete = { deleteScript(it, onShowSnackbar) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    fun ScriptItemRow(script: ScriptItem, onDownload: (ScriptItem) -> Unit, onCopy: (ScriptItem) -> Unit, onDelete: (ScriptItem) -> Unit) {
-        val isLocal = script.localPath != null
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            onClick = { if (isLocal) onCopy(script) else onDownload(script) },
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            ),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (isLocal) MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Code,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = script.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = script.gameName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (!isLocal) {
-                        OutlinedButton(
-                            onClick = { onDownload(script) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                        ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.download))
-                        }
-                    }
-                    Button(
-                        onClick = { onCopy(script) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.copy_script))
-                    }
-                    if (isLocal) {
-                        FilledIconButton(
-                            onClick = { onDelete(script) },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
-                                contentColor = MaterialTheme.colorScheme.error
-                            ),
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
 
 
     // --- Logic functions migrated from old MainActivity ---
@@ -1493,150 +1162,6 @@ class MainActivity : ComponentActivity() {
          }
     }
 
-    // --- Scripts Logic ---
-
-    private suspend fun loadScriptsFromOnline() {
-        withContext(Dispatchers.IO) {
-            try {
-                val req = Request.Builder().url(DEFAULT_SCRIPTS_URL).header("User-Agent", "CloudPhoneTool/1.0").build()
-                client.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) return@withContext
-                    val stream = resp.body?.byteStream() ?: return@withContext
-                    val newScripts = mutableListOf<ScriptItem>()
-                    try {
-                        java.io.InputStreamReader(stream, Charsets.UTF_8).use { reader ->
-                            val remoteScripts: Array<RemoteScript>? = gson.fromJson(reader, Array<RemoteScript>::class.java)
-                            remoteScripts?.forEach { remote ->
-                                val url = remote.url
-                                if (!url.isNullOrBlank()) {
-                                    newScripts.add(
-                                        ScriptItem(
-                                            id = FileUtils.stableIdFromUrl(url),
-                                            name = remote.name ?: "",
-                                            gameName = remote.gameName ?: "",
-                                            url = url
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        onlineScriptsList = newScripts
-                        // Initial merge (will be refined by loadScriptsFromLocal)
-                        scriptsList = newScripts
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
-
-    private fun getDeltaDir(): File {
-        val vng = File(PATH_DELTA_VNG)
-        if (vng.exists()) return vng
-        return File(PATH_DELTA_LEGACY)
-    }
-
-    private suspend fun loadScriptsFromLocal() {
-        // Cache strings & deltaDir trên Main thread trước khi nhảy sang IO
-        // để tránh gọi getString() từ background (an toàn nhưng không cần thiết).
-        val autoString = getString(R.string.local_auto)
-        val manualString = getString(R.string.local_manual)
-        withContext(Dispatchers.IO) {
-            val deltaDir = getDeltaDir()
-            val newLocals = mutableListOf<ScriptItem>()
-            val autoExecuteDir = File(deltaDir, "Autoexecute")
-            val scriptsDir = File(deltaDir, "Scripts")
-
-            autoExecuteDir.listFiles()?.forEach {
-                if (it.isFile) {
-                    newLocals.add(ScriptItem("local_auto_${it.name}", it.nameWithoutExtension, autoString, null, it.absolutePath))
-                }
-            }
-
-            scriptsDir.listFiles()?.forEach {
-                if (it.isFile) {
-                    newLocals.add(ScriptItem("local_manual_${it.name}", it.nameWithoutExtension, manualString, null, it.absolutePath))
-                }
-            }
-            withContext(Dispatchers.Main) {
-                scriptsList = ScriptUtils.mergeScripts(onlineScriptsList, newLocals)
-            }
-        }
-    }
-
-    private fun downloadScript(script: ScriptItem, targetFolder: String, onShowSnackbar: (String) -> Unit) {
-        lifecycleScope.launch {
-            setBusy(true)
-            try {
-                val url = script.url ?: return@launch
-                val content = if (url.contains("/source/hard/")) {
-                    fetchScriptBody(url)
-                } else {
-                    "loadstring(game:HttpGet(\"$url\"))()"
-                }
-
-                val dir = File(getDeltaDir(), targetFolder)
-                // Save with .txt extension as requested
-                val fileName = if (script.name.endsWith(".txt", ignoreCase = true)) script.name else "${script.name}.txt"
-                ScriptUtils.saveScriptToFile(dir, fileName, content)
-                onShowSnackbar(getString(R.string.saved_to, targetFolder))
-                loadScriptsFromLocal() // Refresh
-            } catch (e: Exception) {
-                onShowSnackbar(getString(R.string.error_prefix, e.message))
-            } finally {
-                setBusy(false)
-            }
-        }
-    }
-
-    private suspend fun fetchScriptBody(url: String): String = withContext(Dispatchers.IO) {
-        val req = Request.Builder().url(url).header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0").build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
-            resp.body?.string() ?: ""
-        }
-    }
-
-    private fun copyScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
-         lifecycleScope.launch {
-            try {
-                val content = withContext(Dispatchers.IO) {
-                    when {
-                        script.localPath != null -> File(script.localPath).readText()
-                        script.url != null -> if (script.url.contains("/source/hard/")) fetchScriptBody(script.url)
-                            else "loadstring(game:HttpGet(\"${script.url}\"))()"
-                        else -> ""
-                    }
-                }
-
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText(script.name, content))
-                onShowSnackbar(getString(R.string.copied_script))
-            } catch (e: Exception) {
-                onShowSnackbar(getString(R.string.error_prefix, e.message))
-            }
-         }
-    }
-
-    private fun deleteScript(script: ScriptItem, onShowSnackbar: (String) -> Unit) {
-        if (script.localPath != null) {
-            lifecycleScope.launch {
-                withContext(Dispatchers.IO) {
-                    File(script.localPath).delete()
-                }
-                onShowSnackbar(getString(R.string.deleted_script))
-                loadScriptsFromLocal()
-            }
-        }
-    }
-
     // Copied from old Main for splitting/OBB
     data class ObbInfo(val packageName: String, val obbFiles: List<File>)
     private fun extractSplitsAndObb(packageFile: File): Pair<List<File>, ObbInfo?> {
@@ -1795,3 +1320,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
+
+private data class NavDestination(
+    val index: Int,
+    val title: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)

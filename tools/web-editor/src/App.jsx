@@ -10,12 +10,6 @@ const APPS_SCHEMA = [
   { key: 'iconUrl', label: 'Icon', type: 'image' },
 ];
 
-const SCRIPTS_SCHEMA = [
-  { key: 'name', label: 'Name' },
-  { key: 'gameName', label: 'Game Name' },
-  { key: 'url', label: 'URL' },
-];
-
 function App() {
   const [token, setToken] = useState(localStorage.getItem('gh_token') || '');
   const [repoDetails, setRepoDetails] = useState({ owner: '', repo: '' });
@@ -64,7 +58,7 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const path = activeTab === 'apps' ? 'source/apps.json' : 'source/scripts.json';
+      const path = 'source/apps.json';
       const result = await getFileContent(token, repoDetails.owner, repoDetails.repo, path);
       setData(result.content);
       setSha(result.sha);
@@ -97,7 +91,7 @@ function App() {
     setLoading(true);
     setSuccessMsg('');
     try {
-      const path = activeTab === 'apps' ? 'source/apps.json' : 'source/scripts.json';
+      const path = 'source/apps.json';
       await updateFileContent(
         token,
         repoDetails.owner,
@@ -105,7 +99,7 @@ function App() {
         path,
         newData,
         sha,
-        `Update ${activeTab === 'apps' ? 'apps.json' : 'scripts.json'} via Web Editor`
+        `Update apps.json via Web Editor`
       );
       setSuccessMsg('Saved successfully!');
       await fetchData();
@@ -230,16 +224,6 @@ function App() {
                     Applications
                 </button>
                 <button
-                    onClick={() => setActiveTab('scripts')}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                        activeTab === 'scripts'
-                        ? 'bg-indigo-600 text-white shadow-md'
-                        : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800'
-                    }`}
-                >
-                    Scripts
-                </button>
-                <button
                     onClick={() => setActiveTab('vsphone')}
                     className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         activeTab === 'vsphone'
@@ -304,8 +288,8 @@ function App() {
                     <Editor
                       data={data}
                       onSave={handleSaveChanges}
-                      schema={activeTab === 'apps' ? APPS_SCHEMA : SCRIPTS_SCHEMA}
-                      title={activeTab === 'apps' ? 'Applications' : 'Scripts'}
+                      schema={APPS_SCHEMA}
+                      title={'Applications'}
                     />
                 ) : (
                     <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-gray-300 dark:border-slate-700">

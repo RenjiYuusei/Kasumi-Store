@@ -1,8 +1,8 @@
 # Kasumi-Store
 
-Ứng dụng quản lý và tải xuống APK/Script cho giả lập và thiết bị Android, hỗ trợ cài đặt nâng cao và quản lý script cho Roblox/Delta.
+Ứng dụng quản lý và tải xuống APK cho giả lập và thiết bị Android, hỗ trợ cài đặt nâng cao, đăng nhập Roblox bằng cookie và auto-rejoin.
 
-**Phiên bản:** 1.8.5
+**Phiên bản:** 1.9.0
 **Ngôn ngữ:** Kotlin
 **Giao diện:** Jetpack Compose (Material 3)
 
@@ -15,14 +15,15 @@
     *   Quản lý cache, xóa file rác.
     *   Tìm kiếm, sắp xếp theo tên, kích thước, ngày tải.
 
-*   **Kho Script (Delta/Roblox):**
-    *   Tải xuống script từ nguồn online hoặc import từ bộ nhớ máy.
-    *   Hỗ trợ lưu script vào thư mục `Autoexecute` hoặc `Scripts` của Delta.
-    *   Sao chép nội dung script vào bộ nhớ tạm.
-    *   Xóa script đã lưu.
+*   **Login Roblox:**
+    *   Trích xuất và đăng nhập Roblox bằng cookie `.ROBLOSECURITY` (yêu cầu root).
+
+*   **Auto Rejoin:**
+    *   Tự động rejoin Roblox theo Place ID, chạy nền dưới dạng foreground service.
 
 *   **Giao diện hiện đại:**
     *   Sử dụng Jetpack Compose với chuẩn Material Design 3.
+    *   Điều hướng bằng menu trượt (navigation drawer) từ cạnh trái.
     *   Hỗ trợ Dark Theme mặc định.
     *   Trải nghiệm mượt mà, trực quan.
 
@@ -30,7 +31,7 @@
 
 1.  Tải file APK từ trang phát hành.
 2.  Cài đặt lên thiết bị Android (Android 8.0 trở lên).
-3.  Cấp quyền truy cập bộ nhớ (Manage External Storage) để ứng dụng có thể quản lý file APK và Script.
+3.  Cấp quyền truy cập bộ nhớ (Manage External Storage) để ứng dụng có thể quản lý file APK.
 
 ## Đóng góp
 
