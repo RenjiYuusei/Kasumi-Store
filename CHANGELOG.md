@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0] - 2026-07-08
+### 💥 Thay đổi lớn
+- **Gỡ bỏ tính năng Script**: Xóa hoàn toàn tab "Script" và mọi thứ liên quan (tải/lưu/sao chép/xóa script Delta-Roblox). Bao gồm:
+  - App: `ScriptItem.kt`, `ScriptUtils.kt`, toàn bộ logic script trong `MainActivity.kt` và các string resource liên quan.
+  - Backend: `source/scripts.json`, thư mục `source/hard/`, và phần quản lý Scripts trong web-editor.
+  - `about_description` cập nhật lại: chỉ còn "Trình quản lý và cài đặt APK".
+
+### ✨ Tính năng mới
+- **Điều hướng bằng Navigation Drawer**: Thay thanh tab dưới cùng (`NavigationBar`) bằng `ModalNavigationDrawer` trượt từ cạnh trái, mở bằng nút hamburger trên `TopAppBar`. Tiêu đề `TopAppBar` đổi theo mục đang chọn. Cách này mở rộng tốt khi thêm nhiều mục về sau. 3 mục còn lại: **Ứng dụng**, **Login Roblox**, **Auto Rejoin**.
+
+### 🧹 Tối ưu / Dọn dẹp
+- Gỡ các import không còn dùng (`Code`, `Outlined.*`, animation `spring`/`animateFloatAsState`, `SerializedName`…) sau khi bỏ bottom nav và script.
+- Gỡ hằng số `DEFAULT_SCRIPTS_URL`, `PATH_DELTA_LEGACY`, `PATH_DELTA_VNG` và state script.
+
+### 🔢 Phiên bản
+- **Bump phiên bản**: `1.8.5` → `1.9.0` (versionCode 19 → 20).
+
 ## [1.8.5] - 2026-06-19
 ### ✨ Tính năng mới
 - **Auto Rejoin — Tự dò ID server riêng (svv)**: Nút "Tự dò từ Roblox" giờ phân biệt được **server riêng / VIP server (svv)** và **server thường (svth)**:
