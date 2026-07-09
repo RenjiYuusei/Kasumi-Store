@@ -106,6 +106,7 @@ class AutoRejoinService : Service() {
     private fun handleStart(intent: Intent) {
         val pkg = intent.getStringExtra(EXTRA_PKG)
         val placeId = intent.getStringExtra(EXTRA_PLACE_ID)
+        val accessCode = intent.getStringExtra(EXTRA_ACCESS_CODE)?.takeIf { it.isNotBlank() }
         val intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, 15_000L)
             .coerceIn(5_000L, 60_000L)
 
@@ -130,15 +131,19 @@ class AutoRejoinService : Service() {
                 running = true,
                 pkg = pkg,
                 placeId = placeId,
-
+                accessCode = accessCode,
                 intervalMs = intervalMs,
             )
         }
-        appendLog(LogLevel.INFO, "Bắt đầu vòng lặp auto-rejoin cho placeId=$placeId (interval=${intervalMs / 1000}s).")
+        val serverKind = if (accessCode != null) "server VIP/riêng" else "server thường"
+        appendLog(
+            LogLevel.INFO,
+            "Bắt đầu auto-rejoin cho $serverKind (Place ID $placeId, kiểm tra mỗi ${intervalMs / 1000}s).",
+        )
 
         loopJob?.cancel()
         loopJob = serviceScope.launch {
-            runPollingLoop(pkg, placeId, intervalMs)
+            runPollingLoop(pkg, placeId, accessCode, intervalMs)
         }
     }
 
@@ -169,6 +174,7 @@ class AutoRejoinService : Service() {
     private suspend fun runPollingLoop(
         pkg: String,
         placeId: String,
+        accessCode: String?,
         intervalMs: Long,
     ) {
         // Sau mỗi lần force-stop + rejoin, Roblox cần 20–60s để mở lại và
@@ -248,7 +254,7 @@ class AutoRejoinService : Service() {
 
             if (needRejoin) {
                 val attempts = withContext(Dispatchers.IO) {
-                    AutoRejoinManager.rejoin(pkg, placeId)
+                    AutoRejoinManager.rejoin(pkg, placeId, accessCode)
                 }
                 lastRejoinEpochMs = System.currentTimeMillis()
                 _state.update { it.copy(rejoinCount = it.rejoinCount + 1) }
@@ -337,6 +343,15 @@ class AutoRejoinService : Service() {
                 append(" • ")
                 append(getString(R.string.auto_rejoin_notif_content_place, s.placeId))
             }
+            append(" • ")
+            append(
+                getString(
+                    if (!s.accessCode.isNullOrBlank())
+                        R.string.auto_rejoin_server_type_vip
+                    else
+                        R.string.auto_rejoin_server_type_normal
+                )
+            )
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
@@ -365,6 +380,7 @@ class AutoRejoinService : Service() {
         const val ACTION_STOP = "com.kasumi.tool.action.AUTO_REJOIN_STOP"
         const val EXTRA_PKG = "pkg"
         const val EXTRA_PLACE_ID = "placeId"
+        const val EXTRA_ACCESS_CODE = "accessCode"
         const val EXTRA_INTERVAL_MS = "intervalMs"
 
         // SimpleDateFormat KHÔNG thread-safe theo Java doc. Đặt trong
@@ -395,12 +411,14 @@ class AutoRejoinService : Service() {
             context: Context,
             pkg: String,
             placeId: String,
+            accessCode: String?,
             intervalSec: Int,
         ) {
             val intent = Intent(context, AutoRejoinService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_PKG, pkg)
                 putExtra(EXTRA_PLACE_ID, placeId)
+                putExtra(EXTRA_ACCESS_CODE, accessCode)
                 putExtra(EXTRA_INTERVAL_MS, intervalSec.toLong() * 1000L)
             }
             ContextCompat.startForegroundService(context, intent)
@@ -444,6 +462,7 @@ data class AutoRejoinUiState(
     val running: Boolean = false,
     val pkg: String? = null,
     val placeId: String? = null,
+    val accessCode: String? = null,
     val intervalMs: Long = 15_000L,
     val currentState: AutoRejoinManager.RobloxState? = null,
     val currentPid: Int? = null,

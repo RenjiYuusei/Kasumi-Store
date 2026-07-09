@@ -116,11 +116,29 @@ object AutoRejoinManager {
         return StatusReport(RobloxState.FOREGROUND_NO_GAME, pid, null, null)
     }
 
-    data class DetectedGame(val placeId: String?) {
+    /**
+     * Kết quả tự dò game hiện tại.
+     *
+     * Phân loại loại server dựa trên `accessCode` lấy được từ URL vào game
+     * mà Roblox ghi ra logcat (tag `rbx.web`):
+     *  - Có `accessCode` → server VIP / server riêng (svv). Muốn rejoin đúng
+     *    phòng bắt buộc phải kèm mã này.
+     *  - Không có `accessCode` → server thường (svth), chỉ cần placeId.
+     */
+    data class DetectedGame(
+        val placeId: String?,
+        val accessCode: String? = null,
+    ) {
         val hasPlaceId: Boolean get() = !placeId.isNullOrEmpty()
+        val isPrivateServer: Boolean get() = !accessCode.isNullOrEmpty()
     }
 
     private val PLACE_URL_REGEX = Regex("(?i)placeid=([0-9]{3,16})")
+
+    // accessCode là UUID trong URL vào server VIP/riêng, ví dụ:
+    // .../games/start?placeId=...&accessCode=b66afff7-708c-4d01-8d59-0c493d096dd3
+    private val ACCESS_CODE_REGEX =
+        Regex("(?i)accesscode=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
     fun detectCurrentGame(pkg: String): DetectedGame {
         // Step 1: Roblox phải đang chạy (pidof rỗng → process chết).
@@ -129,26 +147,31 @@ object AutoRejoinManager {
             return DetectedGame(null)
         }
 
-        // Step 2: dumpsys — deeplink roblox:// còn trong task stack.
+        // Step 2: logcat — dòng URL vào game mới nhất (tag rbx.web ghi cả
+        // placeId lẫn accessCode nếu là server VIP/riêng). Ưu tiên nguồn này
+        // vì chỉ nó mới mang accessCode để phân loại + rejoin đúng phòng VIP.
+        val joinR = executeAsRoot(
+            "logcat -d -t 20000 2>/dev/null | grep -iE 'games/start|roblox://|placeid=[0-9]' | tail -120",
+            timeoutSec = 15L
+        )
+        val joinLine = joinR.output.lineSequence()
+            .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
+        if (joinLine != null) {
+            val placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+            if (!placeId.isNullOrEmpty()) {
+                val accessCode = ACCESS_CODE_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
+                return DetectedGame(placeId, accessCode)
+            }
+        }
+
+        // Step 3: dumpsys — deeplink roblox:// còn trong task stack. Thường
+        // chỉ còn placeId (server thường) nên không phân loại VIP ở đây.
         val dumpR = executeAsRoot(
             "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
         )
         var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
 
-        // Step 3: logcat — dòng join URL mới nhất. Chỉ chạy khi dumpsys chưa có.
-        if (placeId.isNullOrEmpty()) {
-            val logR = executeAsRoot(
-                "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid=[0-9]' | tail -80",
-                timeoutSec = 15L
-            )
-            val joinLine = logR.output.lineSequence()
-                .lastOrNull { PLACE_URL_REGEX.containsMatchIn(it) }
-            if (joinLine != null) {
-                placeId = PLACE_URL_REGEX.find(joinLine)?.groupValues?.getOrNull(1)
-            }
-        }
-
-        // Step 4: svth fallback
+        // Step 4: fallback quét rộng placeId (server thường).
         if (placeId.isNullOrEmpty()) {
             val logR2 = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
@@ -178,28 +201,39 @@ object AutoRejoinManager {
 
     fun rejoin(
         pkg: String,
-        placeId: String
+        placeId: String,
+        accessCode: String? = null,
     ): List<RejoinAttempt> {
         val attempts = mutableListOf<RejoinAttempt>()
 
-        val m1Url = "roblox://experiences/start?placeId=$placeId"
-        val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
-            "-d ${shellQuote(m1Url)} -p ${shellQuote(pkg)}"
-        val r1 = executeAsRoot(m1Cmd)
-        attempts += RejoinAttempt("M1 — Experiences deeplink", m1Cmd, r1.exitCode, r1.output, r1.error)
-        if (isAmStartSuccess(r1)) return attempts
+        fun tryStart(method: String, url: String): Boolean {
+            val cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
+                "-d ${shellQuote(url)} -p ${shellQuote(pkg)}"
+            val r = executeAsRoot(cmd)
+            attempts += RejoinAttempt(method, cmd, r.exitCode, r.output, r.error)
+            return isAmStartSuccess(r)
+        }
 
-        val m2Url = "roblox://placeId=$placeId"
-        val m2Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
-            "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
-        val r2 = executeAsRoot(m2Cmd)
-        attempts += RejoinAttempt("M2 — Legacy deeplink", m2Cmd, r2.exitCode, r2.output, r2.error)
-        if (isAmStartSuccess(r2)) return attempts
+        if (!accessCode.isNullOrBlank()) {
+            // Server VIP/riêng: bắt buộc kèm accessCode, nếu không Roblox sẽ
+            // vào phòng public bất kỳ chứ không đúng server người chơi đang ở.
+            val vipDeeplink = "roblox://experiences/start?placeId=$placeId&accessCode=$accessCode"
+            if (tryStart("VIP — Vào lại server riêng (deeplink)", vipDeeplink)) return attempts
+
+            val vipWeb = "https://www.roblox.com/games/start?placeId=$placeId&accessCode=$accessCode"
+            if (tryStart("VIP — Vào lại server riêng (link web)", vipWeb)) return attempts
+        } else {
+            val m1Url = "roblox://experiences/start?placeId=$placeId"
+            if (tryStart("M1 — Vào lại game (deeplink)", m1Url)) return attempts
+
+            val m2Url = "roblox://placeId=$placeId"
+            if (tryStart("M2 — Vào lại game (deeplink cũ)", m2Url)) return attempts
+        }
 
         val m3Cmd = "am start -a android.intent.action.MAIN " +
             "-c android.intent.category.LAUNCHER -p ${shellQuote(pkg)}"
         val r3 = executeAsRoot(m3Cmd)
-        attempts += RejoinAttempt("M3 — Cold launch (mở app)", m3Cmd, r3.exitCode, r3.output, r3.error)
+        attempts += RejoinAttempt("M3 — Mở lại app Roblox", m3Cmd, r3.exitCode, r3.output, r3.error)
         return attempts
     }
 

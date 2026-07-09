@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
@@ -55,7 +57,8 @@ import kotlinx.coroutines.withContext
  *
  * UI gồm 5 khối:
  *  1. **StatusCard**: hiển thị quyền root + bản Roblox được phát hiện.
- *  2. **ConfigCard**: input PlaceId, optional GameInstanceId, slider chu kỳ
+ *  2. **ConfigCard**: input PlaceId, Access Code (server VIP/riêng — có thể
+ *     để trống với server thường), chip phân loại server, slider chu kỳ
  *     check (5–60s). Disable khi service đang chạy để tránh user đổi
  *     giữa chừng.
  *  3. **ControlCard**: nút Start / Stop, hiển thị state hiện tại + tổng số
@@ -79,6 +82,7 @@ fun AutoRejoinScreen(
     val msgDetectNoGame = stringResource(R.string.auto_rejoin_snackbar_detect_no_game)
     val msgDetectNoRoot = stringResource(R.string.auto_rejoin_snackbar_detect_no_root)
     val msgDetectSuccessFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success)
+    val msgDetectSuccessPrivateFmt = stringResource(R.string.auto_rejoin_snackbar_detect_success_private)
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -88,6 +92,7 @@ fun AutoRejoinScreen(
     var isDetecting by remember { mutableStateOf(false) }
 
     var placeIdInput by rememberSaveable { mutableStateOf("") }
+    var accessCodeInput by rememberSaveable { mutableStateOf("") }
     var intervalSec by rememberSaveable { mutableFloatStateOf(15f) }
 
     val uiState by AutoRejoinService.state.collectAsState()
@@ -124,7 +129,12 @@ fun AutoRejoinScreen(
             isDetecting = false
             if (detected.hasPlaceId) {
                 placeIdInput = detected.placeId.orEmpty().filter { it.isDigit() }.take(16)
-                onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                accessCodeInput = detected.accessCode.orEmpty()
+                if (detected.isPrivateServer) {
+                    onShowSnackbar(msgDetectSuccessPrivateFmt.format(detected.placeId))
+                } else {
+                    onShowSnackbar(msgDetectSuccessFmt.format(detected.placeId))
+                }
             } else {
                 onShowSnackbar(msgDetectNoGame)
             }
@@ -137,6 +147,7 @@ fun AutoRejoinScreen(
             context = context,
             pkg = pkg,
             placeId = placeIdInput.trim(),
+            accessCode = accessCodeInput.trim().ifBlank { null },
             intervalSec = intervalSec.toInt().coerceIn(5, 60),
         )
         onShowSnackbar(msgStarted)
@@ -172,6 +183,8 @@ fun AutoRejoinScreen(
         ConfigCard(
             placeId = placeIdInput,
             onPlaceIdChange = { placeIdInput = it.filter { c -> c.isDigit() }.take(16) },
+            accessCode = accessCodeInput,
+            onAccessCodeChange = { accessCodeInput = it.trim().take(64) },
             intervalSec = intervalSec,
             onIntervalChange = { intervalSec = it },
             enabled = !uiState.running,
@@ -186,6 +199,7 @@ fun AutoRejoinScreen(
             currentState = uiState.currentState,
             currentPid = uiState.currentPid,
             rejoinCount = uiState.rejoinCount,
+            isPrivateServer = !uiState.accessCode.isNullOrBlank(),
             onToggle = {
                 if (!uiState.running) {
                     if (!ready) {
@@ -330,6 +344,8 @@ private fun CheckRow(
 private fun ConfigCard(
     placeId: String,
     onPlaceIdChange: (String) -> Unit,
+    accessCode: String,
+    onAccessCodeChange: (String) -> Unit,
     intervalSec: Float,
     onIntervalChange: (Float) -> Unit,
     enabled: Boolean,
@@ -337,6 +353,7 @@ private fun ConfigCard(
     isDetecting: Boolean,
     canDetect: Boolean,
 ) {
+    val isPrivateServer = accessCode.isNotBlank()
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -370,6 +387,19 @@ private fun ConfigCard(
                 label = { Text(stringResource(R.string.auto_rejoin_config_place_id)) },
                 placeholder = { Text(stringResource(R.string.auto_rejoin_config_place_id_hint)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            ServerTypeChip(isPrivateServer = isPrivateServer)
+
+            OutlinedTextField(
+                value = accessCode,
+                onValueChange = onAccessCodeChange,
+                enabled = enabled,
+                singleLine = true,
+                label = { Text(stringResource(R.string.auto_rejoin_config_access_code)) },
+                placeholder = { Text(stringResource(R.string.auto_rejoin_config_access_code_hint)) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp)
             )
@@ -436,12 +466,49 @@ private fun ConfigCard(
 }
 
 @Composable
+private fun ServerTypeChip(isPrivateServer: Boolean) {
+    val bg = if (isPrivateServer)
+        MaterialTheme.colorScheme.tertiaryContainer
+    else
+        MaterialTheme.colorScheme.secondaryContainer
+    val fg = if (isPrivateServer)
+        MaterialTheme.colorScheme.onTertiaryContainer
+    else
+        MaterialTheme.colorScheme.onSecondaryContainer
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            if (isPrivateServer) Icons.Default.Lock else Icons.Default.Public,
+            contentDescription = null,
+            tint = fg,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = stringResource(
+                if (isPrivateServer) R.string.auto_rejoin_server_type_vip
+                else R.string.auto_rejoin_server_type_normal
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = fg
+        )
+    }
+}
+
+@Composable
 private fun ControlCard(
     running: Boolean,
     ready: Boolean,
     currentState: AutoRejoinManager.RobloxState?,
     currentPid: Int?,
     rejoinCount: Int,
+    isPrivateServer: Boolean,
     onToggle: () -> Unit
 ) {
     Card(
@@ -506,6 +573,10 @@ private fun ControlCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (running) {
+                ServerTypeChip(isPrivateServer = isPrivateServer)
+            }
 
             Button(
                 onClick = onToggle,
