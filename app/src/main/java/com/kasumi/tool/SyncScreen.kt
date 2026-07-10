@@ -32,13 +32,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * Tab "Đồng bộ" — sao lưu/khôi phục dữ liệu config của các script Delta client
- * (thư mục /storage/emulated/0/Delta/Workspace) qua database Neon, giúp mang
- * config từ máy này sang máy khác.
+ * Tab "Đồng bộ" — sao lưu/khôi phục toàn bộ dữ liệu Delta client
+ * (thư mục /storage/emulated/0/Delta: Workspace, Scripts, Autoexecute, …)
+ * qua database Neon, giúp mang script và config từ máy này sang máy khác.
  *
- * Người dùng nhập tên đồng bộ (profile), bấm "Đồng bộ lên" để đẩy config lên
+ * Người dùng nhập tên đồng bộ (profile), bấm "Đồng bộ lên" để đẩy dữ liệu lên
  * DB, hoặc "Tải về máy" ở máy khác để khôi phục. Phần dưới hiển thị các tệp
- * config đang lưu trên DB kèm nút cập nhật và nút xoá.
+ * đang lưu trên DB kèm nút cập nhật và nút xoá.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +58,7 @@ fun SyncScreen(
 
     var localCount by remember { mutableIntStateOf(0) }
     var localSize by remember { mutableLongStateOf(0L) }
-    var workspaceExists by remember { mutableStateOf(true) }
+    var deltaExists by remember { mutableStateOf(true) }
 
     // null = chưa tải; danh sách rỗng = đã tải nhưng DB không có dữ liệu.
     var remote by remember { mutableStateOf<List<NeonSyncManager.RemoteEntry>?>(null) }
@@ -69,7 +69,7 @@ fun SyncScreen(
             val scan = manager.scanLocal()
             localCount = scan.files.size
             localSize = scan.files.sumOf { it.size }
-            workspaceExists = NeonSyncManager.workspaceDir.exists()
+            deltaExists = NeonSyncManager.deltaDir.exists()
         }
     }
 
@@ -117,7 +117,7 @@ fun SyncScreen(
             })
         } else {
             LocalStatusCard(
-                exists = workspaceExists,
+                exists = deltaExists,
                 count = localCount,
                 size = localSize
             )
@@ -329,13 +329,13 @@ private fun InfoCard() {
                 )
             }
             Text(
-                text = "Đồng bộ config của các script trong Delta client giữa các máy. " +
-                    "Nguồn dữ liệu:",
+                text = "Sao lưu toàn bộ Delta client (script, autoexecute, config) " +
+                    "giữa các máy. Nguồn dữ liệu:",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "/storage/emulated/0/Delta/Workspace",
+                text = "/storage/emulated/0/Delta",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.primary
@@ -365,7 +365,7 @@ private fun PermissionCard(onGrant: () -> Unit) {
             )
             Text(
                 text = "Ứng dụng cần quyền quản lý tất cả tệp để đọc thư mục " +
-                    "Workspace của Delta.",
+                    "Delta.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
@@ -397,13 +397,13 @@ private fun LocalStatusCard(exists: Boolean, count: Int, size: Long) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Config trên máy này",
+                    text = "Dữ liệu trên máy này",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = if (!exists) {
-                        "Chưa tìm thấy thư mục Workspace."
+                        "Chưa tìm thấy thư mục Delta."
                     } else {
                         "$count tệp • ${formatBytes(size)}"
                     },

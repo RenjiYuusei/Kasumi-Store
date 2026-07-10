@@ -13,8 +13,9 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Đồng bộ dữ liệu config của các script Delta client (thư mục
- * /storage/emulated/0/Delta/Workspace) lên/xuống database Neon Postgres.
+ * Đồng bộ dữ liệu của Delta client (toàn bộ thư mục
+ * /storage/emulated/0/Delta — gồm Workspace, Scripts, Autoexecute, …)
+ * lên/xuống database Neon Postgres.
  *
  * Không dùng JDBC (nặng và không ổn định trên Android). Thay vào đó gọi thẳng
  * endpoint SQL-over-HTTP của Neon: POST https://<host>/sql với header
@@ -41,8 +42,8 @@ class NeonSyncManager(private val client: OkHttpClient) {
 
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
 
-        val workspaceDir: File
-            get() = File(Environment.getExternalStorageDirectory(), "Delta/Workspace")
+        val deltaDir: File
+            get() = File(Environment.getExternalStorageDirectory(), "Delta")
     }
 
     // --- Lớp gọi HTTP tới Neon ------------------------------------------------
@@ -95,9 +96,9 @@ class NeonSyncManager(private val client: OkHttpClient) {
         )
     }
 
-    // --- Đọc thư mục Workspace ------------------------------------------------
+    // --- Đọc thư mục Delta ----------------------------------------------------
 
-    /** Kết quả quét thư mục Workspace trên máy. */
+    /** Kết quả quét thư mục Delta trên máy. */
     data class LocalScan(
         val files: List<LocalFile>,
         val skipped: List<String>
@@ -106,7 +107,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
     data class LocalFile(val relativePath: String, val file: File, val size: Long)
 
     suspend fun scanLocal(): LocalScan = withContext(Dispatchers.IO) {
-        val root = workspaceDir
+        val root = deltaDir
         if (!root.exists() || !root.isDirectory) {
             return@withContext LocalScan(emptyList(), emptyList())
         }
@@ -158,7 +159,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
 
     /**
      * Tải toàn bộ config trên máy lên DB dưới tên [profile]. DB sẽ phản chiếu
-     * đúng nội dung thư mục Workspace hiện tại: tệp mới/đổi được cập nhật, tệp
+     * đúng nội dung thư mục Delta hiện tại: tệp mới/đổi được cập nhật, tệp
      * đã xoá khỏi máy cũng bị xoá khỏi DB.
      *
      * @param onProgress callback (đãXong, tổng, tênTệp) để cập nhật UI.
@@ -201,7 +202,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
     }
 
     /**
-     * Tải config từ DB về thư mục Workspace của máy này. Ghi đè tệp trùng tên,
+     * Tải dữ liệu từ DB về thư mục Delta của máy này. Ghi đè tệp trùng tên,
      * tạo thư mục con nếu cần. Không xoá các tệp local không có trên DB.
      *
      * @return số tệp đã ghi.
@@ -217,7 +218,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
         )
         val rows = res.optJSONArray("rows") ?: JSONArray()
         val total = rows.length()
-        val root = workspaceDir
+        val root = deltaDir
         if (!root.exists()) root.mkdirs()
 
         for (i in 0 until total) {
