@@ -90,6 +90,9 @@
     <string name="roblox_login_result_error">Lỗi</string>
     <string name="roblox_login_result_log_title">Nhật ký</string>
 
+    <!-- Sync tab -->
+    <string name="tab_sync">Đồng bộ</string>
+
     <!-- Auto Rejoin Roblox tab -->
     <string name="tab_auto_rejoin">Auto Rejoin</string>
     <string name="auto_rejoin_title">Auto Rejoin Roblox</string>
