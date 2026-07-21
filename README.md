@@ -2,7 +2,7 @@
 
 Ứng dụng quản lý và tải xuống APK cho giả lập và thiết bị Android, hỗ trợ cài đặt nâng cao, đăng nhập Roblox bằng cookie và auto-rejoin.
 
-**Phiên bản:** 1.9.0
+**Phiên bản:** 1.9.5
 **Ngôn ngữ:** Kotlin
 **Giao diện:** Jetpack Compose (Material 3)
 

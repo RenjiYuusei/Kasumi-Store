@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kasumi Store</string>
-    <string name="install">Cài đặt</string>
-    <string name="delete">Xóa</string>
-    <string name="open">Mở</string>
-    <string name="info">Thông tin</string>
-    <string name="uninstall">Gỡ cài đặt</string>
-    <string name="refresh">Làm mới</string>
     <string name="search_hint">Tìm kiếm ứng dụng…</string>
     <string name="clear_search">Xóa tìm kiếm</string>
     <string name="menu">Menu</string>
@@ -99,76 +93,71 @@
 
     <!-- Auto Rejoin: status card -->
     <string name="auto_rejoin_status_title">Trạng thái thiết bị</string>
-    <string name="auto_rejoin_status_root_label">Quyền Root (su)</string>
-    <string name="auto_rejoin_status_root_hint">Cần root để theo dõi process Roblox và force-stop khi rejoin.</string>
-    <string name="auto_rejoin_status_roblox_installed">Roblox đã cài (%1$s)</string>
-    <string name="auto_rejoin_status_roblox_missing">Roblox chưa cài (com.roblox.client / .vnggames)</string>
+    <string name="auto_rejoin_status_root_label">Quyền Root</string>
+    <string name="auto_rejoin_status_root_hint">Cần máy đã root để theo dõi Roblox và tự mở lại game khi bạn bị văng.</string>
+    <string name="auto_rejoin_status_roblox_installed">Đã cài Roblox (%1$s)</string>
+    <string name="auto_rejoin_status_roblox_missing">Chưa cài Roblox (bản Global hoặc VNG)</string>
     <string name="auto_rejoin_status_roblox_checking">Roblox (đang kiểm tra…)</string>
-    <string name="auto_rejoin_status_roblox_hint">Hãy cài đặt Roblox (bản global hoặc VNG) và mở ít nhất 1 lần để khởi tạo dữ liệu.</string>
+    <string name="auto_rejoin_status_roblox_hint">Hãy cài Roblox (bản Global hoặc VNG) và mở ít nhất 1 lần trước khi dùng.</string>
     <string name="auto_rejoin_status_state_checking">Đang kiểm tra…</string>
     <string name="auto_rejoin_status_state_ready">Sẵn sàng</string>
     <string name="auto_rejoin_status_state_unavailable">Không khả dụng</string>
 
     <!-- Auto Rejoin: config card -->
     <string name="auto_rejoin_config_title">Cấu hình</string>
-    <string name="auto_rejoin_config_place_id">Place ID</string>
-    <string name="auto_rejoin_config_place_id_hint">Ví dụ: 920587237</string>
-    <string name="auto_rejoin_config_game_instance">Game Instance ID (tùy chọn)</string>
-    <string name="auto_rejoin_config_game_instance_hint">Để trống nếu không dùng VIP/Private server</string>
-    <string name="auto_rejoin_config_access_code">Access Code (server riêng/VIP, tùy chọn)</string>
-    <string name="auto_rejoin_config_access_code_hint">Mã truy cập server riêng — tự điền khi "Tự dò" trong svv</string>
-    <string name="auto_rejoin_config_interval">Chu kỳ kiểm tra</string>
+    <string name="auto_rejoin_config_place_id">Place ID (mã game)</string>
+    <string name="auto_rejoin_config_place_id_hint">Dãy số trong link game, ví dụ: 920587237</string>
+    <string name="auto_rejoin_config_interval">Kiểm tra mỗi</string>
     <string name="auto_rejoin_config_interval_value">%1$d giây</string>
-    <string name="auto_rejoin_config_detect_button">Tự dò từ Roblox</string>
-    <string name="auto_rejoin_config_detect_hint">Mở Roblox vào game cần auto-rejoin → bấm để tự lấy Place ID.</string>
+    <string name="auto_rejoin_config_detect_button">Tự lấy từ Roblox</string>
+    <string name="auto_rejoin_config_detect_hint">Mở Roblox và vào đúng game bạn muốn giữ, rồi quay lại đây bấm nút này để tự điền Place ID.</string>
 
     <!-- Auto Rejoin: control card -->
     <string name="auto_rejoin_control_title">Điều khiển</string>
     <string name="auto_rejoin_control_start">Bắt đầu</string>
     <string name="auto_rejoin_control_stop">Dừng</string>
     <string name="auto_rejoin_state_idle">Chưa chạy</string>
-    <string name="auto_rejoin_state_in_game">Đang trong game (đúng placeId)</string>
-    <string name="auto_rejoin_state_in_game_wrong">Đang trong game khác placeId</string>
-    <string name="auto_rejoin_state_foreground_no_game">Roblox đang chạy nhưng chưa vào game</string>
-    <string name="auto_rejoin_state_not_running">Roblox không chạy</string>
-    <string name="auto_rejoin_state_disconnected">Phát hiện bị disconnect/kick</string>
+    <string name="auto_rejoin_state_in_game">Đang trong đúng game</string>
+    <string name="auto_rejoin_state_in_game_wrong">Đang ở game khác</string>
+    <string name="auto_rejoin_state_foreground_no_game">Roblox đang mở nhưng chưa vào game</string>
+    <string name="auto_rejoin_state_not_running">Roblox đang tắt</string>
+    <string name="auto_rejoin_state_disconnected">Phát hiện bị văng / kick</string>
     <string name="auto_rejoin_state_format">Trạng thái: %1$s</string>
-    <string name="auto_rejoin_pid_format">PID Roblox: %1$s</string>
-    <string name="auto_rejoin_count_format">Đã rejoin: %1$d lần</string>
+    <string name="auto_rejoin_pid_format">Mã tiến trình Roblox: %1$s</string>
+    <string name="auto_rejoin_count_format">Đã vào lại: %1$d lần</string>
 
     <!-- Auto Rejoin: log card -->
     <string name="auto_rejoin_log_title">Nhật ký sự kiện</string>
-    <string name="auto_rejoin_log_empty">Chưa có sự kiện nào bấm "Bắt đầu" để chạy.</string>
+    <string name="auto_rejoin_log_empty">Chưa có sự kiện nào. Bấm "Bắt đầu" để chạy.</string>
 
     <!-- Auto Rejoin: warning -->
     <string name="auto_rejoin_warning_title">Lưu ý</string>
-    <string name="auto_rejoin_warning_body">Auto-rejoin chạy như foreground service: vòng lặp tiếp tục chạy khi bạn switch sang Roblox để treo. Notification dai sẽ hiển thị ở status bar — có nút "Dừng" để tắt nhanh. Mỗi lần rejoin sẽ force-stop Roblox để dọn state.</string>
+    <string name="auto_rejoin_warning_body">Khi bật, tính năng vẫn chạy nền cả lúc bạn chuyển sang Roblox để chơi, nên sẽ có một thông báo cố định trên thanh trạng thái (bấm "Dừng" ngay trên thông báo đó để tắt nhanh). Mỗi lần vào lại game, app sẽ tắt hẳn Roblox rồi mở lại cho chắc chắn.</string>
 
     <!-- Auto Rejoin: snackbars -->
     <string name="auto_rejoin_snackbar_invalid_place_id">Place ID không hợp lệ. Hãy nhập số (1–16 chữ số).</string>
-    <string name="auto_rejoin_snackbar_not_ready">Chưa sẵn sàng. Cần root + Roblox đã cài đặt.</string>
-    <string name="auto_rejoin_snackbar_started">Đã bật auto-rejoin (chạy ngầm như foreground service)</string>
-    <string name="auto_rejoin_snackbar_stopped">Đã dừng auto-rejoin</string>
-    <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn từ chối quyền hiển thị notification — service vẫn chạy nhưng không thấy ở status bar.</string>
-    <string name="auto_rejoin_snackbar_detect_running">Đang dò Place ID hiện tại từ Roblox…</string>
-    <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID (server thường): %1$s</string>
-    <string name="auto_rejoin_snackbar_detect_success_private">Đã lấy Place ID + định danh server riêng/VIP: %1$s</string>
-    <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy đảm bảo Roblox đang chạy và đã vào game (đã thử dumpsys + logcat). Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
-    <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền root để dò Place ID.</string>
+    <string name="auto_rejoin_snackbar_not_ready">Chưa sẵn sàng. Cần máy đã root và đã cài Roblox.</string>
+    <string name="auto_rejoin_snackbar_started">Đã bật auto rejoin — sẽ tiếp tục chạy nền khi bạn mở Roblox.</string>
+    <string name="auto_rejoin_snackbar_stopped">Đã dừng auto rejoin</string>
+    <string name="auto_rejoin_snackbar_notif_perm_denied">Bạn đã từ chối quyền thông báo — tính năng vẫn chạy nhưng bạn sẽ không thấy thông báo trên thanh trạng thái.</string>
+    <string name="auto_rejoin_snackbar_detect_running">Đang lấy Place ID hiện tại từ Roblox…</string>
+    <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID: %1$s</string>
+    <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy chắc chắn Roblox đang mở và đã vào game rồi thử lại. Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
+    <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền Root để tự lấy Place ID.</string>
 
     <!-- Auto Rejoin: foreground service notification -->
     <string name="auto_rejoin_notif_channel_name">Auto Rejoin Roblox</string>
-    <string name="auto_rejoin_notif_channel_desc">Thông báo dai khi vòng lặp auto-rejoin Roblox đang chạy ngầm.</string>
+    <string name="auto_rejoin_notif_channel_desc">Thông báo cố định khi auto rejoin Roblox đang chạy nền.</string>
     <string name="auto_rejoin_notif_title_format">Auto Rejoin Roblox — %1$s</string>
     <string name="auto_rejoin_notif_state_in_game">Đang trong game</string>
-    <string name="auto_rejoin_notif_state_in_game_wrong">Trong game khác placeId</string>
-    <string name="auto_rejoin_notif_state_foreground_no_game">Roblox đang load…</string>
-    <string name="auto_rejoin_notif_state_not_running">Roblox tắt — đang rejoin</string>
-    <string name="auto_rejoin_notif_state_disconnected">Bị kick/disconnect — rejoin</string>
+    <string name="auto_rejoin_notif_state_in_game_wrong">Đang ở game khác</string>
+    <string name="auto_rejoin_notif_state_foreground_no_game">Roblox đang mở…</string>
+    <string name="auto_rejoin_notif_state_not_running">Roblox tắt — đang mở lại</string>
+    <string name="auto_rejoin_notif_state_disconnected">Bị văng / kick — đang vào lại</string>
     <string name="auto_rejoin_notif_state_initializing">Đang khởi tạo…</string>
     <string name="auto_rejoin_notif_state_stopped">Đã dừng</string>
-    <string name="auto_rejoin_notif_content_count">Đã rejoin: %1$d lần</string>
+    <string name="auto_rejoin_notif_content_count">Đã vào lại: %1$d lần</string>
     <string name="auto_rejoin_notif_content_pid">PID %1$d</string>
-    <string name="auto_rejoin_notif_content_place">placeId %1$s</string>
+    <string name="auto_rejoin_notif_content_place">Place ID %1$s</string>
     <string name="auto_rejoin_notif_action_stop">Dừng</string>
 </resources>

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.5] - 2026-07-21
+### ✨ Cải thiện trải nghiệm — tab Auto Rejoin dễ hiểu cho người dùng
+Tab **Auto Rejoin** trước đây viết cho lập trình viên: đầy thuật ngữ kỹ thuật (`process`, `force-stop`, `foreground service`, `deeplink`, `svv`/`svth`, `placeId`, `PID`, `dumpsys`, `logcat`, `tick`, `streak`…). Bản này viết lại toàn bộ chữ hiển thị cho người dùng bằng tiếng Việt đời thường, giữ đúng ý nghĩa:
+- **Lưu ý (cảnh báo)**: bỏ "chạy như foreground service / vòng lặp / Notification dai / force-stop để dọn state", thay bằng: *"Khi bật, tính năng vẫn chạy nền cả lúc bạn chuyển sang Roblox để chơi, nên sẽ có một thông báo cố định trên thanh trạng thái… Mỗi lần vào lại game, app sẽ tắt hẳn Roblox rồi mở lại cho chắc chắn."*
+- **Trạng thái**: `Đang trong game (đúng placeId)` → *Đang trong đúng game*; `Roblox không chạy` → *Roblox đang tắt*; `disconnect/kick` → *bị văng / kick*.
+- **Cấu hình**: `Place ID` → *Place ID (mã game)* kèm gợi ý "dãy số trong link game"; nút `Tự dò từ Roblox` → *Tự lấy từ Roblox*; `Chu kỳ kiểm tra` → *Kiểm tra mỗi*.
+- **Nhật ký sự kiện**: các dòng log bỏ `tick`, `streak`, `interval`, `force rejoin`; tên 3 cách vào lại đổi thành *Cách 1 — Mở thẳng vào game / Cách 2 — Mở vào game (kiểu cũ) / Cách 3 — Chỉ mở app Roblox*.
+- **Thông báo (notification)** và các **snackbar** cũng được viết lại cho thống nhất, bỏ "server thường" gây hiểu nhầm.
+
+### 🧹 Dọn dẹp / Xóa code chết & trùng lặp
+- **Xóa 11 string không còn dùng**: 6 string chung (`install`, `delete`, `open`, `info`, `uninstall`, `refresh`) và 5 string Auto Rejoin còn sót lại từ tính năng cũ (`auto_rejoin_config_game_instance`, `…_game_instance_hint`, `…_access_code`, `…_access_code_hint`, `auto_rejoin_snackbar_detect_success_private`). Các string này tham chiếu Game Instance ID / Access Code / "svv" mà UI hiện tại không còn hiển thị.
+- **Gỡ import chết** `android.net.Uri` trong `AutoRejoinManager.kt`.
+- **Gộp lệnh `dumpsys` bị lặp**: `getStatus()` và `detectCurrentGame()` chạy y hệt một lệnh dumpsys → tách thành helper `dumpsysRobloxDeeplinks()`.
+
+### 🔢 Phiên bản
+- **Bump phiên bản**: `1.9.0` → `1.9.5` (versionCode 20 → 21).
+
 ## [1.9.0] - 2026-07-08
 ### 💥 Thay đổi lớn
 - **Gỡ bỏ tính năng Script**: Xóa hoàn toàn tab "Script" và mọi thứ liên quan (tải/lưu/sao chép/xóa script Delta-Roblox). Bao gồm:

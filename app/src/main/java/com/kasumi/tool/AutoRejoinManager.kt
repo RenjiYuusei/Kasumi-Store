@@ -1,7 +1,6 @@
 package com.kasumi.tool
 
 import android.content.Context
-import android.net.Uri
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -101,9 +100,7 @@ object AutoRejoinManager {
             return StatusReport(RobloxState.DISCONNECTED, pid, null, hint)
         }
 
-        val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
-        )
+        val dumpR = dumpsysRobloxDeeplinks(pkg)
         val placeIdInDump = Regex("placeId=([0-9]+)").find(dumpR.output)?.groupValues?.getOrNull(1)
         if (!placeIdInDump.isNullOrEmpty()) {
             return if (placeIdInDump == targetPlaceId) {
@@ -130,9 +127,7 @@ object AutoRejoinManager {
         }
 
         // Step 2: dumpsys — deeplink roblox:// còn trong task stack.
-        val dumpR = executeAsRoot(
-            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
-        )
+        val dumpR = dumpsysRobloxDeeplinks(pkg)
         var placeId = PLACE_URL_REGEX.find(dumpR.output)?.groupValues?.getOrNull(1)
 
         // Step 3: logcat — dòng join URL mới nhất. Chỉ chạy khi dumpsys chưa có.
@@ -148,7 +143,7 @@ object AutoRejoinManager {
             }
         }
 
-        // Step 4: svth fallback
+        // Step 4: fallback — quét placeId trong toàn bộ log gần đây.
         if (placeId.isNullOrEmpty()) {
             val logR2 = executeAsRoot(
                 "logcat -d -t 20000 2>/dev/null | grep -iE 'placeid' | tail -200",
@@ -186,22 +181,32 @@ object AutoRejoinManager {
         val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
             "-d ${shellQuote(m1Url)} -p ${shellQuote(pkg)}"
         val r1 = executeAsRoot(m1Cmd)
-        attempts += RejoinAttempt("M1 — Experiences deeplink", m1Cmd, r1.exitCode, r1.output, r1.error)
+        attempts += RejoinAttempt("Cách 1 — Mở thẳng vào game", m1Cmd, r1.exitCode, r1.output, r1.error)
         if (isAmStartSuccess(r1)) return attempts
 
         val m2Url = "roblox://placeId=$placeId"
         val m2Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
             "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
         val r2 = executeAsRoot(m2Cmd)
-        attempts += RejoinAttempt("M2 — Legacy deeplink", m2Cmd, r2.exitCode, r2.output, r2.error)
+        attempts += RejoinAttempt("Cách 2 — Mở vào game (kiểu cũ)", m2Cmd, r2.exitCode, r2.output, r2.error)
         if (isAmStartSuccess(r2)) return attempts
 
         val m3Cmd = "am start -a android.intent.action.MAIN " +
             "-c android.intent.category.LAUNCHER -p ${shellQuote(pkg)}"
         val r3 = executeAsRoot(m3Cmd)
-        attempts += RejoinAttempt("M3 — Cold launch (mở app)", m3Cmd, r3.exitCode, r3.output, r3.error)
+        attempts += RejoinAttempt("Cách 3 — Chỉ mở app Roblox", m3Cmd, r3.exitCode, r3.output, r3.error)
         return attempts
     }
+
+    /**
+     * Đọc task stack để lấy các dòng còn giữ deeplink `roblox://` của đúng
+     * package Roblox. Dùng chung cho [getStatus] (kiểm tra đang ở game nào)
+     * và [detectCurrentGame] (tự lấy Place ID) — tránh lặp lệnh dumpsys.
+     */
+    private fun dumpsysRobloxDeeplinks(pkg: String): RawResult =
+        executeAsRoot(
+            "dumpsys activity activities 2>/dev/null | grep -i 'roblox://' | grep -F ${shellQuote(pkg)} | head -10"
+        )
 
     private fun shellQuote(s: String): String =
         "'" + s.replace("'", "'\\''") + "'"
