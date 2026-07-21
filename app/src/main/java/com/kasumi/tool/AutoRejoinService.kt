@@ -134,7 +134,7 @@ class AutoRejoinService : Service() {
                 intervalMs = intervalMs,
             )
         }
-        appendLog(LogLevel.INFO, "Bắt đầu vòng lặp auto-rejoin cho placeId=$placeId (interval=${intervalMs / 1000}s).")
+        appendLog(LogLevel.INFO, "Đã bật auto rejoin cho Place ID $placeId (kiểm tra mỗi ${intervalMs / 1000}s).")
 
         loopJob?.cancel()
         loopJob = serviceScope.launch {
@@ -143,7 +143,7 @@ class AutoRejoinService : Service() {
     }
 
     private fun handleStop() {
-        appendLog(LogLevel.INFO, "Đã dừng vòng lặp.")
+        appendLog(LogLevel.INFO, "Đã dừng auto rejoin.")
         stopServiceCompletely()
     }
 
@@ -200,7 +200,7 @@ class AutoRejoinService : Service() {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.OK,
-                        "Đang trong game (placeId=${report.currentPlaceId}, pid=${report.pid}).",
+                        "Đang trong đúng game (Place ID ${report.currentPlaceId}).",
                     )
                     false
                 }
@@ -208,7 +208,7 @@ class AutoRejoinService : Service() {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.WARN,
-                        "Đang ở placeId khác (${report.currentPlaceId}). Bỏ qua — user có thể đã teleport.",
+                        "Bạn đang ở game khác (Place ID ${report.currentPlaceId}). Bỏ qua vì có thể bạn tự chuyển game.",
                     )
                     false
                 }
@@ -217,7 +217,7 @@ class AutoRejoinService : Service() {
                     if (noGameStreak >= noGameMaxStreak) {
                         appendLog(
                             LogLevel.WARN,
-                            "Game không load sau $noGameMaxStreak lần check (~${noGameMaxStreak * intervalMs / 1000}s). Force rejoin…",
+                            "Game không vào được sau $noGameMaxStreak lần kiểm tra (~${noGameMaxStreak * intervalMs / 1000}s). Đang thử mở lại…",
                         )
                         withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
                         noGameStreak = 0
@@ -225,21 +225,21 @@ class AutoRejoinService : Service() {
                     } else {
                         appendLog(
                             LogLevel.INFO,
-                            "Roblox đang chạy nhưng chưa load vào game (pid=${report.pid}, streak=$noGameStreak/$noGameMaxStreak). Chờ tick kế tiếp…",
+                            "Roblox đang mở nhưng chưa vào game (lần $noGameStreak/$noGameMaxStreak). Đợi kiểm tra tiếp…",
                         )
                         false
                     }
                 }
                 AutoRejoinManager.RobloxState.NOT_RUNNING -> {
                     noGameStreak = 0
-                    appendLog(LogLevel.WARN, "Roblox không chạy. Đang khởi động lại…")
+                    appendLog(LogLevel.WARN, "Roblox đang tắt. Đang mở lại…")
                     true
                 }
                 AutoRejoinManager.RobloxState.DISCONNECTED -> {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.WARN,
-                        "Phát hiện disconnect/kick: ${report.disconnectHint?.take(120) ?: "?"}",
+                        "Phát hiện bị văng / kick: ${report.disconnectHint?.take(120) ?: "?"}",
                     )
                     withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
                     true
@@ -256,12 +256,12 @@ class AutoRejoinService : Service() {
                 attempts.forEach { a ->
                     val lvl = if (a.success) LogLevel.OK else LogLevel.ERR
                     val msg = "${a.method}: " +
-                        if (a.success) "OK" else "exit=${a.exitCode} ${a.error.take(80)}"
+                        if (a.success) "OK" else "lỗi (mã ${a.exitCode}) ${a.error.take(80)}"
                     appendLog(lvl, msg)
                 }
                 appendLog(
                     LogLevel.INFO,
-                    "Chờ ${warmupMs / 1000}s để Roblox khởi động + load game trước khi check tiếp…",
+                    "Đợi ${warmupMs / 1000}s cho Roblox mở và vào game rồi kiểm tra tiếp…",
                 )
                 delay(warmupMs)
             } else {
