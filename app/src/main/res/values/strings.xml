@@ -87,6 +87,9 @@
     <!-- Sync tab -->
     <string name="tab_sync">Đồng bộ</string>
 
+    <!-- Bypass Key Delta tab -->
+    <string name="tab_bypass_delta">Bypass Key Delta</string>
+
     <!-- Auto Rejoin Roblox tab -->
     <string name="tab_auto_rejoin">Auto Rejoin</string>
     <string name="auto_rejoin_title">Auto Rejoin Roblox</string>
