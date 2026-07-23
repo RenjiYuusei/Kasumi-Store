@@ -31,6 +31,39 @@ class DeltaBypassManager(private val client: OkHttpClient) {
         val elapsedSeconds: Double?
     )
 
+    companion object {
+        /**
+         * Cấu hình từ xa (remote config): URL raw cố định trên GitHub, KHÔNG bao
+         * giờ đổi. File chứa địa chỉ API hiện tại. Nhờ vậy khi API đổi (ví dụ
+         * deploy Railway mới mỗi tháng) chỉ cần sửa file này là mọi máy tự cập
+         * nhật, không phải build lại APK.
+         */
+        const val REMOTE_CONFIG_URL =
+            "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/bypass_config.json"
+    }
+
+    /**
+     * Đọc địa chỉ API hiện tại từ remote config. Trả về null nếu tải lỗi hoặc
+     * chưa cấu hình (để UI còn cho phép nhập tay).
+     */
+    suspend fun fetchRemoteApiUrl(): String? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url(REMOTE_CONFIG_URL)
+            .header("Accept", "application/json")
+            .get()
+            .build()
+        try {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val text = resp.body?.string().orEmpty()
+                val url = JSONObject(text).optString("delta_api_url").trim()
+                url.ifBlank { null }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun bypass(apiBaseUrl: String, link: String): BypassResult =
         withContext(Dispatchers.IO) {
             val base = apiBaseUrl.trim().trimEnd('/')

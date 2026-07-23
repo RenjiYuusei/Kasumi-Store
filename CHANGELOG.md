@@ -4,7 +4,8 @@
 ### ✨ Tính năng mới — Tab "Bypass Key Delta"
 Thêm tab thứ 5 trong navigation drawer để lấy **key Delta** trực tiếp trong app.
 - **Cách hoạt động**: app gửi link getkey (platoboost.com / platorelay.com) hoặc token tới **API bypass của Kasumi-Bypass** (`api_server.py`, endpoint `GET /bypass?url=…`), máy chủ giải captcha + giải mã rồi trả về key. Điện thoại **không** tự bypass được (cần captcha solver + thư viện nặng), nên bắt buộc phải có API.
-- **Tự host API**: có ô nhập **URL API** (lưu bằng `SharedPreferences`, nhớ giữa các lần mở app) để bạn trỏ tới API mình tự host — không hardcode. Hướng dẫn dựng trên VPS nằm ở repo Kasumi-Bypass (`docs/VPS_DEPLOY.md`).
+- **Tự host API**: có ô nhập **URL API** (lưu bằng `SharedPreferences`, nhớ giữa các lần mở app) để bạn trỏ tới API mình tự host — không hardcode. Hướng dẫn dựng trên VPS/Railway nằm ở repo Kasumi-Bypass (`docs/VPS_DEPLOY.md`, `docs/RAILWAY_DEPLOY.md`).
+- **Remote config (đổi API không cần build lại APK)**: app tự đọc địa chỉ API mới nhất từ `source/bypass_config.json` trên GitHub (URL raw cố định). Khi API đổi (ví dụ deploy Railway mới hằng tháng) chỉ cần sửa 1 dòng trong file này là mọi máy tự cập nhật. Ô nhập tay giờ đóng vai trò **ghi đè tùy chọn**; để trống thì dùng địa chỉ tự động.
 - **Giao diện**: ô dán link (nút Dán/Xóa), nút **Lấy key**, hiển thị key dạng chọn-sao-chép được kèm **số phút còn lại** và thời gian xử lý, có trạng thái đang tải và thẻ báo lỗi.
 - **File mới**: `BypassKeyDeltaScreen.kt` (UI) + `DeltaBypassManager.kt` (gọi HTTP, parse JSON). `MainActivity.kt` thêm `NavDestination(4, …)` và nhánh `when(selectedTab)`; thêm string `tab_bypass_delta`.
 
