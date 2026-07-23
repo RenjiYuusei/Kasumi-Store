@@ -1,4 +1,4 @@
 {
-  "delta_api_url": "",
+  "delta_api_url": "https://web-production-5b580.up.railway.app/",
   "_note": "Dán URL API bypass hiện tại vào 'delta_api_url' (vd: https://xxx.up.railway.app). App Kasumi-Store tự đọc file này mỗi lần mở tab Bypass Key Delta, nên chỉ cần đổi URL ở đây là xong — KHÔNG cần build lại APK."
 }
