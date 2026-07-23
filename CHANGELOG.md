@@ -3,11 +3,10 @@
 ## [2.0.0] - 2026-07-22
 ### ✨ Tính năng mới — Tab "Bypass Key Delta"
 Thêm tab thứ 5 trong navigation drawer để lấy **key Delta** trực tiếp trong app.
-- **Cách hoạt động**: app gửi link getkey (platoboost.com / platorelay.com) hoặc token tới **API bypass của Kasumi-Bypass** (`api_server.py`, endpoint `GET /bypass?url=…`), máy chủ giải captcha + giải mã rồi trả về key. Điện thoại **không** tự bypass được (cần captcha solver + thư viện nặng), nên bắt buộc phải có API.
-- **Tự host API**: có ô nhập **URL API** (lưu bằng `SharedPreferences`, nhớ giữa các lần mở app) để bạn trỏ tới API mình tự host — không hardcode. Hướng dẫn dựng trên VPS/Railway nằm ở repo Kasumi-Bypass (`docs/VPS_DEPLOY.md`, `docs/RAILWAY_DEPLOY.md`).
-- **Remote config (đổi API không cần build lại APK)**: app tự đọc địa chỉ API mới nhất từ `source/bypass_config.json` trên GitHub (URL raw cố định). Khi API đổi (ví dụ deploy Railway mới hằng tháng) chỉ cần sửa 1 dòng trong file này là mọi máy tự cập nhật. Ô nhập tay giờ đóng vai trò **ghi đè tùy chọn**; để trống thì dùng địa chỉ tự động.
-- **Giao diện**: ô dán link (nút Dán/Xóa), nút **Lấy key**, hiển thị key dạng chọn-sao-chép được kèm **số phút còn lại** và thời gian xử lý, có trạng thái đang tải và thẻ báo lỗi.
-- **File mới**: `BypassKeyDeltaScreen.kt` (UI) + `DeltaBypassManager.kt` (gọi HTTP, parse JSON). `MainActivity.kt` thêm `NavDestination(4, …)` và nhánh `when(selectedTab)`; thêm string `tab_bypass_delta`.
+- **Người dùng chỉ cần dán link + bấm "Lấy key"**: dán link getkey (platoboost.com / platorelay.com) hoặc token, bấm nút, chờ một chút là ra key (chọn-sao-chép được) kèm **số phút còn lại**. Không phải cấu hình gì.
+- **Cách hoạt động (ngầm)**: app gửi link tới **API bypass cố định của dự án** (Kasumi-Bypass, `api_server.py`, `GET /bypass?url=…`), máy chủ giải captcha + giải mã rồi trả về key. Điện thoại **không** tự bypass được (cần captcha solver + thư viện nặng).
+- **Đổi API không cần build lại APK**: địa chỉ API được đọc **ngầm** từ `source/bypass_config.json` trên GitHub (URL raw cố định). Khi API đổi (ví dụ deploy Railway mới), chỉ cần sửa 1 dòng trong file này — mọi máy tự cập nhật. Người dùng không thấy/không đụng tới địa chỉ API.
+- **File mới**: `BypassKeyDeltaScreen.kt` (UI) + `DeltaBypassManager.kt` (đọc config + gọi HTTP, parse JSON) + `source/bypass_config.json`. `MainActivity.kt` thêm `NavDestination(4, …)` và nhánh `when(selectedTab)`; thêm string `tab_bypass_delta`.
 
 ### 🔢 Phiên bản
 - **Bump phiên bản**: `1.9.5` → `2.0.0` (versionCode 21 → 22).

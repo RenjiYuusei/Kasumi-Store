@@ -25,9 +25,8 @@
     *   Sao lưu/khôi phục config Delta giữa các máy qua database.
 
 *   **Bypass Key Delta:**
-    *   Lấy key Delta từ link platoboost/platorelay ngay trong app, thông qua API bypass (Kasumi-Bypass) mà bạn **tự host** (ví dụ trên VPS).
-    *   Nhập địa chỉ API (được lưu lại), dán link, bấm "Lấy key" để nhận key kèm số phút còn lại.
-    *   Xem hướng dẫn host API trên VPS trong repo [Kasumi-Bypass](https://github.com/RenjiYuusei/Kasumi-Bypass) (`docs/VPS_DEPLOY.md`).
+    *   Lấy key Delta từ link platoboost/platorelay ngay trong app: chỉ cần **dán link và bấm "Lấy key"**, không phải cấu hình gì.
+    *   Địa chỉ API bypass là cố định của dự án, app đọc ngầm từ cấu hình từ xa — người dùng không cần biết tới.
 
 *   **Giao diện hiện đại:**
     *   Sử dụng Jetpack Compose với chuẩn Material Design 3.

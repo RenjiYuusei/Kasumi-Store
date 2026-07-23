@@ -1,6 +1,5 @@
 package com.kasumi.tool
 
-import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Info
@@ -32,17 +30,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-private const val PREFS_NAME = "bypass_delta"
-private const val KEY_API_BASE_URL = "api_base_url"
-
 /**
- * Tab "Bypass Key Delta" — lấy key Delta từ một link platoboost/platorelay
- * thông qua API bypass của Kasumi-Bypass (api_server.py).
+ * Tab "Bypass Key Delta" — người dùng chỉ cần dán link getkey Delta
+ * (platoboost/platorelay) và bấm "Lấy key".
  *
- * Vì phần giải captcha + giải mã của Delta không thể chạy trên điện thoại,
- * API phải được host ở nơi khác (VPS, Railway…). Địa chỉ API mới nhất được
- * đọc TỰ ĐỘNG từ remote config (file JSON trên GitHub), nên khi API đổi thì
- * không cần build lại app. Vẫn có ô nhập tay để ghi đè nếu cần.
+ * Địa chỉ API bypass là cố định của dự án, được đọc NGẦM từ remote config
+ * (file JSON trên GitHub) nên người dùng không phải cấu hình gì. Khi API đổi,
+ * chỉ cần cập nhật file config đó — không phải build lại app.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,28 +46,27 @@ fun BypassKeyDeltaScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
-    val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
     val manager = remember {
         DeltaBypassManager((context.applicationContext as KasumiApplication).okHttpClient)
     }
 
-    // URL nhập tay (ghi đè). Để trống thì dùng địa chỉ tự động từ remote config.
-    var manualUrl by remember { mutableStateOf(prefs.getString(KEY_API_BASE_URL, "") ?: "") }
-    var remoteUrl by remember { mutableStateOf<String?>(null) }
+    // Địa chỉ API cố định, lấy ngầm từ remote config.
+    var apiUrl by remember { mutableStateOf<String?>(null) }
     var loadingConfig by remember { mutableStateOf(false) }
+    var configFailed by remember { mutableStateOf(false) }
+
     var link by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<DeltaBypassManager.BypassResult?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // Địa chỉ API dùng thực tế: ưu tiên URL nhập tay, để trống thì lấy từ server.
-    val effectiveUrl = manualUrl.trim().ifEmpty { remoteUrl.orEmpty() }
-
     fun loadConfig() {
         scope.launch {
             loadingConfig = true
+            configFailed = false
             try {
-                remoteUrl = manager.fetchRemoteApiUrl()
+                apiUrl = manager.fetchRemoteApiUrl()
+                configFailed = apiUrl.isNullOrBlank()
             } finally {
                 loadingConfig = false
             }
@@ -84,12 +77,17 @@ fun BypassKeyDeltaScreen(
 
     fun runBypass() {
         if (working) return
+        val base = apiUrl
+        if (base.isNullOrBlank()) {
+            errorMsg = "Dịch vụ tạm thời chưa sẵn sàng. Hãy thử lại sau."
+            return
+        }
         result = null
         errorMsg = null
         scope.launch {
             working = true
             try {
-                result = manager.bypass(effectiveUrl, link)
+                result = manager.bypass(base, link)
             } catch (e: DeltaBypassManager.BypassException) {
                 errorMsg = e.message
             } catch (e: Exception) {
@@ -116,77 +114,32 @@ fun BypassKeyDeltaScreen(
 
         InfoCard()
 
-        // Cấu hình địa chỉ API
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Báo lỗi khi không tải được cấu hình dịch vụ (kèm nút thử lại)
+        if (configFailed) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                shape = RoundedCornerShape(20.dp)
             ) {
-                Text(
-                    text = "Địa chỉ API",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                // Trạng thái địa chỉ tự động lấy từ server (remote config)
-                val autoText = when {
-                    loadingConfig -> "Đang lấy địa chỉ API từ server…"
-                    !remoteUrl.isNullOrBlank() -> "Tự động: $remoteUrl"
-                    else -> "Chưa có địa chỉ trên server — hãy nhập tay bên dưới."
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.CloudDone,
-                        contentDescription = null,
-                        tint = if (!remoteUrl.isNullOrBlank()) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = autoText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Text(
-                    text = "App tự lấy địa chỉ API mới nhất từ server, nên khi đổi API bạn " +
-                        "không cần cập nhật app. Chỉ nhập tay nếu muốn ghi đè.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                OutlinedTextField(
-                    value = manualUrl,
-                    onValueChange = {
-                        manualUrl = it
-                        prefs.edit().putString(KEY_API_BASE_URL, it.trim()).apply()
-                    },
-                    singleLine = true,
-                    label = { Text("Ghi đè thủ công (tùy chọn)") },
-                    placeholder = { Text("để trống nếu dùng địa chỉ tự động") },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !working
-                )
-
-                TextButton(
-                    onClick = { loadConfig() },
-                    enabled = !working && !loadingConfig
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Làm mới địa chỉ từ server")
+                    Text(
+                        text = "Không kết nối được dịch vụ. Kiểm tra mạng rồi thử lại.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    OutlinedButton(
+                        onClick = { loadConfig() },
+                        enabled = !loadingConfig
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Thử lại")
+                    }
                 }
             }
         }
@@ -257,12 +210,13 @@ fun BypassKeyDeltaScreen(
 
                 Button(
                     onClick = { runBypass() },
-                    enabled = !working && effectiveUrl.isNotEmpty() && link.trim().isNotEmpty(),
+                    enabled = !working && !loadingConfig && !apiUrl.isNullOrBlank() &&
+                        link.trim().isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Bolt, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Lấy key")
+                    Text(if (loadingConfig) "Đang chuẩn bị…" else "Lấy key")
                 }
             }
         }
@@ -281,8 +235,7 @@ fun BypassKeyDeltaScreen(
                 ) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
-                        text = "Đang bypass… quá trình này có thể mất vài chục giây do phải " +
-                            "giải captcha phía máy chủ.",
+                        text = "Đang lấy key… có thể mất vài chục giây, vui lòng đợi.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -352,22 +305,16 @@ private fun InfoCard() {
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Cách hoạt động",
+                    text = "Cách dùng",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
             Text(
-                text = "App gửi link Delta tới API bypass mà bạn tự host, máy chủ giải captcha " +
-                    "và trả về key. Điện thoại không tự bypass được nên bắt buộc phải có API.",
+                text = "Dán link getkey Delta rồi bấm \"Lấy key\". Chờ một chút, key sẽ hiện " +
+                    "ra để bạn sao chép và dán vào Delta.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "GET {URL API}/bypass?url=<link>",
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.primary
             )
         }
     }
