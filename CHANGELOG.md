@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0] - 2026-07-22
+### ✨ Tính năng mới — Tab "Bypass Key Delta"
+Thêm tab thứ 5 trong navigation drawer để lấy **key Delta** trực tiếp trong app.
+- **Người dùng chỉ cần dán link + bấm "Lấy key"**: dán link getkey (platoboost.com / platorelay.com) hoặc token, bấm nút, chờ một chút là ra key (chọn-sao-chép được) kèm **số phút còn lại**. Không phải cấu hình gì.
+- **Cách hoạt động (ngầm)**: app gửi link tới **API bypass cố định của dự án** (Kasumi-Bypass, `api_server.py`, `GET /bypass?url=…`), máy chủ giải captcha + giải mã rồi trả về key. Điện thoại **không** tự bypass được (cần captcha solver + thư viện nặng).
+- **Đổi API không cần build lại APK**: địa chỉ API được đọc **ngầm** từ `source/bypass_config.json` trên GitHub (URL raw cố định). Khi API đổi (ví dụ deploy Railway mới), chỉ cần sửa 1 dòng trong file này — mọi máy tự cập nhật. Người dùng không thấy/không đụng tới địa chỉ API.
+- **File mới**: `BypassKeyDeltaScreen.kt` (UI) + `DeltaBypassManager.kt` (đọc config + gọi HTTP, parse JSON) + `source/bypass_config.json`. `MainActivity.kt` thêm `NavDestination(4, …)` và nhánh `when(selectedTab)`; thêm string `tab_bypass_delta`.
+
+### 🔢 Phiên bản
+- **Bump phiên bản**: `1.9.5` → `2.0.0` (versionCode 21 → 22).
+
 ## [1.9.5] - 2026-07-21
 ### ✨ Cải thiện trải nghiệm — tab Auto Rejoin dễ hiểu cho người dùng
 Tab **Auto Rejoin** trước đây viết cho lập trình viên: đầy thuật ngữ kỹ thuật (`process`, `force-stop`, `foreground service`, `deeplink`, `svv`/`svth`, `placeId`, `PID`, `dumpsys`, `logcat`, `tick`, `streak`…). Bản này viết lại toàn bộ chữ hiển thị cho người dùng bằng tiếng Việt đời thường, giữ đúng ý nghĩa:

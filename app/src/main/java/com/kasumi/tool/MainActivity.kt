@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -201,7 +202,8 @@ class MainActivity : ComponentActivity() {
             NavDestination(0, stringResource(R.string.tab_apps), Icons.Default.Apps),
             NavDestination(1, stringResource(R.string.tab_roblox_login), Icons.AutoMirrored.Filled.Login),
             NavDestination(2, stringResource(R.string.tab_auto_rejoin), Icons.Default.Replay),
-            NavDestination(3, stringResource(R.string.tab_sync), Icons.Default.Sync)
+            NavDestination(3, stringResource(R.string.tab_sync), Icons.Default.Sync),
+            NavDestination(4, stringResource(R.string.tab_bypass_delta), Icons.Default.VpnKey)
         )
 
         ModalNavigationDrawer(
@@ -312,7 +314,10 @@ class MainActivity : ComponentActivity() {
                     2 -> AutoRejoinScreen(onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
-                    else -> SyncScreen(onShowSnackbar = { msg ->
+                    3 -> SyncScreen(onShowSnackbar = { msg ->
+                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
+                    })
+                    else -> BypassKeyDeltaScreen(onShowSnackbar = { msg ->
                         lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
                     })
                 }

@@ -2,7 +2,7 @@
 
 Ứng dụng quản lý và tải xuống APK cho giả lập và thiết bị Android, hỗ trợ cài đặt nâng cao, đăng nhập Roblox bằng cookie và auto-rejoin.
 
-**Phiên bản:** 1.9.5
+**Phiên bản:** 2.0.0
 **Ngôn ngữ:** Kotlin
 **Giao diện:** Jetpack Compose (Material 3)
 
@@ -20,6 +20,13 @@
 
 *   **Auto Rejoin:**
     *   Tự động rejoin Roblox theo Place ID, chạy nền dưới dạng foreground service.
+
+*   **Đồng bộ (Sync):**
+    *   Sao lưu/khôi phục config Delta giữa các máy qua database.
+
+*   **Bypass Key Delta:**
+    *   Lấy key Delta từ link platoboost/platorelay ngay trong app: chỉ cần **dán link và bấm "Lấy key"**, không phải cấu hình gì.
+    *   Địa chỉ API bypass là cố định của dự án, app đọc ngầm từ cấu hình từ xa — người dùng không cần biết tới.
 
 *   **Giao diện hiện đại:**
     *   Sử dụng Jetpack Compose với chuẩn Material Design 3.
