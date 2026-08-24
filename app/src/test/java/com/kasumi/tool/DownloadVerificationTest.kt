@@ -7,6 +7,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -126,5 +127,70 @@ class DownloadVerificationTest {
             zip.closeEntry()
         }
         verifyDownloadedPackage(f, f.length())
+    }
+
+    private fun storedEntry(name: String, content: ByteArray) = ZipEntry(name).apply {
+        method = ZipEntry.STORED
+        size = content.size.toLong()
+        compressedSize = content.size.toLong()
+        crc = CRC32().apply { update(content) }.value
+    }
+
+    /** An archive comment carrying the EOCD signature is legal and must not confuse the scan. */
+    private fun packageWithDecoyInComment(): File {
+        val f = temp.newFile()
+        ZipOutputStream(f.outputStream()).use { zip ->
+            // 'PK' encodes to the four EOCD bytes in UTF-8.
+            zip.setComment("A".repeat(50) + "PK" + "A".repeat(146))
+            zip.putNextEntry(ZipEntry("AndroidManifest.xml"))
+            zip.write(ByteArray(256))
+            zip.closeEntry()
+        }
+        return f
+    }
+
+    @Test
+    fun `a complete package is accepted even when its comment contains the signature`() {
+        val f = packageWithDecoyInComment()
+        verifyDownloadedPackage(f, f.length())
+    }
+
+    /**
+     * The record has to end exactly at EOF. Cutting inside the comment leaves the
+     * decoy signature as the last match, and the real record now claims more
+     * bytes than the file has — neither may be accepted.
+     */
+    @Test
+    fun `an archive cut inside a comment containing the signature is rejected`() {
+        val whole = packageWithDecoyInComment().readBytes()
+        val cut = temp.newFile()
+        cut.writeBytes(whole.copyOf(whole.size - 80))
+        expectRejected(cut, -1L, "the comment is only half there")
+    }
+
+    /**
+     * An XAPK stores whole APKs, so a half-received container really does end
+     * with a complete inner EOCD. Only the central-directory cross-check tells
+     * the two apart.
+     */
+    @Test
+    fun `a container truncated after a complete inner package is rejected`() {
+        val inner = completePackage(payload = 128).readBytes()
+        val outer = temp.newFile()
+        ZipOutputStream(outer.outputStream()).use { zip ->
+            for (name in listOf("base.apk", "config.arm64_v8a.apk")) {
+                // STORED so the inner archive lands in the container byte for
+                // byte, exactly as a real XAPK holds its split APKs.
+                zip.putNextEntry(storedEntry(name, inner))
+                zip.write(inner)
+                zip.closeEntry()
+            }
+        }
+        val bytes = outer.readBytes()
+        // Keep the first stored APK whole and drop everything from the middle of
+        // the second one onwards, so the outer central directory never arrives.
+        val cut = temp.newFile()
+        cut.writeBytes(bytes.copyOf(inner.size + inner.size / 2))
+        expectRejected(cut, -1L, "the outer archive never finished")
     }
 }

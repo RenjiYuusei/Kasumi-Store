@@ -438,25 +438,83 @@ private fun endsWithCentralDirectory(file: File): Boolean {
     if (length < EOCD_MIN_SIZE) return false
 
     val window = minOf(length, EOCD_MAX_SIZE).toInt()
-    val tail = ByteArray(window)
     RandomAccessFile(file, "r").use { raf ->
+        val tail = ByteArray(window)
         raf.seek(length - window)
         raf.readFully(tail)
-    }
 
-    // Scan backwards: the real EOCD is the last match, and a stored entry could
-    // otherwise contain the same four bytes.
-    for (i in window - EOCD_MIN_SIZE downTo 0) {
-        if (tail[i] == 0x50.toByte() &&
-            tail[i + 1] == 0x4B.toByte() &&
-            tail[i + 2] == 0x05.toByte() &&
-            tail[i + 3] == 0x06.toByte()
-        ) {
-            return true
+        // Scan backwards and keep going until a candidate actually checks out.
+        // The signature on its own proves nothing: an XAPK stores whole APKs, so
+        // the EOCD of an inner APK is a genuine record sitting in the middle of
+        // the container, and an archive comment can carry the same four bytes.
+        for (i in window - EOCD_MIN_SIZE downTo 0) {
+            val isSignature = tail[i] == 0x50.toByte() &&
+                tail[i + 1] == 0x4B.toByte() &&
+                tail[i + 2] == 0x05.toByte() &&
+                tail[i + 3] == 0x06.toByte()
+            if (isSignature && describesCompleteArchive(raf, tail, i, window, length)) {
+                return true
+            }
         }
     }
     return false
 }
 
+/**
+ * Whether the EOCD candidate at [offset] in [tail] really terminates a complete
+ * archive.
+ *
+ * Two things have to hold, and a truncated download fails at least one:
+ *
+ *  - the record is 22 bytes plus the comment whose length it declares, so a
+ *    genuine EOCD ends exactly at EOF. A copy cut short inside its own comment
+ *    fails here even though the signature survived.
+ *  - the central directory it points at has to actually be there, checked by
+ *    reading the entry signature at that offset. That is what separates the real
+ *    record from the EOCD of an APK stored inside a half-received XAPK, whose
+ *    offsets are relative to the inner archive and land on unrelated bytes.
+ */
+private fun describesCompleteArchive(
+    raf: RandomAccessFile,
+    tail: ByteArray,
+    offset: Int,
+    window: Int,
+    fileLength: Long,
+): Boolean {
+    val commentLength = readUInt16(tail, offset + 20)
+    if (offset + EOCD_MIN_SIZE + commentLength != window) return false
+
+    val centralDirSize = readUInt32(tail, offset + 12)
+    val centralDirOffset = readUInt32(tail, offset + 16)
+    // 0xFFFFFFFF is the Zip64 sentinel: the real values live in a Zip64 record,
+    // so there is nothing to cross-check and the EOF match has to stand alone.
+    if (centralDirSize == ZIP64_SENTINEL || centralDirOffset == ZIP64_SENTINEL) return true
+
+    // An APK always has entries, so a central directory smaller than a single
+    // header cannot belong to a usable package.
+    if (centralDirSize < CD_HEADER_MIN_SIZE) return false
+    val eocdStart = fileLength - window + offset
+    if (centralDirOffset + centralDirSize > eocdStart) return false
+
+    val header = ByteArray(4)
+    raf.seek(centralDirOffset)
+    raf.readFully(header)
+    return header[0] == 0x50.toByte() &&
+        header[1] == 0x4B.toByte() &&
+        header[2] == 0x01.toByte() &&
+        header[3] == 0x02.toByte()
+}
+
+private fun readUInt16(bytes: ByteArray, at: Int): Int =
+    (bytes[at].toInt() and 0xFF) or ((bytes[at + 1].toInt() and 0xFF) shl 8)
+
+private fun readUInt32(bytes: ByteArray, at: Int): Long =
+    (bytes[at].toLong() and 0xFF) or
+        ((bytes[at + 1].toLong() and 0xFF) shl 8) or
+        ((bytes[at + 2].toLong() and 0xFF) shl 16) or
+        ((bytes[at + 3].toLong() and 0xFF) shl 24)
+
 private const val EOCD_MIN_SIZE = 22
 private const val EOCD_MAX_SIZE = 22L + 65_535L
+private const val ZIP64_SENTINEL = 0xFFFFFFFFL
+private const val CD_HEADER_MIN_SIZE = 46L
