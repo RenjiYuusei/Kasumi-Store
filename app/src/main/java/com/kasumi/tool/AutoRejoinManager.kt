@@ -1,5 +1,7 @@
 package com.kasumi.tool
 
+import androidx.annotation.StringRes
+
 import android.content.Context
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -162,7 +164,7 @@ object AutoRejoinManager {
     }
 
     data class RejoinAttempt(
-        val method: String,
+        @StringRes val methodRes: Int,
         val command: String,
         val exitCode: Int,
         val output: String,
@@ -181,20 +183,20 @@ object AutoRejoinManager {
         val m1Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
             "-d ${shellQuote(m1Url)} -p ${shellQuote(pkg)}"
         val r1 = executeAsRoot(m1Cmd)
-        attempts += RejoinAttempt("Cách 1 — Mở thẳng vào game", m1Cmd, r1.exitCode, r1.output, r1.error)
+        attempts += RejoinAttempt(R.string.ar_method_deeplink, m1Cmd, r1.exitCode, r1.output, r1.error)
         if (isAmStartSuccess(r1)) return attempts
 
         val m2Url = "roblox://placeId=$placeId"
         val m2Cmd = "am start --activity-clear-task -a android.intent.action.VIEW " +
             "-d ${shellQuote(m2Url)} -p ${shellQuote(pkg)}"
         val r2 = executeAsRoot(m2Cmd)
-        attempts += RejoinAttempt("Cách 2 — Mở vào game (kiểu cũ)", m2Cmd, r2.exitCode, r2.output, r2.error)
+        attempts += RejoinAttempt(R.string.ar_method_legacy, m2Cmd, r2.exitCode, r2.output, r2.error)
         if (isAmStartSuccess(r2)) return attempts
 
         val m3Cmd = "am start -a android.intent.action.MAIN " +
             "-c android.intent.category.LAUNCHER -p ${shellQuote(pkg)}"
         val r3 = executeAsRoot(m3Cmd)
-        attempts += RejoinAttempt("Cách 3 — Chỉ mở app Roblox", m3Cmd, r3.exitCode, r3.output, r3.error)
+        attempts += RejoinAttempt(R.string.ar_method_launcher, m3Cmd, r3.exitCode, r3.output, r3.error)
         return attempts
     }
 

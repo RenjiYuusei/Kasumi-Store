@@ -2,6 +2,14 @@ name: Build and Deploy Web Editor
 
 on:
   push:
+    # Only the default branch may publish to Pages; a push to any feature
+    # branch used to deploy over the live site.
+    branches: [ main ]
+    paths:
+      - 'tools/web-editor/**'
+      - '.github/workflows/web-editor.yml'
+  pull_request:
+    branches: [ main ]
     paths:
       - 'tools/web-editor/**'
       - '.github/workflows/web-editor.yml'
@@ -20,6 +28,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,28 +37,37 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: tools/web-editor/package-lock.json
 
       - name: Install Dependencies
         working-directory: ./tools/web-editor
-        run: npm install
+        # ci, not install: reproducible from the lockfile and it fails loudly
+        # when package.json and the lockfile have drifted apart.
+        run: npm ci
 
       - name: Build
         working-directory: ./tools/web-editor
         run: npm run build
 
       - name: Setup Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./tools/web-editor/dist
 
   deploy:
+    # Pull requests build for validation only; they must not publish.
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build
     steps:
       - name: Deploy to GitHub Pages

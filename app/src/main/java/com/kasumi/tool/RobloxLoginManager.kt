@@ -2,6 +2,7 @@ package com.kasumi.tool
 
 import android.content.ContentValues
 import android.content.Context
+import androidx.annotation.StringRes
 import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
@@ -97,7 +98,7 @@ object RobloxLoginManager {
      * không có sẵn (API 26+); dùng [CompletableFuture] wrap quanh `waitFor()`
      * để cài đặt timeout tương đương.
      */
-    private fun executeAsRoot(command: String): RawResult {
+    private fun executeAsRoot(context: Context, command: String): RawResult {
         var process: Process? = null
         return try {
             val p = ProcessBuilder("su", "-c", command).start().also { process = it }
@@ -121,8 +122,7 @@ object RobloxLoginManager {
                 return RawResult(
                     exitCode = -1,
                     output = "",
-                    error = "Lệnh `su` quá thời gian chờ ($SU_TIMEOUT_SEC s) — process đã bị huỷ. " +
-                        "Có thể đang chờ user grant quyền root, hoặc `su` binary không phản hồi."
+                    error = context.getString(R.string.rbx_err_su_timeout, SU_TIMEOUT_SEC)
                 )
             }
 
@@ -149,10 +149,10 @@ object RobloxLoginManager {
         }
     }
 
-    private fun runStep(name: String, command: String): StepResult {
-        val r = executeAsRoot(command)
+    private fun runStep(context: Context, @StringRes nameRes: Int, command: String): StepResult {
+        val r = executeAsRoot(context, command)
         return StepResult(
-            name = name,
+            name = context.getString(nameRes),
             success = r.exitCode == 0,
             exitCode = r.exitCode,
             output = r.output,
@@ -286,29 +286,30 @@ object RobloxLoginManager {
         // 1. Xác định package Roblox đang cài (com.roblox.client hoặc VNG)
         val pkg = detectActivePackage(context) ?: return Outcome(
             success = false,
-            message = "Không tìm thấy ứng dụng Roblox đã cài (com.roblox.client hoặc com.roblox.client.vnggames).",
+            message = context.getString(R.string.rbx_msg_roblox_not_installed),
             steps = steps
         )
-        steps += StepResult("Phát hiện Roblox", true, 0, pkg, "")
+        steps += StepResult(context.getString(R.string.rbx_step_detect_roblox), true, 0, pkg, "")
 
         val cookiesDir = cookiesDir(pkg)
         val cookiesDb = cookiesDbPath(pkg)
 
         // 2. Force-stop Roblox để đảm bảo DB ổn định khi copy
-        val stop = runStep("Tắt Roblox", "am force-stop $pkg")
+        val stop = runStep(context, R.string.rbx_step_stop_roblox, "am force-stop $pkg")
         steps += stop
         // Không return-fail ở đây: Roblox có thể đang không chạy
 
         // 3. Kiểm tra database tồn tại
         val checkDb = runStep(
-            "Kiểm tra database cookie",
+            context,
+            R.string.rbx_step_check_db,
             "test -f $cookiesDb && echo 'EXISTS' || echo 'MISSING'"
         )
         steps += checkDb
         if (!checkDb.success || !checkDb.output.contains("EXISTS")) {
             return Outcome(
                 success = false,
-                message = "Không tìm thấy database cookie của Roblox ($pkg). Hãy mở ứng dụng Roblox ít nhất 1 lần để khởi tạo dữ liệu.",
+                message = context.getString(R.string.rbx_msg_db_missing_extract, pkg),
                 steps = steps
             )
         }
@@ -325,13 +326,13 @@ object RobloxLoginManager {
             "chmod 666 '${cacheDb.absolutePath}'",
             "if [ -f '$cookiesDir/Cookies-wal' ]; then cp '$cookiesDir/Cookies-wal' '${cacheWal.absolutePath}' && chmod 666 '${cacheWal.absolutePath}'; fi"
         ).joinToString(" && ")
-        val copy = runStep("Copy DB ra cache app", copyCmd)
+        val copy = runStep(context, R.string.rbx_step_copy_db, copyCmd)
         steps += copy
         if (!copy.success) {
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Không copy được database: ${copy.error.ifBlank { copy.output }}",
+                message = context.getString(R.string.rbx_msg_copy_db_failed, copy.error.ifBlank { copy.output }),
                 steps = steps
             )
         }
@@ -348,26 +349,26 @@ object RobloxLoginManager {
         //      này có thể mất cookie chưa checkpoint từ WAL, nhưng vẫn lấy
         //      được dữ liệu trong main DB.
         return try {
-            queryCookie(cacheDb, steps)
+            queryCookie(context, cacheDb, steps)
         } catch (e: Exception) {
             // Fallback: ép legacy + bỏ WAL rồi thử lại
             steps += StepResult(
-                "Mở DB (lần 1)",
+                context.getString(R.string.rbx_step_open_db_1),
                 false,
                 -1,
                 "",
-                "${e.message ?: "unknown"} — fallback sang legacy mode"
+                context.getString(R.string.rbx_out_fallback_legacy, e.message ?: "unknown")
             )
             try {
                 forceLegacyJournalMode(cacheDb)
                 cacheWal.delete()
-                steps += StepResult("Ép legacy journal mode", true, 0, "OK", "")
-                queryCookie(cacheDb, steps)
+                steps += StepResult(context.getString(R.string.rbx_step_force_legacy), true, 0, "OK", "")
+                queryCookie(context, cacheDb, steps)
             } catch (e2: Exception) {
-                steps += StepResult("Mở DB (lần 2)", false, -1, "", e2.message ?: "")
+                steps += StepResult(context.getString(R.string.rbx_step_open_db_2), false, -1, "", e2.message ?: "")
                 Outcome(
                     success = false,
-                    message = "Lỗi mở database SQLite: ${e2.message}",
+                    message = context.getString(R.string.rbx_msg_open_db_failed, e2.message ?: ""),
                     steps = steps
                 )
             }
@@ -381,7 +382,7 @@ object RobloxLoginManager {
      * caller là đảm bảo file sẵn sàng để mở (đã copy về, chỉnh quyền,…).
      * Phương thức này không cleanup file cache.
      */
-    private fun queryCookie(cacheDb: File, steps: MutableList<StepResult>): Outcome {
+    private fun queryCookie(context: Context, cacheDb: File, steps: MutableList<StepResult>): Outcome {
         SQLiteDatabase.openDatabase(
             cacheDb.absolutePath,
             null,
@@ -399,15 +400,15 @@ object RobloxLoginManager {
             ).use { c ->
                 if (!c.moveToFirst()) {
                     steps += StepResult(
-                        "Truy vấn cookie",
+                        context.getString(R.string.rbx_step_query_cookie),
                         true,
                         0,
-                        "Không tìm thấy cookie .ROBLOSECURITY",
+                        context.getString(R.string.rbx_out_cookie_not_found),
                         ""
                     )
                     return@use Outcome(
                         success = false,
-                        message = "Không tìm thấy cookie .ROBLOSECURITY trong database. Hãy đăng nhập Roblox trước rồi thử lại.",
+                        message = context.getString(R.string.rbx_msg_cookie_not_found),
                         steps = steps
                     )
                 }
@@ -418,16 +419,16 @@ object RobloxLoginManager {
                     null
                 }
                 if (value.isNotBlank()) {
-                    steps += StepResult("Truy vấn cookie", true, 0, "OK", "")
+                    steps += StepResult(context.getString(R.string.rbx_step_query_cookie), true, 0, "OK", "")
                     Outcome(
                         success = true,
-                        message = "Đã lấy cookie .ROBLOSECURITY thành công.",
+                        message = context.getString(R.string.rbx_msg_extract_success),
                         steps = steps,
                         cookie = value
                     )
                 } else if (encVal != null && encVal.isNotEmpty()) {
                     steps += StepResult(
-                        "Truy vấn cookie",
+                        context.getString(R.string.rbx_step_query_cookie),
                         true,
                         0,
                         "encrypted_value = ${encVal.size} bytes",
@@ -435,14 +436,14 @@ object RobloxLoginManager {
                     )
                     Outcome(
                         success = false,
-                        message = "Cookie đang được WebView mã hóa (encrypted_value). Phiên bản WebView/Android này không cho phép đọc cookie trực tiếp.",
+                        message = context.getString(R.string.rbx_msg_cookie_encrypted),
                         steps = steps
                     )
                 } else {
-                    steps += StepResult("Truy vấn cookie", true, 0, "Empty", "")
+                    steps += StepResult(context.getString(R.string.rbx_step_query_cookie), true, 0, "Empty", "")
                     Outcome(
                         success = false,
-                        message = "Cookie tồn tại nhưng giá trị rỗng. Có thể tài khoản chưa đăng nhập.",
+                        message = context.getString(R.string.rbx_msg_cookie_empty),
                         steps = steps
                     )
                 }
@@ -468,7 +469,7 @@ object RobloxLoginManager {
         if (!isCookieFormatValid(trimmed)) {
             return Outcome(
                 success = false,
-                message = "Cookie không hợp lệ. Phải bắt đầu bằng `_|WARNING:` và không chứa khoảng trắng/xuống dòng.",
+                message = context.getString(R.string.rbx_msg_cookie_invalid),
                 steps = emptyList()
             )
         }
@@ -477,10 +478,10 @@ object RobloxLoginManager {
 
         val pkg = detectActivePackage(context) ?: return Outcome(
             success = false,
-            message = "Không tìm thấy ứng dụng Roblox đã cài (com.roblox.client hoặc com.roblox.client.vnggames).",
+            message = context.getString(R.string.rbx_msg_roblox_not_installed),
             steps = steps
         )
-        steps += StepResult("Phát hiện Roblox", true, 0, pkg, "")
+        steps += StepResult(context.getString(R.string.rbx_step_detect_roblox), true, 0, pkg, "")
 
         val appData = appDataPath(pkg)
         val cookiesDir = cookiesDir(pkg)
@@ -490,19 +491,24 @@ object RobloxLoginManager {
         // Không fail-fast nếu force-stop trả exit != 0 (Roblox có thể chưa chạy);
         // các bước rm -f vẫn idempotent nên chạy tiếp được.
         val cleanupSteps = listOf(
-            "Tắt Roblox" to "am force-stop $pkg",
-            "Xóa Cookies-journal" to "rm -f $cookiesDir/Cookies-journal",
-            "Xóa Cookies-wal" to "rm -f $cookiesDir/Cookies-wal",
-            "Xóa Cookies-shm" to "rm -f $cookiesDir/Cookies-shm"
+            R.string.rbx_step_stop_roblox to "am force-stop $pkg",
+            R.string.rbx_step_delete_journal to "rm -f $cookiesDir/Cookies-journal",
+            R.string.rbx_step_delete_wal to "rm -f $cookiesDir/Cookies-wal",
+            R.string.rbx_step_delete_shm to "rm -f $cookiesDir/Cookies-shm"
         )
-        cleanupSteps.forEachIndexed { idx, (name, cmd) ->
-            val r = runStep(name, cmd)
+        cleanupSteps.forEachIndexed { idx, (nameRes, cmd) ->
+            val r = runStep(context, nameRes, cmd)
             steps += r
             // idx == 0 là `am force-stop`: bỏ qua lỗi (đồng nhất với extractCookie).
             if (!r.success && idx > 0) {
                 return Outcome(
                     success = false,
-                    message = "Bước \"$name\" thất bại (exit ${r.exitCode}): ${r.error.ifBlank { r.output }}",
+                    message = context.getString(
+                        R.string.rbx_msg_step_failed,
+                        context.getString(nameRes),
+                        r.exitCode,
+                        r.error.ifBlank { r.output },
+                    ),
                     steps = steps
                 )
             }
@@ -510,14 +516,15 @@ object RobloxLoginManager {
 
         // 2. Đảm bảo database tồn tại
         val checkDb = runStep(
-            "Kiểm tra database cookie",
+            context,
+            R.string.rbx_step_check_db,
             "test -f $cookiesDb && echo OK || echo MISSING"
         )
         steps += checkDb
         if (!checkDb.success || !checkDb.output.contains("OK")) {
             return Outcome(
                 success = false,
-                message = "Không tìm thấy database cookie của Roblox ($pkg). Hãy mở ứng dụng Roblox ít nhất 1 lần rồi thử lại.",
+                message = context.getString(R.string.rbx_msg_db_missing_inject, pkg),
                 steps = steps
             )
         }
@@ -526,7 +533,8 @@ object RobloxLoginManager {
         cleanupCache(context)
         val cacheDb = File(context.cacheDir, CACHE_DB_NAME)
         val copy = runStep(
-            "Copy DB ra cache app",
+            context,
+            R.string.rbx_step_copy_db,
             "cp '$cookiesDb' '${cacheDb.absolutePath}' && chmod 666 '${cacheDb.absolutePath}'"
         )
         steps += copy
@@ -534,7 +542,7 @@ object RobloxLoginManager {
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Không copy được database: ${copy.error.ifBlank { copy.output }}",
+                message = context.getString(R.string.rbx_msg_copy_db_failed, copy.error.ifBlank { copy.output }),
                 steps = steps
             )
         }
@@ -551,15 +559,15 @@ object RobloxLoginManager {
         try {
             forceWalJournalMode(cacheDb)
         } catch (e: Exception) {
-            steps += StepResult("Ép WAL journal mode", false, -1, "", e.message ?: "")
+            steps += StepResult(context.getString(R.string.rbx_step_force_wal), false, -1, "", e.message ?: "")
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Không điều chỉnh được file header DB: ${e.message}",
+                message = context.getString(R.string.rbx_msg_header_failed, e.message ?: ""),
                 steps = steps
             )
         }
-        steps += StepResult("Ép WAL journal mode", true, 0, "OK", "")
+        steps += StepResult(context.getString(R.string.rbx_step_force_wal), true, 0, "OK", "")
 
         // 5. Probe encryption mode: nếu WebView của Roblox đang lưu cookie
         // dạng encrypted_value (Chromium 112+ với OSCrypt enabled), việc
@@ -579,34 +587,34 @@ object RobloxLoginManager {
                     val encryptedCount = if (c.moveToFirst()) c.getInt(0) else 0
                     if (encryptedCount > 0) {
                         steps += StepResult(
-                            "Probe encryption mode",
+                            context.getString(R.string.rbx_step_probe_encryption),
                             true,
                             0,
-                            "Phát hiện $encryptedCount cookie có encrypted_value",
+                            context.getString(R.string.rbx_out_encrypted_found, encryptedCount),
                             ""
                         )
                         cleanupCache(context)
                         return Outcome(
                             success = false,
-                            message = "WebView của Roblox đang dùng mã hóa cookie (encrypted_value). Inject plaintext vào cột `value` sẽ bị WebView bỏ qua khi đọc → login sẽ thất bại. Tính năng này không hoạt động trên thiết bị/ROM hiện tại.",
+                            message = context.getString(R.string.rbx_msg_webview_encrypted),
                             steps = steps
                         )
                     }
                     steps += StepResult(
-                        "Probe encryption mode",
+                        context.getString(R.string.rbx_step_probe_encryption),
                         true,
                         0,
-                        "Plaintext mode (encrypted_value rỗng)",
+                        context.getString(R.string.rbx_out_plaintext_mode),
                         ""
                     )
                 }
             }
         } catch (e: Exception) {
-            steps += StepResult("Probe encryption mode", false, -1, "", e.message ?: "")
+            steps += StepResult(context.getString(R.string.rbx_step_probe_encryption), false, -1, "", e.message ?: "")
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Lỗi mở database SQLite (probe): ${e.message}",
+                message = context.getString(R.string.rbx_msg_open_db_probe_failed, e.message ?: ""),
                 steps = steps
             )
         }
@@ -638,7 +646,7 @@ object RobloxLoginManager {
                     // thành Outcome failure, tránh trường hợp commit ở rollback
                     // mode trigger lại lỗi 7434.
                     throw IllegalStateException(
-                        "Không bật được WAL (mode hiện tại: $effectiveMode) — cache DB sẽ rơi vào rollback journal và có thể trigger lỗi 7434"
+                        context.getString(R.string.rbx_err_wal_not_enabled, effectiveMode ?: "null")
                     )
                 }
                 // Giữ mức NORMAL: WAL + NORMAL fsync sau commit là cấu hình
@@ -652,13 +660,13 @@ object RobloxLoginManager {
                 // (DB cũ) hoặc thiếu cột bắt buộc không default (DB mới).
                 val schemaCols = listCookieColumns(db)
                 if (schemaCols.isEmpty()) {
-                    throw IllegalStateException("Không đọc được schema của bảng cookies")
+                    throw IllegalStateException(context.getString(R.string.rbx_err_no_schema))
                 }
                 steps += StepResult(
-                    "Đọc schema cookies",
+                    context.getString(R.string.rbx_step_read_schema),
                     true,
                     0,
-                    "${schemaCols.size} cột: ${schemaCols.joinToString(",")}",
+                    context.getString(R.string.rbx_out_schema_cols, schemaCols.size, schemaCols.joinToString(",")),
                     ""
                 )
 
@@ -675,10 +683,10 @@ object RobloxLoginManager {
                     db.setTransactionSuccessful()
 
                     steps += StepResult(
-                        name = "Ghi cookie vào DB",
+                        name = context.getString(R.string.rbx_step_write_cookie),
                         success = true,
                         exitCode = 0,
-                        output = "Đã xóa $deleted cookie cũ + chèn 1 cookie mới (${cv.size()} cột)",
+                        output = context.getString(R.string.rbx_out_cookie_written, deleted, cv.size()),
                         error = ""
                     )
                 } finally {
@@ -703,7 +711,7 @@ object RobloxLoginManager {
                     // skip (cookie sẽ kẹt trong WAL nếu có frame chưa flush).
                     if (!c.moveToFirst()) {
                         throw IllegalStateException(
-                            "WAL checkpoint không trả về kết quả — không thể xác nhận trạng thái"
+                            context.getString(R.string.rbx_err_checkpoint_no_result)
                         )
                     }
                     // Cột 0 = busy (1 nếu có reader/writer khác đang giữ),
@@ -720,11 +728,11 @@ object RobloxLoginManager {
                         // vẫn account cũ. Throw để outer catch chuyển thành
                         // Outcome(success = false).
                         throw IllegalStateException(
-                            "WAL checkpoint chưa hoàn thành (busy=$busy) — main DB có thể thiếu cookie mới"
+                            context.getString(R.string.rbx_err_checkpoint_busy, busy)
                         )
                     }
                     steps += StepResult(
-                        name = "Checkpoint WAL",
+                        name = context.getString(R.string.rbx_step_checkpoint_wal),
                         success = true,
                         exitCode = 0,
                         output = "log=$logFrames frames, checkpointed=$checkpointed frames",
@@ -739,7 +747,7 @@ object RobloxLoginManager {
             // "Ghi cookie vào DB" đã success trước khi checkpoint throw,
             // nếu reuse cùng tên sẽ thấy hai entry mâu thuẫn trong nhật ký).
             steps += StepResult(
-                name = "Thao tác DB SQLite",
+                name = context.getString(R.string.rbx_step_sqlite_ops),
                 success = false,
                 exitCode = -1,
                 output = "",
@@ -748,7 +756,7 @@ object RobloxLoginManager {
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Lỗi ghi database SQLite: ${e.message}",
+                message = context.getString(R.string.rbx_msg_write_db_failed, e.message ?: ""),
                 steps = steps
             )
         }
@@ -776,17 +784,17 @@ object RobloxLoginManager {
             "cp '${cacheDb.absolutePath}' '${cookiesDb}.tmp'",
             "mv '${cookiesDb}.tmp' '$cookiesDb'"
         ).joinToString(" && ")
-        val replace = runStep("Đẩy DB lại Roblox", replaceCmd)
+        val replace = runStep(context, R.string.rbx_step_push_db, replaceCmd)
         steps += replace
         if (!replace.success) {
             // Cố gắng dọn file tmp leftover trong thư mục Roblox (chỉ root xóa được).
             // Append vào steps để hiển thị trong nhật ký — user biết file tmp
             // đã được dọn sạch hay vẫn còn sót.
-            steps += runStep("Dọn file tmp", "rm -f '${cookiesDb}.tmp'")
+            steps += runStep(context, R.string.rbx_step_cleanup_tmp, "rm -f '${cookiesDb}.tmp'")
             cleanupCache(context)
             return Outcome(
                 success = false,
-                message = "Không đẩy được DB ngược về Roblox: ${replace.error.ifBlank { replace.output }}",
+                message = context.getString(R.string.rbx_msg_push_db_failed, replace.error.ifBlank { replace.output }),
                 steps = steps
             )
         }
@@ -799,13 +807,13 @@ object RobloxLoginManager {
             "[ -n \"\$APP_UID\" ] && [ -n \"\$APP_GID\" ] && " +
             "chown \$APP_UID:\$APP_GID $cookiesDb) || " +
             "(set -- \$(ls -nd $appData) && chown \$3:\$4 $cookiesDb)"
-        val chown = runStep("Sửa owner Cookies", chownCmd)
+        val chown = runStep(context, R.string.rbx_step_fix_owner, chownCmd)
         steps += chown
 
         // chmod + restorecon: chạy độc lập, không phụ thuộc chown.
-        val chmod = runStep("Sửa quyền 660", "chmod 660 $cookiesDb")
+        val chmod = runStep(context, R.string.rbx_step_fix_perms, "chmod 660 $cookiesDb")
         steps += chmod
-        val restorecon = runStep("Khôi phục SELinux context", "restorecon $cookiesDb || true")
+        val restorecon = runStep(context, R.string.rbx_step_restorecon, "restorecon $cookiesDb || true")
         steps += restorecon
 
         cleanupCache(context)
@@ -817,15 +825,17 @@ object RobloxLoginManager {
         if (!chown.success) {
             return Outcome(
                 success = false,
-                message = "DB đã được đẩy về Roblox nhưng KHÔNG sửa được owner — Roblox sẽ không đọc được Cookies. " +
-                    "Vui lòng chạy lại với `su` hoạt động đúng. Lỗi: ${chown.error.ifBlank { chown.output }}",
+                message = context.getString(
+                    R.string.rbx_msg_owner_failed,
+                    chown.error.ifBlank { chown.output },
+                ),
                 steps = steps
             )
         }
 
         return Outcome(
             success = true,
-            message = "Đã đăng nhập thành công! Mở Roblox ($pkg) để vào thẳng tài khoản.",
+            message = context.getString(R.string.rbx_msg_inject_success, pkg),
             steps = steps
         )
     }

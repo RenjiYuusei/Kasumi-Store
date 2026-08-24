@@ -1,5 +1,68 @@
 # Changelog
 
+## [2.1.0] - 2026-08-23
+Bản này không thêm tính năng mới cho người dùng: toàn bộ công sức nằm ở sửa lỗi, tái cấu trúc, nâng toolchain và dọn nợ kỹ thuật. Mọi thay đổi đều được kiểm chứng bằng build thật (`assembleRelease` + `lintRelease` + unit test).
+
+### 🏗️ Kiến trúc — tách ViewModel & repository
+`MainActivity.kt` trước đây dài 1338 dòng, ôm toàn bộ state (`appsList`, `fileStats`, `sortMode`, `isLoading`) bằng `mutableStateOf` ngay trên Activity. Hệ quả: **xoay màn hình hoặc bị hệ thống kill process là mất sạch danh sách app đã tải, mất cache stats, và app gọi lại mạng từ đầu.**
+- **File mới**: `ApkRepository.kt` (đọc/ghi catalogue, tải APK, quản lý cache, giải nén split/OBB), `AppsViewModel.kt` (state + điều phối, expose `StateFlow`), `KasumiApp.kt` (drawer/scaffold/dialog), `AppsScreen.kt` (tab Ứng dụng), `UiText.kt`, `Formatting.kt`, `UrlUtils.kt`, `ClipboardExt.kt`.
+- `MainActivity` còn ~215 dòng, chỉ giữ 2 thứ thực sự cần Activity: intent cài đặt và broadcast trạng thái cài.
+- Bỏ hack `statsVersion++` (đếm tay để ép recompose) — state giờ là map bất biến trong `StateFlow`.
+
+### 🐛 Sửa lỗi
+- **Tải file không atomic** (`ApkRepository.downloadApk`): trước đây ghi thẳng vào file cache đích. Mạng đứt hoặc user thoát giữa chừng để lại **file cụt vẫn bị coi là "đã tải"**, lần sau đem đi cài → cài lỗi. Nay ghi ra `.part`, kiểm `Content-Length`, khớp mới đổi tên.
+- **Thiếu chỗ trống**: kiểm tra dung lượng khả dụng trước khi tải.
+- **API bypass dùng `http://`**: app hướng dẫn nhập `http://1.2.3.4:8078` nhưng `targetSdk` chặn cleartext → lỗi khó hiểu từ tầng OkHttp. Nay báo rõ "phải dùng HTTPS".
+- **Nuốt lỗi**: các `catch` rỗng / `printStackTrace()` trong luồng giải nén và lưu file được thay bằng log có ngữ cảnh; `CancellationException` không còn bị nuốt.
+- **Danh sách giật khi cuộn**: bỏ animation vào-màn-hình so le theo index (chạy lại mỗi lần item được tái sử dụng), thay bằng `Modifier.animateItem()`.
+
+### 🔐 Bảo mật
+- **Receiver cài đặt đổi sang `RECEIVER_NOT_EXPORTED`**: trước đây đăng ký exported trong khi handler lấy `EXTRA_INTENT` từ broadcast ra rồi `startActivity` — bất kỳ app nào cũng có thể ép Kasumi mở một Intent tùy ý.
+- **Bỏ quyền `QUERY_ALL_PACKAGES`** (bị Play hạn chế), thay bằng `<queries>` khai báo đúng 2 package Roblox mà app thực sự cần thấy.
+
+### ⬆️ Nâng toolchain & thư viện
+- Gradle `8.14.2` → `9.7.1`, AGP `8.7.2` → `9.3.2`, Kotlin `2.1.0` → `2.4.10`, `compileSdk` 35 → 37.
+- AGP 9 tự biên dịch Kotlin nên **bỏ plugin `org.jetbrains.kotlin.android`**; root buildscript nâng KGP mà AGP ghim sẵn lên phiên bản trong version catalog.
+- Compose BOM `2025.01.00` → `2026.08.00`, OkHttp `4.12` → `5.5` (`Response.body` giờ non-null), coil `3.5`, gson `2.14`, lifecycle `2.11`, core-ktx `1.19`.
+- **`targetSdk` giữ nguyên 36** — nâng targetSdk đổi hành vi runtime (quyền, giới hạn chạy nền) và cần kiểm thử trên máy thật.
+- Bỏ `LocalClipboardManager` (deprecated) sang `LocalClipboard`; `Uri.parse` / `prefs.edit().apply()` sang core-ktx.
+
+### 🌐 Đưa toàn bộ chuỗi vào `strings.xml`
+**174 → 0** chuỗi tiếng Việt hardcode trong code Kotlin (chỉ còn dấu `•`, `✓`, `✗`).
+- Gồm cả **59 chuỗi chẩn đoán trong `RobloxLoginManager.kt`**: `Context` được luồn qua `executeAsRoot` / `runStep` / `queryCookie`, tên bước đổi thành `@StringRes`.
+- Thêm `UiText` để ViewModel và manager báo lỗi dịch được mà không phải giữ `Context`.
+- Màn hình đọc resource qua `LocalResources` thay vì `LocalContext.current`, nên bám đúng configuration change.
+
+### 🧪 Kiểm thử (lần đầu có trong dự án)
+**40 unit test** cho `filterAndSortApps`, `formatFileSize`, `FileUtils` (suy ra đường dẫn cache theo đuôi file), `ApkItem` (Gson round-trip, JSON hỏng, field lạ), `normalizeDownloadUrl` (Dropbox `dl=1`) và `FileStatsHelper`.
+
+### 🧹 Dọn dẹp / Xóa
+- Xóa 5 resource icon không dùng (`ic_launcher*`, `ic_launcher_background/foreground`) — lint xác nhận.
+- Xóa keep rule Gson thủ công: Gson 2.14 tự ship `META-INF/proguard/gson.pro`, rule cũ vừa thừa vừa **chặn R8 shrink cả thư viện**.
+- Bỏ nhánh `SDK_INT` chết (minSdk vốn là 24), `xmlns:tools` không còn dùng, dependency `appcompat` không dùng; `ui-tooling-preview` chuyển sang `debugImplementation`.
+- Xóa `tools/__pycache__/*.pyc` và `tools/web-editor/preview.log` bị commit nhầm.
+
+### ⚙️ Build & CI
+- Thêm `gradle/libs.versions.toml`; cả 2 file build dùng version catalog.
+- Bỏ property vô tác dụng/lỗi thời (`android.enableResourceOptimizations`, `suppressUnsupportedCompileSdk=34`, `configureondemand`); bật configuration cache + R8 full mode; `packagingOptions`/`kotlinOptions` sang DSL hiện hành; thêm cấu hình `lint`, `dependenciesInfo`, `testOptions`.
+- Chỉ đóng gói locale `en`/`vi`.
+- **3 workflow cùng ghi `source/apps.json`** giờ chung một `concurrency group` và **rebase + retry khi push bị từ chối** — trước đây push hỏng là mất luôn bản cập nhật.
+- Cache pip/npm, ghim dependency Python qua `tools/requirements.txt`, dùng `npm ci`.
+- Deploy GitHub Pages chỉ từ nhánh `main`; pull request chỉ build, không publish.
+- Workflow release chạy unit test trước khi đóng gói; thêm timeout cho mọi job.
+
+### 🛠️ Tooling
+- `tools/apps_json.py` (mới): ghi `apps.json` **atomic** (crash giữa chừng từng làm hỏng file, khiến lần chạy sau parse lỗi) + `requests.Session` dùng chung có retry và User-Agent.
+- Web editor: bỏ `@octokit/rest` (chỉ dùng cho 2 lời gọi REST) thay bằng `fetch`, và **báo rõ xung đột SHA** — 3 workflow định kỳ ghi đè `apps.json` mỗi 12h nên tab để lâu rất dễ giữ SHA cũ. Bundle `271.92 kB` → `179.02 kB` (gzip `74.20` → `56.94 kB`).
+
+### 📊 Số liệu
+- APK release: `3,635,536` → `3,159,116` bytes (**−13.1%**).
+- Lint: 24 → **14** cảnh báo (dù bộ lint mới chạy nhiều check hơn hẳn); phần còn lại là false positive hoặc cố ý.
+- Unit test: 0 → **40** (pass toàn bộ).
+
+### 🔢 Phiên bản
+- **Bump phiên bản**: `2.0.0` → `2.1.0` (versionCode 22 → 23).
+
 ## [2.0.0] - 2026-07-22
 ### ✨ Tính năng mới — Tab "Bypass Key Delta"
 Thêm tab thứ 5 trong navigation drawer để lấy **key Delta** trực tiếp trong app.

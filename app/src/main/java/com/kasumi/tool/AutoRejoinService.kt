@@ -134,7 +134,7 @@ class AutoRejoinService : Service() {
                 intervalMs = intervalMs,
             )
         }
-        appendLog(LogLevel.INFO, "Đã bật auto rejoin cho Place ID $placeId (kiểm tra mỗi ${intervalMs / 1000}s).")
+        appendLog(LogLevel.INFO, getString(R.string.ar_log_started, placeId, intervalMs / 1000))
 
         loopJob?.cancel()
         loopJob = serviceScope.launch {
@@ -143,7 +143,7 @@ class AutoRejoinService : Service() {
     }
 
     private fun handleStop() {
-        appendLog(LogLevel.INFO, "Đã dừng auto rejoin.")
+        appendLog(LogLevel.INFO, getString(R.string.ar_log_stopped))
         stopServiceCompletely()
     }
 
@@ -152,12 +152,8 @@ class AutoRejoinService : Service() {
         loopJob = null
         // Reset state để UI hiển thị idle ngay khi service dừng.
         _state.update { it.copy(running = false, currentState = null, currentPid = null) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        // minSdk is 24 (N), so the int overload is always available here.
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -200,7 +196,7 @@ class AutoRejoinService : Service() {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.OK,
-                        "Đang trong đúng game (Place ID ${report.currentPlaceId}).",
+                        getString(R.string.ar_log_in_game, report.currentPlaceId ?: ""),
                     )
                     false
                 }
@@ -208,7 +204,7 @@ class AutoRejoinService : Service() {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.WARN,
-                        "Bạn đang ở game khác (Place ID ${report.currentPlaceId}). Bỏ qua vì có thể bạn tự chuyển game.",
+                        getString(R.string.ar_log_wrong_game, report.currentPlaceId ?: ""),
                     )
                     false
                 }
@@ -217,7 +213,11 @@ class AutoRejoinService : Service() {
                     if (noGameStreak >= noGameMaxStreak) {
                         appendLog(
                             LogLevel.WARN,
-                            "Game không vào được sau $noGameMaxStreak lần kiểm tra (~${noGameMaxStreak * intervalMs / 1000}s). Đang thử mở lại…",
+                            getString(
+                                R.string.ar_log_no_game_retry,
+                                noGameMaxStreak,
+                                noGameMaxStreak * intervalMs / 1000,
+                            ),
                         )
                         withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
                         noGameStreak = 0
@@ -225,21 +225,21 @@ class AutoRejoinService : Service() {
                     } else {
                         appendLog(
                             LogLevel.INFO,
-                            "Roblox đang mở nhưng chưa vào game (lần $noGameStreak/$noGameMaxStreak). Đợi kiểm tra tiếp…",
+                            getString(R.string.ar_log_no_game_wait, noGameStreak, noGameMaxStreak),
                         )
                         false
                     }
                 }
                 AutoRejoinManager.RobloxState.NOT_RUNNING -> {
                     noGameStreak = 0
-                    appendLog(LogLevel.WARN, "Roblox đang tắt. Đang mở lại…")
+                    appendLog(LogLevel.WARN, getString(R.string.ar_log_not_running))
                     true
                 }
                 AutoRejoinManager.RobloxState.DISCONNECTED -> {
                     noGameStreak = 0
                     appendLog(
                         LogLevel.WARN,
-                        "Phát hiện bị văng / kick: ${report.disconnectHint?.take(120) ?: "?"}",
+                        getString(R.string.ar_log_disconnected, report.disconnectHint?.take(120) ?: "?"),
                     )
                     withContext(Dispatchers.IO) { AutoRejoinManager.forceStop(pkg) }
                     true
@@ -255,13 +255,17 @@ class AutoRejoinService : Service() {
                 updateNotification()
                 attempts.forEach { a ->
                     val lvl = if (a.success) LogLevel.OK else LogLevel.ERR
-                    val msg = "${a.method}: " +
-                        if (a.success) "OK" else "lỗi (mã ${a.exitCode}) ${a.error.take(80)}"
+                    val detail = if (a.success) {
+                        "OK"
+                    } else {
+                        getString(R.string.ar_log_attempt_failed, a.exitCode, a.error.take(80))
+                    }
+                    val msg = getString(a.methodRes) + ": " + detail
                     appendLog(lvl, msg)
                 }
                 appendLog(
                     LogLevel.INFO,
-                    "Đợi ${warmupMs / 1000}s cho Roblox mở và vào game rồi kiểm tra tiếp…",
+                    getString(R.string.ar_log_warmup, warmupMs / 1000),
                 )
                 delay(warmupMs)
             } else {

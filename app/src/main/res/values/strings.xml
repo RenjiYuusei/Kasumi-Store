@@ -30,6 +30,22 @@
     <string name="open_unknown_sources_failed">Không mở được cài đặt quyền: %s</string>
     <string name="open_installer_failed">Không mở được installer: %s</string>
 
+    <!-- Apps tab: source refresh -->
+    <string name="source_refreshed">Đã làm mới nguồn</string>
+    <string name="source_refresh_failed">Không tải được nguồn ứng dụng. Kiểm tra kết nối mạng rồi thử lại.</string>
+
+    <!-- Apps tab: install flow -->
+    <string name="install_prepare_failed">Không chuẩn bị được tệp APK</string>
+    <string name="install_no_apk_inside">Không tìm thấy APK nào bên trong tệp</string>
+    <string name="install_success">Cài đặt thành công</string>
+    <string name="install_in_progress">Đang tiến hành cài đặt…</string>
+    <string name="install_error">Lỗi: %1$s</string>
+    <string name="install_splits_error">Lỗi cài đặt splits: %1$s</string>
+    <string name="install_confirm_dialog_failed">Không thể mở hộp thoại xác nhận: %1$s</string>
+    <string name="install_failed_with_reason">Cài đặt thất bại: %1$s</string>
+    <string name="install_failed_unknown">Lỗi không xác định (%1$d)</string>
+    <string name="app_icon_desc">Biểu tượng ứng dụng %1$s</string>
+
     <!-- Login Roblox tab -->
     <string name="tab_roblox_login">Login Roblox</string>
     <string name="roblox_login_title">Đăng nhập Roblox bằng Cookie</string>
@@ -84,11 +100,160 @@
     <string name="roblox_login_result_error">Lỗi</string>
     <string name="roblox_login_result_log_title">Nhật ký</string>
 
+    <!-- Login Roblox: step names shown in the diagnostic log -->
+    <string name="rbx_step_detect_roblox">Phát hiện Roblox</string>
+    <string name="rbx_step_stop_roblox">Tắt Roblox</string>
+    <string name="rbx_step_check_db">Kiểm tra database cookie</string>
+    <string name="rbx_step_copy_db">Copy DB ra cache app</string>
+    <string name="rbx_step_open_db_1">Mở DB (lần 1)</string>
+    <string name="rbx_step_open_db_2">Mở DB (lần 2)</string>
+    <string name="rbx_step_force_legacy">Ép legacy journal mode</string>
+    <string name="rbx_step_force_wal">Ép WAL journal mode</string>
+    <string name="rbx_step_query_cookie">Truy vấn cookie</string>
+    <string name="rbx_step_delete_journal">Xóa Cookies-journal</string>
+    <string name="rbx_step_delete_wal">Xóa Cookies-wal</string>
+    <string name="rbx_step_delete_shm">Xóa Cookies-shm</string>
+    <string name="rbx_step_probe_encryption">Probe encryption mode</string>
+    <string name="rbx_step_read_schema">Đọc schema cookies</string>
+    <string name="rbx_step_write_cookie">Ghi cookie vào DB</string>
+    <string name="rbx_step_checkpoint_wal">Checkpoint WAL</string>
+    <string name="rbx_step_sqlite_ops">Thao tác DB SQLite</string>
+    <string name="rbx_step_push_db">Đẩy DB lại Roblox</string>
+    <string name="rbx_step_cleanup_tmp">Dọn file tmp</string>
+    <string name="rbx_step_fix_owner">Sửa owner Cookies</string>
+    <string name="rbx_step_fix_perms">Sửa quyền 660</string>
+    <string name="rbx_step_restorecon">Khôi phục SELinux context</string>
+
+    <!-- Login Roblox: step output details -->
+    <string name="rbx_out_cookie_not_found">Không tìm thấy cookie .ROBLOSECURITY</string>
+    <string name="rbx_out_fallback_legacy">%1$s — fallback sang legacy mode</string>
+    <string name="rbx_out_encrypted_found">Phát hiện %1$d cookie có encrypted_value</string>
+    <string name="rbx_out_plaintext_mode">Plaintext mode (encrypted_value rỗng)</string>
+    <string name="rbx_out_schema_cols">%1$d cột: %2$s</string>
+    <string name="rbx_out_cookie_written">Đã xóa %1$d cookie cũ + chèn 1 cookie mới (%2$d cột)</string>
+
+    <!-- Login Roblox: failures -->
+    <string name="rbx_err_su_timeout">Lệnh `su` quá thời gian chờ (%1$d s) — process đã bị huỷ. Có thể đang chờ user grant quyền root, hoặc `su` binary không phản hồi.</string>
+    <string name="rbx_err_no_schema">Không đọc được schema của bảng cookies</string>
+    <string name="rbx_err_wal_not_enabled">Không bật được WAL (mode hiện tại: %1$s) — cache DB sẽ rơi vào rollback journal và có thể trigger lỗi 7434</string>
+    <string name="rbx_err_checkpoint_no_result">WAL checkpoint không trả về kết quả — không thể xác nhận trạng thái</string>
+    <string name="rbx_err_checkpoint_busy">WAL checkpoint chưa hoàn thành (busy=%1$d) — main DB có thể thiếu cookie mới</string>
+
+    <!-- Login Roblox: outcome messages -->
+    <string name="rbx_msg_roblox_not_installed">Không tìm thấy ứng dụng Roblox đã cài (com.roblox.client hoặc com.roblox.client.vnggames).</string>
+    <string name="rbx_msg_db_missing_extract">Không tìm thấy database cookie của Roblox (%1$s). Hãy mở ứng dụng Roblox ít nhất 1 lần để khởi tạo dữ liệu.</string>
+    <string name="rbx_msg_db_missing_inject">Không tìm thấy database cookie của Roblox (%1$s). Hãy mở ứng dụng Roblox ít nhất 1 lần rồi thử lại.</string>
+    <string name="rbx_msg_copy_db_failed">Không copy được database: %1$s</string>
+    <string name="rbx_msg_open_db_failed">Lỗi mở database SQLite: %1$s</string>
+    <string name="rbx_msg_open_db_probe_failed">Lỗi mở database SQLite (probe): %1$s</string>
+    <string name="rbx_msg_write_db_failed">Lỗi ghi database SQLite: %1$s</string>
+    <string name="rbx_msg_cookie_not_found">Không tìm thấy cookie .ROBLOSECURITY trong database. Hãy đăng nhập Roblox trước rồi thử lại.</string>
+    <string name="rbx_msg_extract_success">Đã lấy cookie .ROBLOSECURITY thành công.</string>
+    <string name="rbx_msg_cookie_encrypted">Cookie đang được WebView mã hóa (encrypted_value). Phiên bản WebView/Android này không cho phép đọc cookie trực tiếp.</string>
+    <string name="rbx_msg_cookie_empty">Cookie tồn tại nhưng giá trị rỗng. Có thể tài khoản chưa đăng nhập.</string>
+    <string name="rbx_msg_cookie_invalid">Cookie không hợp lệ. Phải bắt đầu bằng `_|WARNING:` và không chứa khoảng trắng/xuống dòng.</string>
+    <string name="rbx_msg_step_failed">Bước \"%1$s\" thất bại (exit %2$d): %3$s</string>
+    <string name="rbx_msg_header_failed">Không điều chỉnh được file header DB: %1$s</string>
+    <string name="rbx_msg_webview_encrypted">WebView của Roblox đang dùng mã hóa cookie (encrypted_value). Inject plaintext vào cột `value` sẽ bị WebView bỏ qua khi đọc → login sẽ thất bại. Tính năng này không hoạt động trên thiết bị/ROM hiện tại.</string>
+    <string name="rbx_msg_push_db_failed">Không đẩy được DB ngược về Roblox: %1$s</string>
+    <string name="rbx_msg_owner_failed">DB đã được đẩy về Roblox nhưng KHÔNG sửa được owner — Roblox sẽ không đọc được Cookies. Vui lòng chạy lại với `su` hoạt động đúng. Lỗi: %1$s</string>
+    <string name="rbx_msg_inject_success">Đã đăng nhập thành công! Mở Roblox (%1$s) để vào thẳng tài khoản.</string>
+
     <!-- Sync tab -->
     <string name="tab_sync">Đồng bộ</string>
+    <string name="sync_title">Đồng bộ Config</string>
+
+    <!-- Sync: info card -->
+    <string name="sync_info_title">Cách hoạt động</string>
+    <string name="sync_info_body">Sao lưu toàn bộ Delta client (script, autoexecute, config) giữa các máy. Nguồn dữ liệu:</string>
+
+    <!-- Sync: storage permission -->
+    <string name="sync_permission_title">Cần quyền truy cập bộ nhớ</string>
+    <string name="sync_permission_body">Ứng dụng cần quyền quản lý tất cả tệp để đọc thư mục Delta.</string>
+    <string name="sync_permission_button">Cấp quyền</string>
+
+    <!-- Sync: profile name -->
+    <string name="sync_profile_title">Tên đồng bộ</string>
+    <string name="sync_profile_desc">Đặt một tên để nhận diện bộ config (ví dụ tên máy của bạn). Dùng lại đúng tên này ở máy khác để tải về.</string>
+    <string name="sync_profile_label">Tên</string>
+
+    <!-- Sync: actions -->
+    <string name="sync_button_upload">Đồng bộ lên</string>
+    <string name="sync_button_update">Cập nhật đồng bộ</string>
+    <string name="sync_button_download">Tải về máy</string>
+    <string name="sync_button_view_remote">Xem dữ liệu trên database</string>
+    <string name="sync_button_delete_remote">Xoá dữ liệu config khỏi database</string>
+    <string name="sync_button_delete">Xoá</string>
+
+    <!-- Sync: progress and results -->
+    <string name="sync_progress_default">Đang xử lý…</string>
+    <string name="sync_progress_fetch_remote">Đang tải danh sách config từ database…</string>
+    <string name="sync_progress_upload">Đang tải lên %1$d/%2$d: %3$s</string>
+    <string name="sync_progress_download">Đang tải về %1$d/%2$d: %3$s</string>
+    <string name="sync_progress_delete">Đang xoá dữ liệu…</string>
+    <string name="sync_error_fetch">Lỗi khi tải dữ liệu: %1$s</string>
+    <string name="sync_upload_success">Đã đồng bộ %1$d tệp config lên database.</string>
+    <string name="sync_upload_failed">Đồng bộ thất bại: %1$s</string>
+    <string name="sync_download_empty">Không có config nào trên database cho tên này.</string>
+    <string name="sync_download_success">Đã tải %1$d tệp config về máy.</string>
+    <string name="sync_download_failed">Tải về thất bại: %1$s</string>
+    <string name="sync_delete_success">Đã xoá %1$d tệp config khỏi database.</string>
+    <string name="sync_delete_failed">Xoá thất bại: %1$s</string>
+
+    <!-- Sync: delete confirmation -->
+    <string name="sync_delete_title">Xoá dữ liệu config?</string>
+    <string name="sync_delete_message">Toàn bộ config của tên \"%1$s\" sẽ bị xoá khỏi database. Tệp trên máy không bị ảnh hưởng. Hành động này không thể hoàn tác.</string>
+
+    <!-- Sync: local and remote listings -->
+    <string name="sync_local_title">Dữ liệu trên máy này</string>
+    <string name="sync_local_missing">Chưa tìm thấy thư mục Delta.</string>
+    <string name="sync_files_summary">%1$d tệp • %2$s</string>
+    <string name="sync_remote_title">Dữ liệu trên database</string>
+    <string name="sync_remote_enter_name">Nhập tên đồng bộ để xem dữ liệu.</string>
+    <string name="sync_remote_empty_hint">Chưa có dữ liệu. Nhập tên và bấm \"Đồng bộ lên\" để tải config lên, hoặc \"Xem dữ liệu trên database\" để kiểm tra.</string>
+    <string name="sync_remote_none_for_name">Chưa có config nào trên database cho tên \"%1$s\". Bấm \"Đồng bộ lên\" để bắt đầu.</string>
+    <string name="sync_entry_binary">nhị phân</string>
 
     <!-- Bypass Key Delta tab -->
     <string name="tab_bypass_delta">Bypass Key Delta</string>
+    <string name="bypass_title">Lấy Key Delta</string>
+
+    <!-- Bypass: input and actions -->
+    <string name="bypass_input_hint">Dán link getkey (platoboost.com / platorelay.com) hoặc token key.</string>
+    <string name="bypass_paste">Dán</string>
+    <string name="bypass_clear">Xóa</string>
+    <string name="bypass_preparing">Đang chuẩn bị…</string>
+    <string name="bypass_get_key">Lấy key</string>
+    <string name="bypass_retry">Thử lại</string>
+    <string name="bypass_copy_key">Sao chép key</string>
+    <string name="bypass_clipboard_empty">Clipboard trống</string>
+    <string name="bypass_key_copied">Đã sao chép key</string>
+    <string name="bypass_working_hint">Đang lấy key… có thể mất vài chục giây, vui lòng đợi.</string>
+
+    <!-- Bypass: result card -->
+    <string name="bypass_your_key">Key của bạn</string>
+    <string name="bypass_remaining_minutes">Còn lại: %1$d phút</string>
+    <string name="bypass_remaining_hours_suffix"> (~%1$d giờ)</string>
+    <string name="bypass_elapsed">Thời gian xử lý: %1$ss</string>
+
+    <!-- Bypass: how-to -->
+    <string name="bypass_howto_title">Cách dùng</string>
+    <string name="bypass_howto_body">Dán link getkey Delta rồi bấm \"Lấy key\". Chờ một chút, key sẽ hiện ra để bạn sao chép và dán vào Delta.</string>
+
+    <!-- Bypass: errors -->
+    <string name="bypass_service_unavailable">Dịch vụ tạm thời chưa sẵn sàng. Hãy thử lại sau.</string>
+    <string name="bypass_config_failed">Không kết nối được dịch vụ. Kiểm tra mạng rồi thử lại.</string>
+    <string name="bypass_error_unknown">Lỗi không xác định</string>
+    <string name="bypass_error_no_api">Chưa cấu hình địa chỉ API. Hãy nhập URL API bạn đã host.</string>
+    <string name="bypass_error_no_link">Hãy dán link Delta (platoboost/platorelay) hoặc key token.</string>
+    <string name="bypass_error_bad_api_url">URL API không hợp lệ. Ví dụ đúng: https://api.example.com</string>
+    <string name="bypass_error_cleartext">Địa chỉ API phải dùng HTTPS. Android chặn kết nối HTTP thường, nên link bắt đầu bằng http:// sẽ không hoạt động.</string>
+    <string name="bypass_error_connect">Không kết nối được tới API: %1$s</string>
+    <string name="bypass_error_bad_response">Phản hồi không hợp lệ từ API (HTTP %1$d).</string>
+    <string name="bypass_error_http">Máy chủ trả về HTTP %1$d</string>
+    <string name="bypass_error_generic">Bypass thất bại</string>
+    <string name="bypass_error_wrong_type">Link không phải Delta (API nhận diện: %1$s).</string>
+    <string name="bypass_error_no_key">API không trả về key.</string>
 
     <!-- Auto Rejoin Roblox tab -->
     <string name="tab_auto_rejoin">Auto Rejoin</string>
@@ -147,6 +312,26 @@
     <string name="auto_rejoin_snackbar_detect_success">Đã lấy Place ID: %1$s</string>
     <string name="auto_rejoin_snackbar_detect_no_game">Không tìm thấy Place ID. Hãy chắc chắn Roblox đang mở và đã vào game rồi thử lại. Nếu Roblox vừa khởi động, đợi vài giây rồi bấm lại.</string>
     <string name="auto_rejoin_snackbar_detect_no_root">Cần quyền Root để tự lấy Place ID.</string>
+
+    <!-- Auto Rejoin: rejoin methods (shown in the event log) -->
+    <string name="ar_method_deeplink">Cách 1 — Mở thẳng vào game</string>
+    <string name="ar_method_legacy">Cách 2 — Mở vào game (kiểu cũ)</string>
+    <string name="ar_method_launcher">Cách 3 — Chỉ mở app Roblox</string>
+
+    <!-- Auto Rejoin: event log lines -->
+    <string name="ar_log_started">Đã bật auto rejoin cho Place ID %1$s (kiểm tra mỗi %2$d s).</string>
+    <string name="ar_log_stopped">Đã dừng auto rejoin.</string>
+    <string name="ar_log_in_game">Đang trong đúng game (Place ID %1$s).</string>
+    <string name="ar_log_wrong_game">Bạn đang ở game khác (Place ID %1$s). Bỏ qua vì có thể bạn tự chuyển game.</string>
+    <string name="ar_log_no_game_retry">Game không vào được sau %1$d lần kiểm tra (~%2$d s). Đang thử mở lại…</string>
+    <string name="ar_log_no_game_wait">Roblox đang mở nhưng chưa vào game (lần %1$d/%2$d). Đợi kiểm tra tiếp…</string>
+    <string name="ar_log_not_running">Roblox đang tắt. Đang mở lại…</string>
+    <string name="ar_log_disconnected">Phát hiện bị văng / kick: %1$s</string>
+    <string name="ar_log_attempt_failed">lỗi (mã %1$d) %2$s</string>
+    <string name="ar_log_warmup">Đợi %1$d s cho Roblox mở và vào game rồi kiểm tra tiếp…</string>
+
+    <!-- Sync: server errors -->
+    <string name="sync_error_invalid_response">Phản hồi không hợp lệ từ máy chủ</string>
 
     <!-- Auto Rejoin: foreground service notification -->
     <string name="auto_rejoin_notif_channel_name">Auto Rejoin Roblox</string>

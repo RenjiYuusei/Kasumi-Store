@@ -1,5 +1,6 @@
 package com.kasumi.tool
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -23,7 +24,13 @@ import org.json.JSONObject
  */
 class DeltaBypassManager(private val client: OkHttpClient) {
 
-    class BypassException(message: String) : Exception(message)
+    /**
+     * Carries a [UiText] rather than a pre-rendered string: the manager has no
+     * Context, so the screen decides how to localise the failure.
+     */
+    class BypassException(val text: UiText) : Exception(
+        (text as? UiText.Raw)?.value ?: "Delta bypass failed"
+    )
 
     data class BypassResult(
         val key: String,
@@ -55,7 +62,7 @@ class DeltaBypassManager(private val client: OkHttpClient) {
         try {
             client.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
-                val text = resp.body?.string().orEmpty()
+                val text = resp.body.string()
                 val url = JSONObject(text).optString("delta_api_url").trim()
                 url.ifBlank { null }
             }
@@ -68,15 +75,22 @@ class DeltaBypassManager(private val client: OkHttpClient) {
         withContext(Dispatchers.IO) {
             val base = apiBaseUrl.trim().trimEnd('/')
             if (base.isEmpty()) {
-                throw BypassException("Chưa cấu hình địa chỉ API. Hãy nhập URL API bạn đã host.")
+                throw BypassException(UiText.res(R.string.bypass_error_no_api))
             }
             val target = link.trim()
             if (target.isEmpty()) {
-                throw BypassException("Hãy dán link Delta (platoboost/platorelay) hoặc key token.")
+                throw BypassException(UiText.res(R.string.bypass_error_no_link))
             }
 
             val httpBase = base.toHttpUrlOrNull()
-                ?: throw BypassException("URL API không hợp lệ. Ví dụ đúng: http://1.2.3.4:8078")
+                ?: throw BypassException(UiText.res(R.string.bypass_error_bad_api_url))
+
+            // targetSdk 35 blocks cleartext by default and the app ships no
+            // network-security config, so a plain http:// endpoint would fail
+            // deep inside OkHttp with an opaque UnknownServiceException. Say so.
+            if (!httpBase.isHttps) {
+                throw BypassException(UiText.res(R.string.bypass_error_cleartext))
+            }
 
             val url = httpBase.newBuilder()
                 .addPathSegment("bypass")
@@ -94,33 +108,40 @@ class DeltaBypassManager(private val client: OkHttpClient) {
             try {
                 client.newCall(request).execute().use { resp ->
                     code = resp.code
-                    text = resp.body?.string().orEmpty()
+                    text = resp.body.string()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                throw BypassException("Không kết nối được tới API: ${e.message}")
+                throw BypassException(UiText.res(R.string.bypass_error_connect, e.message ?: ""))
             }
 
             val json = try {
                 JSONObject(text)
             } catch (_: Exception) {
-                throw BypassException("Phản hồi không hợp lệ từ API (HTTP $code).")
+                throw BypassException(UiText.res(R.string.bypass_error_bad_response, code))
             }
 
             if (!json.optBoolean("success", false)) {
-                val err = json.optString("error").ifBlank {
-                    if (code != 200) "Máy chủ trả về HTTP $code" else "Bypass thất bại"
-                }
-                throw BypassException(err)
+                val serverError = json.optString("error")
+                throw BypassException(
+                    when {
+                        // The server already localises its own errors.
+                        serverError.isNotBlank() -> UiText.Raw(serverError)
+                        code != 200 -> UiText.res(R.string.bypass_error_http, code)
+                        else -> UiText.res(R.string.bypass_error_generic)
+                    }
+                )
             }
 
             val type = json.optString("type")
             if (type.isNotEmpty() && type != "delta") {
-                throw BypassException("Link không phải Delta (API nhận diện: $type).")
+                throw BypassException(UiText.res(R.string.bypass_error_wrong_type, type))
             }
 
             val key = json.optString("key")
             if (key.isBlank()) {
-                throw BypassException("API không trả về key.")
+                throw BypassException(UiText.res(R.string.bypass_error_no_key))
             }
 
             BypassResult(

@@ -1,5 +1,7 @@
 package com.kasumi.tool
 
+import android.content.Context
+
 import android.os.Environment
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +29,10 @@ import java.io.File
  * lấy được toàn quyền truy cập DB. Nên thay bằng một role hạn chế quyền hoặc
  * đặt sau một backend proxy trước khi phát hành rộng rãi.
  */
-class NeonSyncManager(private val client: OkHttpClient) {
+class NeonSyncManager(
+    private val context: Context,
+    private val client: OkHttpClient,
+) {
 
     class NeonException(message: String) : Exception(message)
 
@@ -64,7 +69,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
                 .build()
 
             client.newCall(request).execute().use { resp ->
-                val text = resp.body?.string().orEmpty()
+                val text = resp.body.string()
                 if (!resp.isSuccessful) {
                     val msg = try {
                         JSONObject(text).optString("message").ifBlank { "HTTP ${resp.code}" }
@@ -76,7 +81,7 @@ class NeonSyncManager(private val client: OkHttpClient) {
                 try {
                     JSONObject(text)
                 } catch (_: Exception) {
-                    throw NeonException("Phản hồi không hợp lệ từ máy chủ")
+                    throw NeonException(context.getString(R.string.sync_error_invalid_response))
                 }
             }
         }
