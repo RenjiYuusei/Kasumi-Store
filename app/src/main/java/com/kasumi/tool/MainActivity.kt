@@ -122,9 +122,15 @@ class MainActivity : ComponentActivity() {
 
     // --- Installer intents ----------------------------------------------------
 
-    /** Hands a single APK to the system package installer. */
-    private fun installWithSystemInstaller(file: File, report: (UiText) -> Unit) {
-        if (!ensureCanRequestInstalls(report)) return
+    /**
+     * Hands a single APK to the system package installer.
+     *
+     * @return whether the caller may drop the request. False means the user was
+     *   sent to grant "install unknown apps" first and nothing was installed yet,
+     *   so the request has to be kept for a retry once they come back.
+     */
+    private fun installWithSystemInstaller(file: File, report: (UiText) -> Unit): Boolean {
+        if (!ensureCanRequestInstalls(report)) return false
 
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -132,16 +138,25 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        try {
+        return try {
             startActivity(intent)
+            true
         } catch (e: Exception) {
+            // No installer on this ROM: retrying will not help, so the request
+            // is finished either way.
             report(UiText.res(R.string.open_installer_failed, e.message ?: ""))
+            true
         }
     }
 
-    /** Installs a split package through a PackageInstaller session. */
-    private suspend fun installSplitsWithSession(files: List<File>, report: (UiText) -> Unit) {
-        if (!ensureCanRequestInstalls(report)) return
+    /**
+     * Installs a split package through a PackageInstaller session.
+     *
+     * @return whether the caller may drop the request; see
+     *   [installWithSystemInstaller].
+     */
+    private suspend fun installSplitsWithSession(files: List<File>, report: (UiText) -> Unit): Boolean {
+        if (!ensureCanRequestInstalls(report)) return false
 
         val installer = packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
@@ -174,8 +189,11 @@ class MainActivity : ComponentActivity() {
                 report(UiText.res(R.string.install_in_progress))
             }
         } catch (e: Exception) {
+            // A session failure is terminal for this attempt; the user can start
+            // a new install rather than having it silently retried on resume.
             report(UiText.res(R.string.install_splits_error, e.message ?: ""))
         }
+        return true
     }
 
     /**

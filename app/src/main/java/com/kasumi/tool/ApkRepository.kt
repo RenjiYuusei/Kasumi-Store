@@ -29,6 +29,7 @@ import java.io.FileOutputStream
 import java.io.FileReader
 import java.io.IOException
 import java.io.OutputStreamWriter
+import java.io.RandomAccessFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
@@ -415,4 +416,47 @@ internal fun verifyDownloadedPackage(file: File, expectedLength: Long) {
     if (read < 2 || magic[0] != 0x50.toByte() || magic[1] != 0x4B.toByte()) {
         throw IOException("Downloaded file is not an APK package")
     }
+    // The header alone says nothing about how much arrived: a stream cut short
+    // after the first local-file header still starts with PK. Without a
+    // Content-Length there is nothing else to compare against, so completeness
+    // has to come from the archive itself.
+    if (!endsWithCentralDirectory(file)) {
+        throw IOException("Download is incomplete: the archive has no end-of-central-directory record")
+    }
 }
+
+/**
+ * True when the file ends with a ZIP end-of-central-directory (EOCD) record.
+ *
+ * EOCD is always the final structure of a ZIP — the APK Signing Block sits
+ * before the central directory, not after it — so its presence means the
+ * transfer really reached the end of the archive. It is 22 bytes plus an
+ * optional comment of up to 65535, hence the search window.
+ */
+private fun endsWithCentralDirectory(file: File): Boolean {
+    val length = file.length()
+    if (length < EOCD_MIN_SIZE) return false
+
+    val window = minOf(length, EOCD_MAX_SIZE).toInt()
+    val tail = ByteArray(window)
+    RandomAccessFile(file, "r").use { raf ->
+        raf.seek(length - window)
+        raf.readFully(tail)
+    }
+
+    // Scan backwards: the real EOCD is the last match, and a stored entry could
+    // otherwise contain the same four bytes.
+    for (i in window - EOCD_MIN_SIZE downTo 0) {
+        if (tail[i] == 0x50.toByte() &&
+            tail[i + 1] == 0x4B.toByte() &&
+            tail[i + 2] == 0x05.toByte() &&
+            tail[i + 3] == 0x06.toByte()
+        ) {
+            return true
+        }
+    }
+    return false
+}
+
+private const val EOCD_MIN_SIZE = 22
+private const val EOCD_MAX_SIZE = 22L + 65_535L

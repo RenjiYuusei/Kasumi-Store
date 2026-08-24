@@ -7,25 +7,34 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class DownloadVerificationTest {
 
     @get:Rule
     val temp = TemporaryFolder()
 
-    /** A minimal file that starts like every ZIP-based APK container. */
-    private fun apkLike(size: Int = 64): File {
+    /** A real, complete ZIP — the shape every .apk/.apks/.apkm/.xapk has. */
+    private fun completePackage(payload: Int = 512): File {
         val f = temp.newFile()
-        val bytes = ByteArray(size)
-        bytes[0] = 0x50 // 'P'
-        bytes[1] = 0x4B // 'K'
-        bytes[2] = 0x03
-        bytes[3] = 0x04
-        f.writeBytes(bytes)
+        ZipOutputStream(f.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("AndroidManifest.xml"))
+            zip.write(ByteArray(payload))
+            zip.closeEntry()
+        }
         return f
     }
 
-    private fun expectFailure(file: File, expectedLength: Long, because: String) {
+    /** The same archive with its tail lost, as a dropped connection would leave it. */
+    private fun truncatedPackage(keepFraction: Double = 0.5): File {
+        val whole = completePackage().readBytes()
+        val cut = temp.newFile()
+        cut.writeBytes(whole.copyOf((whole.size * keepFraction).toInt()))
+        return cut
+    }
+
+    private fun expectRejected(file: File, expectedLength: Long, because: String) {
         try {
             verifyDownloadedPackage(file, expectedLength)
             fail("Expected verification to reject the download: $because")
@@ -36,18 +45,34 @@ class DownloadVerificationTest {
 
     @Test
     fun `a complete package with a matching length is accepted`() {
-        val f = apkLike(64)
-        verifyDownloadedPackage(f, 64L)
+        val f = completePackage()
+        verifyDownloadedPackage(f, f.length())
     }
 
     @Test
     fun `a complete package is accepted when the server sent no length`() {
-        verifyDownloadedPackage(apkLike(64), -1L)
+        verifyDownloadedPackage(completePackage(), -1L)
     }
 
     @Test
     fun `a short read against a known length is rejected`() {
-        expectFailure(apkLike(10), 64L, "10 of 64 bytes arrived")
+        val f = truncatedPackage()
+        expectRejected(f, f.length() + 1000L, "fewer bytes arrived than advertised")
+    }
+
+    /**
+     * The case that matters most: no Content-Length to compare against, and the
+     * stream stopped after the first local-file header. The bytes still start
+     * with PK, so only the missing end-of-central-directory record gives it away.
+     */
+    @Test
+    fun `a truncated archive is rejected when the length is unknown`() {
+        expectRejected(truncatedPackage(), -1L, "the archive has no end-of-central-directory")
+    }
+
+    @Test
+    fun `an archive cut just before its central directory is rejected`() {
+        expectRejected(truncatedPackage(keepFraction = 0.95), -1L, "the tail is missing")
     }
 
     /**
@@ -56,12 +81,12 @@ class DownloadVerificationTest {
      */
     @Test
     fun `an empty download is rejected even when Content-Length agrees`() {
-        expectFailure(temp.newFile(), 0L, "the body was empty")
+        expectRejected(temp.newFile(), 0L, "the body was empty")
     }
 
     @Test
     fun `an empty download is rejected when the length is unknown`() {
-        expectFailure(temp.newFile(), -1L, "the body was empty")
+        expectRejected(temp.newFile(), -1L, "the body was empty")
     }
 
     /**
@@ -73,21 +98,33 @@ class DownloadVerificationTest {
         val f = temp.newFile()
         val html = "<!DOCTYPE html><html><body>Link expired</body></html>".toByteArray()
         f.writeBytes(html)
-        expectFailure(f, html.size.toLong(), "it is HTML, not a package")
+        expectRejected(f, html.size.toLong(), "it is HTML, not a package")
     }
 
-    /** Close-delimited responses give no length to compare against at all. */
     @Test
     fun `a non-package payload is rejected when the length is unknown`() {
         val f = temp.newFile()
         f.writeBytes("not an apk".toByteArray())
-        expectFailure(f, -1L, "it does not start with the ZIP signature")
+        expectRejected(f, -1L, "it does not start with the ZIP signature")
     }
 
     @Test
     fun `a file too short to hold a signature is rejected`() {
         val f = temp.newFile()
         f.writeBytes(byteArrayOf(0x50))
-        expectFailure(f, 1L, "one byte cannot carry the PK signature")
+        expectRejected(f, 1L, "one byte cannot carry the PK signature")
+    }
+
+    /** A comment after the EOCD is legal, so the record must still be found. */
+    @Test
+    fun `a package whose archive comment follows the record is accepted`() {
+        val f = temp.newFile()
+        ZipOutputStream(f.outputStream()).use { zip ->
+            zip.setComment("built by CI")
+            zip.putNextEntry(ZipEntry("AndroidManifest.xml"))
+            zip.write(ByteArray(64))
+            zip.closeEntry()
+        }
+        verifyDownloadedPackage(f, f.length())
     }
 }

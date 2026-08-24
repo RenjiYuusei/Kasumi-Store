@@ -77,7 +77,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -89,14 +92,16 @@ private data class NavDestination(val index: Int, val title: String, val icon: I
  * Root of the UI: navigation drawer, top bar, and the five feature tabs.
  *
  * Install effects are routed back out to the Activity through [onInstallApk] /
- * [onInstallSplits] because they need Activity-scoped APIs.
+ * [onInstallSplits] because they need Activity-scoped APIs. Both report whether
+ * the request is finished: false means the user still has to grant permission,
+ * and the request is retried when they return.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KasumiApp(
     viewModel: AppsViewModel,
-    onInstallApk: (File, (UiText) -> Unit) -> Unit,
-    onInstallSplits: suspend (List<File>, (UiText) -> Unit) -> Unit,
+    onInstallApk: (File, (UiText) -> Unit) -> Boolean,
+    onInstallSplits: suspend (List<File>, (UiText) -> Unit) -> Boolean,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -271,8 +276,8 @@ private fun KasumiEvents(
     viewModel: AppsViewModel,
     pendingInstall: InstallRequest?,
     showMessage: (UiText) -> Unit,
-    onInstallApk: (File, (UiText) -> Unit) -> Unit,
-    onInstallSplits: suspend (List<File>, (UiText) -> Unit) -> Unit,
+    onInstallApk: (File, (UiText) -> Unit) -> Boolean,
+    onInstallSplits: suspend (List<File>, (UiText) -> Unit) -> Boolean,
 ) {
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -282,17 +287,26 @@ private fun KasumiEvents(
         }
     }
 
-    LaunchedEffect(pendingInstall) {
-        when (pendingInstall) {
-            null -> Unit
-            is InstallRequest.Single -> {
-                onInstallApk(pendingInstall.file, showMessage)
-                viewModel.onInstallRequestHandled()
-            }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(pendingInstall, lifecycleOwner) {
+        val request = pendingInstall ?: return@LaunchedEffect
+        var sentToSettings = false
 
-            is InstallRequest.Splits -> {
-                onInstallSplits(pendingInstall.files, showMessage)
-                viewModel.onInstallRequestHandled()
+        // repeatOnLifecycle rather than a plain call: when the app lacks the
+        // "install unknown apps" permission the handover only opens Settings, and
+        // the request has to be tried again once the user grants it and comes
+        // back. Returning to RESUMED is exactly that moment.
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val handled = when (request) {
+                is InstallRequest.Single -> onInstallApk(request.file, showMessage)
+                is InstallRequest.Splits -> onInstallSplits(request.files, showMessage)
+            }
+            when {
+                handled -> viewModel.onInstallRequestHandled()
+                // Back from Settings and still not granted. Drop the request
+                // instead of bouncing the user to Settings on every resume.
+                sentToSettings -> viewModel.onInstallRequestHandled()
+                else -> sentToSettings = true
             }
         }
     }
