@@ -193,4 +193,92 @@ class DownloadVerificationTest {
         cut.writeBytes(bytes.copyOf(inner.size + inner.size / 2))
         expectRejected(cut, -1L, "the outer archive never finished")
     }
+
+    // --- Zip64 --------------------------------------------------------------
+
+    private fun le16(v: Int) = byteArrayOf((v and 0xFF).toByte(), ((v shr 8) and 0xFF).toByte())
+
+    private fun le32(v: Long) = ByteArray(4) { ((v shr (it * 8)) and 0xFF).toByte() }
+
+    private fun le64(v: Long) = ByteArray(8) { ((v shr (it * 8)) and 0xFF).toByte() }
+
+    /** Offset of the plain EOCD in an archive that has no archive comment. */
+    private fun eocdStartOf(bytes: ByteArray) = bytes.size - 22
+
+    /**
+     * Rebuilds a normal archive with a Zip64 tail: the central directory is kept
+     * where it is, then a Zip64 EOCD record, its locator, and an EOCD carrying
+     * the 0xFFFFFFFF sentinels. Producing a genuine Zip64 file would need more
+     * than 4 GB or 65535 entries, which a unit test cannot afford.
+     *
+     * @param corruptLocator writes a wrong locator signature, standing in for the
+     *   Zip64 structures being absent or damaged.
+     */
+    private fun zip64Package(corruptLocator: Boolean = false): File {
+        val normal = completePackage(payload = 256).readBytes()
+        val eocdStart = eocdStartOf(normal)
+        val cdSize = readLe32(normal, eocdStart + 12)
+        val cdOffset = readLe32(normal, eocdStart + 16)
+
+        val out = java.io.ByteArrayOutputStream()
+        out.write(normal, 0, eocdStart) // local headers + central directory
+
+        val zip64RecordOffset = eocdStart.toLong()
+        out.write(le32(0x06064b50L)) // Zip64 EOCD signature
+        out.write(le64(44L)) // size of the record that follows
+        out.write(le16(45)); out.write(le16(45)) // version made by / needed
+        out.write(le32(0L)); out.write(le32(0L)) // this disk / disk with CD
+        out.write(le64(1L)); out.write(le64(1L)) // entries here / entries total
+        out.write(le64(cdSize))
+        out.write(le64(cdOffset))
+
+        out.write(le32(if (corruptLocator) 0x07064b51L else 0x07064b50L))
+        out.write(le32(0L))
+        out.write(le64(zip64RecordOffset))
+        out.write(le32(1L))
+
+        out.write(le32(0x06054b50L)) // EOCD
+        out.write(le16(0)); out.write(le16(0))
+        out.write(le16(1)); out.write(le16(1))
+        out.write(le32(0xFFFFFFFFL)) // central directory size  -> Zip64
+        out.write(le32(0xFFFFFFFFL)) // central directory offset -> Zip64
+        out.write(le16(0)) // no comment
+
+        val f = temp.newFile()
+        f.writeBytes(out.toByteArray())
+        return f
+    }
+
+    private fun readLe32(bytes: ByteArray, at: Int): Long =
+        (bytes[at].toLong() and 0xFF) or
+            ((bytes[at + 1].toLong() and 0xFF) shl 8) or
+            ((bytes[at + 2].toLong() and 0xFF) shl 16) or
+            ((bytes[at + 3].toLong() and 0xFF) shl 24)
+
+    @Test
+    fun `a complete zip64 archive is accepted`() {
+        val f = zip64Package()
+        verifyDownloadedPackage(f, f.length())
+    }
+
+    /**
+     * The sentinel used to be taken as "cannot check, assume complete". An
+     * archive that claims Zip64 but has no usable Zip64 record is not complete.
+     */
+    @Test
+    fun `a zip64 sentinel without a valid locator is rejected`() {
+        val f = zip64Package(corruptLocator = true)
+        expectRejected(f, f.length(), "the Zip64 locator is not there")
+    }
+
+    /** A plain archive whose EOCD was patched to claim Zip64 has no Zip64 tail at all. */
+    @Test
+    fun `a sentinel on an archive with no zip64 structures is rejected`() {
+        val bytes = completePackage(payload = 256).readBytes()
+        val eocdStart = eocdStartOf(bytes)
+        le32(0xFFFFFFFFL).copyInto(bytes, eocdStart + 16)
+        val f = temp.newFile()
+        f.writeBytes(bytes)
+        expectRejected(f, f.length(), "it claims Zip64 but carries none")
+    }
 }

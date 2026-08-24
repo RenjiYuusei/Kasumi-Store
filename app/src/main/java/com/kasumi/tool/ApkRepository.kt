@@ -484,25 +484,70 @@ private fun describesCompleteArchive(
     val commentLength = readUInt16(tail, offset + 20)
     if (offset + EOCD_MIN_SIZE + commentLength != window) return false
 
+    val eocdStart = fileLength - window + offset
     val centralDirSize = readUInt32(tail, offset + 12)
     val centralDirOffset = readUInt32(tail, offset + 16)
-    // 0xFFFFFFFF is the Zip64 sentinel: the real values live in a Zip64 record,
-    // so there is nothing to cross-check and the EOF match has to stand alone.
-    if (centralDirSize == ZIP64_SENTINEL || centralDirOffset == ZIP64_SENTINEL) return true
 
+    // 0xFFFFFFFF means the real values live in a Zip64 record. That has to be
+    // followed through rather than waved past: "cannot check here" is not the
+    // same as "complete", and a half-received archive whose tail happens to end
+    // on a sentinel EOCD would otherwise be accepted.
+    return if (centralDirSize == ZIP64_SENTINEL || centralDirOffset == ZIP64_SENTINEL) {
+        hasCompleteZip64Tail(raf, eocdStart)
+    } else {
+        hasCentralDirectoryAt(raf, centralDirOffset, centralDirSize, eocdStart)
+    }
+}
+
+/**
+ * Follows the Zip64 chain that sits between the central directory and the EOCD:
+ * a locator immediately before the EOCD points back at the Zip64 EOCD record,
+ * which carries the real central-directory size and offset.
+ */
+private fun hasCompleteZip64Tail(raf: RandomAccessFile, eocdStart: Long): Boolean {
+    val locatorStart = eocdStart - ZIP64_LOCATOR_SIZE
+    if (locatorStart < 0) return false
+
+    val locator = ByteArray(ZIP64_LOCATOR_SIZE)
+    raf.seek(locatorStart)
+    raf.readFully(locator)
+    if (readUInt32(locator, 0) != ZIP64_LOCATOR_SIGNATURE) return false
+
+    val recordOffset = readInt64(locator, 8)
+    if (recordOffset < 0 || recordOffset + ZIP64_EOCD_MIN_SIZE > locatorStart) return false
+
+    val record = ByteArray(ZIP64_EOCD_MIN_SIZE)
+    raf.seek(recordOffset)
+    raf.readFully(record)
+    if (readUInt32(record, 0) != ZIP64_EOCD_SIGNATURE) return false
+
+    return hasCentralDirectoryAt(
+        raf = raf,
+        centralDirOffset = readInt64(record, 48),
+        centralDirSize = readInt64(record, 40),
+        limit = recordOffset,
+    )
+}
+
+/**
+ * Whether a central directory of [centralDirSize] bytes really begins at
+ * [centralDirOffset] and ends before [limit].
+ */
+private fun hasCentralDirectoryAt(
+    raf: RandomAccessFile,
+    centralDirOffset: Long,
+    centralDirSize: Long,
+    limit: Long,
+): Boolean {
     // An APK always has entries, so a central directory smaller than a single
     // header cannot belong to a usable package.
     if (centralDirSize < CD_HEADER_MIN_SIZE) return false
-    val eocdStart = fileLength - window + offset
-    if (centralDirOffset + centralDirSize > eocdStart) return false
+    if (centralDirOffset < 0 || centralDirOffset + centralDirSize > limit) return false
 
     val header = ByteArray(4)
     raf.seek(centralDirOffset)
     raf.readFully(header)
-    return header[0] == 0x50.toByte() &&
-        header[1] == 0x4B.toByte() &&
-        header[2] == 0x01.toByte() &&
-        header[3] == 0x02.toByte()
+    return readUInt32(header, 0) == CD_HEADER_SIGNATURE
 }
 
 private fun readUInt16(bytes: ByteArray, at: Int): Int =
@@ -514,7 +559,22 @@ private fun readUInt32(bytes: ByteArray, at: Int): Long =
         ((bytes[at + 2].toLong() and 0xFF) shl 16) or
         ((bytes[at + 3].toLong() and 0xFF) shl 24)
 
+private fun readInt64(bytes: ByteArray, at: Int): Long {
+    var value = 0L
+    for (i in 7 downTo 0) {
+        value = (value shl 8) or (bytes[at + i].toLong() and 0xFF)
+    }
+    return value
+}
+
 private const val EOCD_MIN_SIZE = 22
 private const val EOCD_MAX_SIZE = 22L + 65_535L
 private const val ZIP64_SENTINEL = 0xFFFFFFFFL
 private const val CD_HEADER_MIN_SIZE = 46L
+
+/** Little-endian on-disk signatures. */
+private const val CD_HEADER_SIGNATURE = 0x02014b50L
+private const val ZIP64_EOCD_SIGNATURE = 0x06064b50L
+private const val ZIP64_LOCATOR_SIGNATURE = 0x07064b50L
+private const val ZIP64_LOCATOR_SIZE = 20
+private const val ZIP64_EOCD_MIN_SIZE = 56

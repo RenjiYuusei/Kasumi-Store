@@ -18,6 +18,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.kasumi.tool.ui.theme.KasumiTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -160,8 +161,9 @@ class MainActivity : ComponentActivity() {
 
         val installer = packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        var sessionId = NO_SESSION
         try {
-            val sessionId = installer.createSession(params)
+            sessionId = installer.createSession(params)
             installer.openSession(sessionId).use { session ->
                 withContext(Dispatchers.IO) {
                     for (f in files) {
@@ -188,12 +190,31 @@ class MainActivity : ComponentActivity() {
                 session.commit(pi.intentSender)
                 report(UiText.res(R.string.install_in_progress))
             }
+        } catch (e: CancellationException) {
+            // The screen left RESUMED while the APKs were still being written, so
+            // nothing was committed. Rethrowing keeps the caller from marking the
+            // request handled — swallowing it here reported success and dropped
+            // the install, because cancellation is cooperative and the
+            // acknowledgement that follows is not a suspending call.
+            abandonQuietly(installer, sessionId)
+            throw e
         } catch (e: Exception) {
             // A session failure is terminal for this attempt; the user can start
             // a new install rather than having it silently retried on resume.
+            abandonQuietly(installer, sessionId)
             report(UiText.res(R.string.install_splits_error, e.message ?: ""))
         }
         return true
+    }
+
+    /**
+     * Drops a session that never reached commit. Sessions outlive the process and
+     * an app may only hold so many, so leaking one per interrupted install
+     * eventually blocks installing altogether.
+     */
+    private fun abandonQuietly(installer: PackageInstaller, sessionId: Int) {
+        if (sessionId == NO_SESSION) return
+        runCatching { installer.abandonSession(sessionId) }
     }
 
     /**
@@ -249,5 +270,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val REQUEST_STORAGE = 100
+        const val NO_SESSION = -1
     }
 }
