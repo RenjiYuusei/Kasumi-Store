@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,35 @@ sealed interface InstallRequest {
     data class Splits(val files: List<File>) : InstallRequest
 }
 
+private const val INSTALL_KIND_SINGLE = "single"
+private const val INSTALL_KIND_SPLITS = "splits"
+
+/** Flattens a request into the two Bundle-friendly values SavedStateHandle stores. */
+internal fun encodeInstallRequest(request: InstallRequest?): Pair<String?, List<String>?> =
+    when (request) {
+        null -> null to null
+        is InstallRequest.Single -> INSTALL_KIND_SINGLE to listOf(request.file.path)
+        is InstallRequest.Splits -> INSTALL_KIND_SPLITS to request.files.map { it.path }
+    }
+
+/**
+ * Rebuilds a request saved before the process was killed.
+ *
+ * Returns null when the packages are no longer on disk: these live in the cache
+ * directory, which the system may clear while the app is gone, and replaying a
+ * request whose files have vanished would only hand the installer a dead path.
+ */
+internal fun decodeInstallRequest(kind: String?, paths: List<String>?): InstallRequest? {
+    if (kind == null || paths.isNullOrEmpty()) return null
+    val files = paths.map(::File)
+    if (files.any { !it.isFile || it.length() == 0L }) return null
+    return when (kind) {
+        INSTALL_KIND_SINGLE -> InstallRequest.Single(files.first())
+        INSTALL_KIND_SPLITS -> InstallRequest.Splits(files)
+        else -> null
+    }
+}
+
 /** Everything the apps screen renders. */
 data class AppsUiState(
     val apps: List<ApkItem> = emptyList(),
@@ -69,14 +99,28 @@ sealed interface AppsEvent {
  * the state survives configuration changes and the work is cancelled exactly
  * once, when the screen really goes away.
  */
-class AppsViewModel(application: Application) : AndroidViewModel(application) {
+class AppsViewModel(
+    application: Application,
+    private val savedState: SavedStateHandle,
+) : AndroidViewModel(application) {
 
     private val repository = ApkRepository(
         context = application,
         client = (application as KasumiApplication).okHttpClient,
     )
 
-    private val _uiState = MutableStateFlow(AppsUiState())
+    // Restored rather than defaulted: sending the user to grant "install unknown
+    // apps" puts Settings in the foreground, and the system is free to kill this
+    // process while it is there. Without this the pending hand-off would be gone
+    // by the time they came back, exactly when it is needed most.
+    private val _uiState = MutableStateFlow(
+        AppsUiState(
+            pendingInstall = decodeInstallRequest(
+                kind = savedState[KEY_INSTALL_KIND],
+                paths = savedState[KEY_INSTALL_PATHS],
+            )
+        )
+    )
     val uiState: StateFlow<AppsUiState> = _uiState.asStateFlow()
 
     private val _events = MutableSharedFlow<AppsEvent>(
@@ -218,7 +262,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         if (installedByRoot) {
             emit(UiText.res(R.string.install_success))
         } else {
-            _uiState.update { it.copy(pendingInstall = InstallRequest.Splits(pkg.apks)) }
+            setPendingInstall(InstallRequest.Splits(pkg.apks))
         }
     }
 
@@ -229,7 +273,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         if (installedByRoot) {
             emit(UiText.res(R.string.install_success))
         } else {
-            _uiState.update { it.copy(pendingInstall = InstallRequest.Single(apkFile)) }
+            setPendingInstall(InstallRequest.Single(apkFile))
         }
     }
 
@@ -239,7 +283,15 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
      * Activity that is destroyed mid-handover and is retried on the next one,
      * rather than being dropped.
      */
-    fun onInstallRequestHandled() = _uiState.update { it.copy(pendingInstall = null) }
+    fun onInstallRequestHandled() = setPendingInstall(null)
+
+    /** Keeps the live state and the saved-state copy of the request in step. */
+    private fun setPendingInstall(request: InstallRequest?) {
+        val (kind, paths) = encodeInstallRequest(request)
+        savedState[KEY_INSTALL_KIND] = kind
+        savedState[KEY_INSTALL_PATHS] = paths
+        _uiState.update { it.copy(pendingInstall = request) }
+    }
 
     // --- Stats ----------------------------------------------------------------
 
@@ -257,6 +309,8 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val TAG = "AppsViewModel"
+        private const val KEY_INSTALL_KIND = "pending_install_kind"
+        private const val KEY_INSTALL_PATHS = "pending_install_paths"
         private val SPLIT_EXTENSIONS = listOf(".apks", ".xapk", ".apkm")
     }
 }
