@@ -147,10 +147,10 @@ class ApkRepository(
      * Downloads [item] into the APK cache.
      *
      * The body is streamed into a sibling `.part` file and only renamed onto the
-     * final path once the transfer completed and the length matched
-     * `Content-Length`. Without this, a download interrupted by a dropped
-     * connection or by the user leaving left a truncated file behind that later
-     * looked cached and was handed straight to the installer.
+     * final path once [verifyDownloadedPackage] accepts it. Without this, a
+     * download interrupted by a dropped connection or by the user leaving left a
+     * truncated file behind that later looked cached and was handed straight to
+     * the installer.
      */
     suspend fun downloadApk(item: ApkItem): File = withContext(Dispatchers.IO) {
         val url = item.url ?: throw IOException("Item has no download URL")
@@ -174,9 +174,7 @@ class ApkRepository(
                 body.byteStream().use { input ->
                     FileOutputStream(partFile).use { out -> input.copyTo(out, COPY_BUFFER) }
                 }
-                if (expected > 0 && partFile.length() != expected) {
-                    throw IOException("Truncated download: " + partFile.length() + " of " + expected + " bytes")
-                }
+                verifyDownloadedPackage(partFile, expected)
             }
             outFile.delete()
             if (!partFile.renameTo(outFile)) {
@@ -380,5 +378,41 @@ class ApkRepository(
 
         const val DEFAULT_SOURCE_URL =
             "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
+    }
+}
+
+/**
+ * Accepts a finished download only if it can actually be an APK container.
+ *
+ * Comparing against `Content-Length` is not enough on its own:
+ *
+ *  - a server may answer without a length at all (HTTP/1.0 style, delimited by
+ *    closing the connection), and then a transfer cut short mid-way reaches us
+ *    as a clean end-of-stream with nothing to compare against;
+ *  - `Content-Length: 0` used to slip past the old `expected > 0` guard, so an
+ *    empty file was renamed into the cache and later handed to the installer;
+ *  - a mirror that has expired the link often answers 200 with an HTML notice,
+ *    which is a perfectly complete response and simply is not an APK.
+ *
+ * Every format this app installs (.apk, .apks, .apkm, .xapk) is a ZIP, so the
+ * two-byte `PK` signature is a cheap check that rules all three out — the same
+ * check [ApkRepository.extractApkEntry] already applies to entries inside a
+ * container.
+ *
+ * @param expectedLength `Content-Length`, or a negative value when unknown.
+ * @throws IOException when the file cannot be a usable package.
+ */
+internal fun verifyDownloadedPackage(file: File, expectedLength: Long) {
+    val actual = file.length()
+    if (actual == 0L) {
+        throw IOException("Download is empty")
+    }
+    if (expectedLength >= 0 && actual != expectedLength) {
+        throw IOException("Truncated download: $actual of $expectedLength bytes")
+    }
+    val magic = ByteArray(2)
+    val read = FileInputStream(file).use { it.read(magic) }
+    if (read < 2 || magic[0] != 0x50.toByte() || magic[1] != 0x4B.toByte()) {
+        throw IOException("Downloaded file is not an APK package")
     }
 }

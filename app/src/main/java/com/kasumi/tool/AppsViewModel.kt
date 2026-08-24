@@ -24,6 +24,23 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
+/**
+ * A package that is ready on disk and still has to be handed to the system
+ * installer by the Activity.
+ *
+ * This is state rather than a one-shot event on purpose. The download runs in
+ * [androidx.lifecycle.viewModelScope] and therefore survives a configuration
+ * change, but the collector lives in the composition and does not. A shared flow
+ * with `replay = 0` drops anything emitted while nobody is subscribed, so an
+ * install that finished during a rotation used to vanish: the APK was downloaded,
+ * the spinner stopped, and no installer ever opened. As state it is simply
+ * replayed to whatever composition exists next.
+ */
+sealed interface InstallRequest {
+    data class Single(val file: File) : InstallRequest
+    data class Splits(val files: List<File>) : InstallRequest
+}
+
 /** Everything the apps screen renders. */
 data class AppsUiState(
     val apps: List<ApkItem> = emptyList(),
@@ -32,13 +49,15 @@ data class AppsUiState(
     val searchQuery: String = "",
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
+    val pendingInstall: InstallRequest? = null,
 )
 
-/** One-shot effects the Activity has to carry out, because they need an Activity. */
+/**
+ * Transient effects. Only messages travel this way: losing a snackbar because
+ * the screen was being recreated is harmless, losing an install is not.
+ */
 sealed interface AppsEvent {
     data class Message(val text: UiText) : AppsEvent
-    data class InstallApk(val file: File) : AppsEvent
-    data class InstallSplits(val files: List<File>) : AppsEvent
 }
 
 /**
@@ -199,7 +218,7 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         if (installedByRoot) {
             emit(UiText.res(R.string.install_success))
         } else {
-            _events.emit(AppsEvent.InstallSplits(pkg.apks))
+            _uiState.update { it.copy(pendingInstall = InstallRequest.Splits(pkg.apks)) }
         }
     }
 
@@ -210,9 +229,17 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         if (installedByRoot) {
             emit(UiText.res(R.string.install_success))
         } else {
-            _events.emit(AppsEvent.InstallApk(apkFile))
+            _uiState.update { it.copy(pendingInstall = InstallRequest.Single(apkFile)) }
         }
     }
+
+    /**
+     * Clears the pending request once the Activity has actually started the
+     * installer. Acknowledging only afterwards means a request survives an
+     * Activity that is destroyed mid-handover and is retried on the next one,
+     * rather than being dropped.
+     */
+    fun onInstallRequestHandled() = _uiState.update { it.copy(pendingInstall = null) }
 
     // --- Stats ----------------------------------------------------------------
 

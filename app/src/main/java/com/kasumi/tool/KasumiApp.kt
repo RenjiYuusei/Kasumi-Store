@@ -57,6 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -123,7 +124,7 @@ fun KasumiApp(
         { message -> showMessage(UiText.Raw(message)) }
     }
 
-    KasumiEvents(viewModel, showMessage, onInstallApk, onInstallSplits)
+    KasumiEvents(viewModel, uiState.pendingInstall, showMessage, onInstallApk, onInstallSplits)
 
     val destinations = listOf(
         NavDestination(0, stringResource(R.string.tab_apps), Icons.Default.Apps),
@@ -253,20 +254,45 @@ fun KasumiApp(
     }
 }
 
-/** Bridges one-shot [AppsEvent]s to the snackbar and the Activity installers. */
+/**
+ * Bridges the ViewModel to the Activity: transient messages to the snackbar, and
+ * a pending install to the system installer.
+ *
+ * The install is driven from state, not from the event flow. A download keeps
+ * running across a configuration change while the composition — and with it the
+ * collector — is torn down and rebuilt, and a `replay = 0` shared flow discards
+ * whatever is emitted in that gap. Reading it as state means the request is still
+ * there for the next composition, and [AppsViewModel.onInstallRequestHandled] is
+ * called only after the installer has actually been started, so a handover
+ * interrupted half-way is retried instead of lost.
+ */
 @Composable
 private fun KasumiEvents(
     viewModel: AppsViewModel,
+    pendingInstall: InstallRequest?,
     showMessage: (UiText) -> Unit,
     onInstallApk: (File, (UiText) -> Unit) -> Unit,
     onInstallSplits: suspend (List<File>, (UiText) -> Unit) -> Unit,
 ) {
-    androidx.compose.runtime.LaunchedEffect(viewModel) {
+    LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is AppsEvent.Message -> showMessage(event.text)
-                is AppsEvent.InstallApk -> onInstallApk(event.file, showMessage)
-                is AppsEvent.InstallSplits -> onInstallSplits(event.files, showMessage)
+            }
+        }
+    }
+
+    LaunchedEffect(pendingInstall) {
+        when (pendingInstall) {
+            null -> Unit
+            is InstallRequest.Single -> {
+                onInstallApk(pendingInstall.file, showMessage)
+                viewModel.onInstallRequestHandled()
+            }
+
+            is InstallRequest.Splits -> {
+                onInstallSplits(pendingInstall.files, showMessage)
+                viewModel.onInstallRequestHandled()
             }
         }
     }
