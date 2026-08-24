@@ -488,44 +488,78 @@ private fun describesCompleteArchive(
     val centralDirSize = readUInt32(tail, offset + 12)
     val centralDirOffset = readUInt32(tail, offset + 16)
 
-    // 0xFFFFFFFF means the real values live in a Zip64 record. That has to be
-    // followed through rather than waved past: "cannot check here" is not the
-    // same as "complete", and a half-received archive whose tail happens to end
-    // on a sentinel EOCD would otherwise be accepted.
-    return if (centralDirSize == ZIP64_SENTINEL || centralDirOffset == ZIP64_SENTINEL) {
-        hasCompleteZip64Tail(raf, eocdStart)
-    } else {
-        hasCentralDirectoryAt(raf, centralDirOffset, centralDirSize, eocdStart)
+    // Any field left at its sentinel means the real value was too large for the
+    // EOCD and lives in a Zip64 record. The 32-bit size/offset are unambiguous,
+    // but the 16-bit entry counts are not: an archive holding exactly 65535
+    // entries stores 65535, which is the same bit pattern.
+    val sizeOrOffsetDelegated = centralDirSize == ZIP64_SENTINEL || centralDirOffset == ZIP64_SENTINEL
+    val countDelegated = readUInt16(tail, offset + 8) == ZIP16_SENTINEL ||
+        readUInt16(tail, offset + 10) == ZIP16_SENTINEL
+
+    if (sizeOrOffsetDelegated || countDelegated) {
+        when (val zip64 = readZip64Tail(raf, eocdStart)) {
+            is Zip64Tail.Present -> return hasCentralDirectoryAt(
+                raf = raf,
+                centralDirOffset = zip64.centralDirOffset,
+                centralDirSize = zip64.centralDirSize,
+                limit = zip64.recordOffset,
+            )
+
+            // A locator that is there but leads nowhere means the tail did not
+            // arrive intact, whichever field pointed at it.
+            Zip64Tail.Broken -> return false
+
+            // No locator at all. Legitimate only for the exactly-65535-entries
+            // case above, where the 32-bit fields still carry real values; if
+            // those were the delegated ones there is nothing left to read.
+            Zip64Tail.Absent -> if (sizeOrOffsetDelegated) return false
+        }
     }
+
+    return hasCentralDirectoryAt(raf, centralDirOffset, centralDirSize, eocdStart)
+}
+
+/** Outcome of looking for the Zip64 chain that sits just before the EOCD. */
+private sealed interface Zip64Tail {
+    /** No locator: the archive is not Zip64 and the 32-bit fields stand. */
+    data object Absent : Zip64Tail
+
+    /** A locator is present but the record it points at is missing or damaged. */
+    data object Broken : Zip64Tail
+
+    data class Present(
+        val recordOffset: Long,
+        val centralDirSize: Long,
+        val centralDirOffset: Long,
+    ) : Zip64Tail
 }
 
 /**
- * Follows the Zip64 chain that sits between the central directory and the EOCD:
- * a locator immediately before the EOCD points back at the Zip64 EOCD record,
- * which carries the real central-directory size and offset.
+ * Reads the Zip64 chain: a 20-byte locator immediately before the EOCD points
+ * back at the Zip64 EOCD record, which carries the real central-directory size
+ * and offset.
  */
-private fun hasCompleteZip64Tail(raf: RandomAccessFile, eocdStart: Long): Boolean {
+private fun readZip64Tail(raf: RandomAccessFile, eocdStart: Long): Zip64Tail {
     val locatorStart = eocdStart - ZIP64_LOCATOR_SIZE
-    if (locatorStart < 0) return false
+    if (locatorStart < 0) return Zip64Tail.Absent
 
     val locator = ByteArray(ZIP64_LOCATOR_SIZE)
     raf.seek(locatorStart)
     raf.readFully(locator)
-    if (readUInt32(locator, 0) != ZIP64_LOCATOR_SIGNATURE) return false
+    if (readUInt32(locator, 0) != ZIP64_LOCATOR_SIGNATURE) return Zip64Tail.Absent
 
     val recordOffset = readInt64(locator, 8)
-    if (recordOffset < 0 || recordOffset + ZIP64_EOCD_MIN_SIZE > locatorStart) return false
+    if (recordOffset < 0 || recordOffset + ZIP64_EOCD_MIN_SIZE > locatorStart) return Zip64Tail.Broken
 
     val record = ByteArray(ZIP64_EOCD_MIN_SIZE)
     raf.seek(recordOffset)
     raf.readFully(record)
-    if (readUInt32(record, 0) != ZIP64_EOCD_SIGNATURE) return false
+    if (readUInt32(record, 0) != ZIP64_EOCD_SIGNATURE) return Zip64Tail.Broken
 
-    return hasCentralDirectoryAt(
-        raf = raf,
-        centralDirOffset = readInt64(record, 48),
+    return Zip64Tail.Present(
+        recordOffset = recordOffset,
         centralDirSize = readInt64(record, 40),
-        limit = recordOffset,
+        centralDirOffset = readInt64(record, 48),
     )
 }
 
@@ -570,6 +604,7 @@ private fun readInt64(bytes: ByteArray, at: Int): Long {
 private const val EOCD_MIN_SIZE = 22
 private const val EOCD_MAX_SIZE = 22L + 65_535L
 private const val ZIP64_SENTINEL = 0xFFFFFFFFL
+private const val ZIP16_SENTINEL = 0xFFFF
 private const val CD_HEADER_MIN_SIZE = 46L
 
 /** Little-endian on-disk signatures. */

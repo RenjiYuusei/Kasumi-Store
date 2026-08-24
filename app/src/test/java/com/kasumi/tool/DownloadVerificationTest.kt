@@ -214,7 +214,16 @@ class DownloadVerificationTest {
      * @param corruptLocator writes a wrong locator signature, standing in for the
      *   Zip64 structures being absent or damaged.
      */
-    private fun zip64Package(corruptLocator: Boolean = false): File {
+    private fun zip64Package(
+        corruptLocator: Boolean = false,
+        corruptRecord: Boolean = false,
+        withZip64Tail: Boolean = true,
+        // false = only the entry counts are sentinels, the 32-bit size/offset
+        // still carry real values. That is what an archive with more than 65535
+        // entries but under 4 GB looks like.
+        sentinelSizeAndOffset: Boolean = true,
+        sentinelCounts: Boolean = false,
+    ): File {
         val normal = completePackage(payload = 256).readBytes()
         val eocdStart = eocdStartOf(normal)
         val cdSize = readLe32(normal, eocdStart + 12)
@@ -224,24 +233,27 @@ class DownloadVerificationTest {
         out.write(normal, 0, eocdStart) // local headers + central directory
 
         val zip64RecordOffset = eocdStart.toLong()
-        out.write(le32(0x06064b50L)) // Zip64 EOCD signature
-        out.write(le64(44L)) // size of the record that follows
-        out.write(le16(45)); out.write(le16(45)) // version made by / needed
-        out.write(le32(0L)); out.write(le32(0L)) // this disk / disk with CD
-        out.write(le64(1L)); out.write(le64(1L)) // entries here / entries total
-        out.write(le64(cdSize))
-        out.write(le64(cdOffset))
+        if (withZip64Tail) {
+            out.write(le32(if (corruptRecord) 0x06064b51L else 0x06064b50L))
+            out.write(le64(44L)) // size of the record that follows
+            out.write(le16(45)); out.write(le16(45)) // version made by / needed
+            out.write(le32(0L)); out.write(le32(0L)) // this disk / disk with CD
+            out.write(le64(1L)); out.write(le64(1L)) // entries here / entries total
+            out.write(le64(cdSize))
+            out.write(le64(cdOffset))
 
-        out.write(le32(if (corruptLocator) 0x07064b51L else 0x07064b50L))
-        out.write(le32(0L))
-        out.write(le64(zip64RecordOffset))
-        out.write(le32(1L))
+            out.write(le32(if (corruptLocator) 0x07064b51L else 0x07064b50L))
+            out.write(le32(0L))
+            out.write(le64(zip64RecordOffset))
+            out.write(le32(1L))
+        }
 
+        val count = if (sentinelCounts) 0xFFFF else 1
         out.write(le32(0x06054b50L)) // EOCD
         out.write(le16(0)); out.write(le16(0))
-        out.write(le16(1)); out.write(le16(1))
-        out.write(le32(0xFFFFFFFFL)) // central directory size  -> Zip64
-        out.write(le32(0xFFFFFFFFL)) // central directory offset -> Zip64
+        out.write(le16(count)); out.write(le16(count))
+        out.write(le32(if (sentinelSizeAndOffset) 0xFFFFFFFFL else cdSize))
+        out.write(le32(if (sentinelSizeAndOffset) 0xFFFFFFFFL else cdOffset))
         out.write(le16(0)) // no comment
 
         val f = temp.newFile()
@@ -269,6 +281,45 @@ class DownloadVerificationTest {
     fun `a zip64 sentinel without a valid locator is rejected`() {
         val f = zip64Package(corruptLocator = true)
         expectRejected(f, f.length(), "the Zip64 locator is not there")
+    }
+
+    /**
+     * More than 65535 entries but under 4 GB: only the counts are sentinels, the
+     * 32-bit size and offset are real. The Zip64 chain still has to be honoured.
+     */
+    @Test
+    fun `a zip64 archive flagged only by its entry counts is accepted`() {
+        val f = zip64Package(sentinelSizeAndOffset = false, sentinelCounts = true)
+        verifyDownloadedPackage(f, f.length())
+    }
+
+    /**
+     * The count sentinel used to be ignored outright, so a broken Zip64 chain
+     * behind it went unnoticed and the archive took the ordinary path.
+     */
+    @Test
+    fun `an entry-count sentinel with a damaged zip64 record is rejected`() {
+        val f = zip64Package(
+            sentinelSizeAndOffset = false,
+            sentinelCounts = true,
+            corruptRecord = true,
+        )
+        expectRejected(f, f.length(), "the Zip64 record behind the locator is damaged")
+    }
+
+    /**
+     * 0xFFFF is also the honest count of an archive holding exactly 65535
+     * entries, which needs no Zip64 record at all. Demanding one here would
+     * reject a perfectly installable package, so the 32-bit fields stand.
+     */
+    @Test
+    fun `an entry-count sentinel with no zip64 tail falls back to the 32-bit fields`() {
+        val f = zip64Package(
+            sentinelSizeAndOffset = false,
+            sentinelCounts = true,
+            withZip64Tail = false,
+        )
+        verifyDownloadedPackage(f, f.length())
     }
 
     /** A plain archive whose EOCD was patched to claim Zip64 has no Zip64 tail at all. */
