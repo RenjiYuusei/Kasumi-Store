@@ -9,6 +9,8 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 from apksearch import APKMirror
 
+from apps_json import save_apps
+
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -404,8 +406,7 @@ def main():
         any_update = True
 
     if any_update:
-        with open(APPS_JSON_PATH, 'w', encoding='utf-8') as f:
-            json.dump(apps_data, f, indent=2, ensure_ascii=False)
+        save_apps(apps_data)
         print('Saved source/apps.json')
     else:
         print('No updates made')

@@ -1,7 +1,6 @@
 package com.kasumi.tool
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
@@ -28,7 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import kotlinx.coroutines.launch
 
 /**
@@ -46,9 +48,13 @@ fun SyncScreen(
     onShowSnackbar: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val manager = remember {
-        NeonSyncManager((context.applicationContext as KasumiApplication).okHttpClient)
+        NeonSyncManager(
+            context.applicationContext,
+            (context.applicationContext as KasumiApplication).okHttpClient,
+        )
     }
 
     var hasStorage by remember { mutableStateOf(hasStoragePermission()) }
@@ -78,11 +84,11 @@ fun SyncScreen(
         if (name.isEmpty()) return
         scope.launch {
             working = true
-            progressText = "Đang tải danh sách config từ database…"
+            progressText = resources.getString(R.string.sync_progress_fetch_remote)
             try {
                 remote = manager.fetchRemote(name)
             } catch (e: Exception) {
-                onShowSnackbar("Lỗi khi tải dữ liệu: ${e.message}")
+                onShowSnackbar(resources.getString(R.string.sync_error_fetch, e.message ?: ""))
             } finally {
                 working = false
                 progressText = null
@@ -102,7 +108,7 @@ fun SyncScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = "Đồng bộ Config",
+            text = stringResource(R.string.sync_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
@@ -136,13 +142,12 @@ fun SyncScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Tên đồng bộ",
+                    text = stringResource(R.string.sync_profile_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Đặt một tên để nhận diện bộ config (ví dụ tên máy của bạn). " +
-                        "Dùng lại đúng tên này ở máy khác để tải về.",
+                    text = stringResource(R.string.sync_profile_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -150,7 +155,7 @@ fun SyncScreen(
                     value = profileName,
                     onValueChange = { profileName = it },
                     singleLine = true,
-                    label = { Text("Tên") },
+                    label = { Text(stringResource(R.string.sync_profile_label)) },
                     placeholder = { Text("vd: may-cua-toi") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     modifier = Modifier.fillMaxWidth(),
@@ -166,13 +171,13 @@ fun SyncScreen(
                                 working = true
                                 try {
                                     val n = manager.syncUp(name) { done, total, fileName ->
-                                        progressText = "Đang tải lên $done/$total: $fileName"
+                                        progressText = resources.getString(R.string.sync_progress_upload, done, total, fileName)
                                     }
-                                    onShowSnackbar("Đã đồng bộ $n tệp config lên database.")
+                                    onShowSnackbar(resources.getString(R.string.sync_upload_success, n))
                                     refreshLocal()
                                     remote = manager.fetchRemote(name)
                                 } catch (e: Exception) {
-                                    onShowSnackbar("Đồng bộ thất bại: ${e.message}")
+                                    onShowSnackbar(resources.getString(R.string.sync_upload_failed, e.message ?: ""))
                                 } finally {
                                     working = false
                                     progressText = null
@@ -184,7 +189,7 @@ fun SyncScreen(
                     ) {
                         Icon(Icons.Default.CloudUpload, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (remote.isNullOrEmpty()) "Đồng bộ lên" else "Cập nhật đồng bộ")
+                        Text(stringResource(if (remote.isNullOrEmpty()) R.string.sync_button_upload else R.string.sync_button_update))
                     }
                     OutlinedButton(
                         onClick = {
@@ -193,16 +198,16 @@ fun SyncScreen(
                                 working = true
                                 try {
                                     val n = manager.syncDown(name) { done, total, fileName ->
-                                        progressText = "Đang tải về $done/$total: $fileName"
+                                        progressText = resources.getString(R.string.sync_progress_download, done, total, fileName)
                                     }
                                     if (n == 0) {
-                                        onShowSnackbar("Không có config nào trên database cho tên này.")
+                                        onShowSnackbar(resources.getString(R.string.sync_download_empty))
                                     } else {
-                                        onShowSnackbar("Đã tải $n tệp config về máy.")
+                                        onShowSnackbar(resources.getString(R.string.sync_download_success, n))
                                     }
                                     refreshLocal()
                                 } catch (e: Exception) {
-                                    onShowSnackbar("Tải về thất bại: ${e.message}")
+                                    onShowSnackbar(resources.getString(R.string.sync_download_failed, e.message ?: ""))
                                 } finally {
                                     working = false
                                     progressText = null
@@ -214,7 +219,7 @@ fun SyncScreen(
                     ) {
                         Icon(Icons.Default.CloudDownload, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Tải về máy")
+                        Text(stringResource(R.string.sync_button_download))
                     }
                 }
 
@@ -224,7 +229,7 @@ fun SyncScreen(
                 ) {
                     Icon(Icons.Default.Sync, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Xem dữ liệu trên database")
+                    Text(stringResource(R.string.sync_button_view_remote))
                 }
             }
         }
@@ -243,7 +248,7 @@ fun SyncScreen(
                 ) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
-                        text = progressText ?: "Đang xử lý…",
+                        text = progressText ?: stringResource(R.string.sync_progress_default),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
@@ -267,12 +272,10 @@ fun SyncScreen(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             icon = { Icon(Icons.Default.Warning, contentDescription = null) },
-            title = { Text("Xoá dữ liệu config?") },
+            title = { Text(stringResource(R.string.sync_delete_title)) },
             text = {
                 Text(
-                    "Toàn bộ config của tên \"${profileName.trim()}\" sẽ bị xoá khỏi " +
-                        "database. Tệp trên máy không bị ảnh hưởng. Hành động này không " +
-                        "thể hoàn tác."
+                    stringResource(R.string.sync_delete_message, profileName.trim())
                 )
             },
             confirmButton = {
@@ -281,22 +284,22 @@ fun SyncScreen(
                     val name = profileName.trim()
                     scope.launch {
                         working = true
-                        progressText = "Đang xoá dữ liệu…"
+                        progressText = resources.getString(R.string.sync_progress_delete)
                         try {
                             val n = manager.deleteRemote(name)
                             remote = emptyList()
-                            onShowSnackbar("Đã xoá $n tệp config khỏi database.")
+                            onShowSnackbar(resources.getString(R.string.sync_delete_success, n))
                         } catch (e: Exception) {
-                            onShowSnackbar("Xoá thất bại: ${e.message}")
+                            onShowSnackbar(resources.getString(R.string.sync_delete_failed, e.message ?: ""))
                         } finally {
                             working = false
                             progressText = null
                         }
                     }
-                }) { Text("Xoá") }
+                }) { Text(stringResource(R.string.sync_button_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Huỷ") }
+                TextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -323,14 +326,13 @@ private fun InfoCard() {
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Cách hoạt động",
+                    text = stringResource(R.string.sync_info_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
             Text(
-                text = "Sao lưu toàn bộ Delta client (script, autoexecute, config) " +
-                    "giữa các máy. Nguồn dữ liệu:",
+                text = stringResource(R.string.sync_info_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -358,19 +360,18 @@ private fun PermissionCard(onGrant: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Cần quyền truy cập bộ nhớ",
+                text = stringResource(R.string.sync_permission_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Text(
-                text = "Ứng dụng cần quyền quản lý tất cả tệp để đọc thư mục " +
-                    "Delta.",
+                text = stringResource(R.string.sync_permission_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Button(onClick = onGrant) {
-                Text("Cấp quyền")
+                Text(stringResource(R.string.sync_permission_button))
             }
         }
     }
@@ -397,15 +398,15 @@ private fun LocalStatusCard(exists: Boolean, count: Int, size: Long) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Dữ liệu trên máy này",
+                    text = stringResource(R.string.sync_local_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = if (!exists) {
-                        "Chưa tìm thấy thư mục Delta."
+                        stringResource(R.string.sync_local_missing)
                     } else {
-                        "$count tệp • ${formatBytes(size)}"
+                        stringResource(R.string.sync_files_summary, count, formatFileSize(size))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -434,7 +435,7 @@ private fun RemoteDataSection(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Dữ liệu trên database",
+                text = stringResource(R.string.sync_remote_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -442,23 +443,21 @@ private fun RemoteDataSection(
             when {
                 profileName.isEmpty() -> {
                     Text(
-                        text = "Nhập tên đồng bộ để xem dữ liệu.",
+                        text = stringResource(R.string.sync_remote_enter_name),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 remote == null -> {
                     Text(
-                        text = "Chưa có dữ liệu. Nhập tên và bấm \"Đồng bộ lên\" để tải " +
-                            "config lên, hoặc \"Xem dữ liệu trên database\" để kiểm tra.",
+                        text = stringResource(R.string.sync_remote_empty_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 remote.isEmpty() -> {
                     Text(
-                        text = "Chưa có config nào trên database cho tên \"$profileName\". " +
-                            "Bấm \"Đồng bộ lên\" để bắt đầu.",
+                        text = stringResource(R.string.sync_remote_none_for_name, profileName),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -466,7 +465,7 @@ private fun RemoteDataSection(
                 else -> {
                     val total = remote.sumOf { it.size }
                     Text(
-                        text = "${remote.size} tệp • ${formatBytes(total)}",
+                        text = stringResource(R.string.sync_files_summary, remote.size, formatFileSize(total)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -489,8 +488,8 @@ private fun RemoteDataSection(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = formatBytes(entry.size) +
-                                        (if (entry.isBinary) " • nhị phân" else ""),
+                                    text = formatFileSize(entry.size) +
+                                        (if (entry.isBinary) " • " + stringResource(R.string.sync_entry_binary) else ""),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -509,7 +508,7 @@ private fun RemoteDataSection(
                     ) {
                         Icon(Icons.Default.DeleteForever, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Xoá dữ liệu config khỏi database")
+                        Text(stringResource(R.string.sync_button_delete_remote))
                     }
                 }
             }
@@ -529,7 +528,7 @@ private fun requestAllFilesAccess(context: android.content.Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
     try {
         val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-        intent.data = Uri.parse("package:${context.packageName}")
+        intent.data = "package:${context.packageName}".toUri()
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     } catch (_: Exception) {
@@ -539,10 +538,4 @@ private fun requestAllFilesAccess(context: android.content.Context) {
     }
 }
 
-private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val kb = bytes / 1024.0
-    if (kb < 1024) return String.format(java.util.Locale.US, "%.1f KB", kb)
-    val mb = kb / 1024.0
-    return String.format(java.util.Locale.US, "%.1f MB", mb)
-}
+

@@ -20,9 +20,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -44,8 +45,9 @@ fun BypassKeyDeltaScreen(
     onShowSnackbar: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val manager = remember {
         DeltaBypassManager((context.applicationContext as KasumiApplication).okHttpClient)
     }
@@ -79,7 +81,7 @@ fun BypassKeyDeltaScreen(
         if (working) return
         val base = apiUrl
         if (base.isNullOrBlank()) {
-            errorMsg = "Dịch vụ tạm thời chưa sẵn sàng. Hãy thử lại sau."
+            errorMsg = resources.getString(R.string.bypass_service_unavailable)
             return
         }
         result = null
@@ -89,9 +91,9 @@ fun BypassKeyDeltaScreen(
             try {
                 result = manager.bypass(base, link)
             } catch (e: DeltaBypassManager.BypassException) {
-                errorMsg = e.message
+                errorMsg = e.text.asString(context)
             } catch (e: Exception) {
-                errorMsg = e.message ?: "Lỗi không xác định"
+                errorMsg = e.message ?: resources.getString(R.string.bypass_error_unknown)
             } finally {
                 working = false
             }
@@ -106,7 +108,7 @@ fun BypassKeyDeltaScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = "Lấy Key Delta",
+            text = stringResource(R.string.bypass_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
@@ -128,7 +130,7 @@ fun BypassKeyDeltaScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Không kết nối được dịch vụ. Kiểm tra mạng rồi thử lại.",
+                        text = stringResource(R.string.bypass_config_failed),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -138,7 +140,7 @@ fun BypassKeyDeltaScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Thử lại")
+                        Text(stringResource(R.string.bypass_retry))
                     }
                 }
             }
@@ -162,7 +164,7 @@ fun BypassKeyDeltaScreen(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Dán link getkey (platoboost.com / platorelay.com) hoặc token key.",
+                    text = stringResource(R.string.bypass_input_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -183,11 +185,13 @@ fun BypassKeyDeltaScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val text = clipboard.getText()?.toString()
-                            if (text.isNullOrBlank()) {
-                                onShowSnackbar("Clipboard trống")
-                            } else {
-                                link = text.trim()
+                            scope.launch {
+                                val text = clipboard.readPlainText()
+                                if (text.isNullOrBlank()) {
+                                    onShowSnackbar(resources.getString(R.string.bypass_clipboard_empty))
+                                } else {
+                                    link = text.trim()
+                                }
                             }
                         },
                         enabled = !working,
@@ -195,7 +199,7 @@ fun BypassKeyDeltaScreen(
                     ) {
                         Icon(Icons.Default.ContentPaste, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Dán")
+                        Text(stringResource(R.string.bypass_paste))
                     }
                     OutlinedButton(
                         onClick = { link = "" },
@@ -204,7 +208,7 @@ fun BypassKeyDeltaScreen(
                     ) {
                         Icon(Icons.Default.Clear, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Xóa")
+                        Text(stringResource(R.string.bypass_clear))
                     }
                 }
 
@@ -216,7 +220,7 @@ fun BypassKeyDeltaScreen(
                 ) {
                     Icon(Icons.Default.Bolt, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (loadingConfig) "Đang chuẩn bị…" else "Lấy key")
+                    Text(stringResource(if (loadingConfig) R.string.bypass_preparing else R.string.bypass_get_key))
                 }
             }
         }
@@ -235,7 +239,7 @@ fun BypassKeyDeltaScreen(
                 ) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
-                        text = "Đang lấy key… có thể mất vài chục giây, vui lòng đợi.",
+                        text = stringResource(R.string.bypass_working_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -274,8 +278,10 @@ fun BypassKeyDeltaScreen(
             ResultCard(
                 res = res,
                 onCopy = {
-                    clipboard.setText(AnnotatedString(res.key))
-                    onShowSnackbar("Đã sao chép key")
+                    scope.launch {
+                        clipboard.setPlainText("Delta key", res.key)
+                        onShowSnackbar(resources.getString(R.string.bypass_key_copied))
+                    }
                 }
             )
         }
@@ -305,14 +311,13 @@ private fun InfoCard() {
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Cách dùng",
+                    text = stringResource(R.string.bypass_howto_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
             }
             Text(
-                text = "Dán link getkey Delta rồi bấm \"Lấy key\". Chờ một chút, key sẽ hiện " +
-                    "ra để bạn sao chép và dán vào Delta.",
+                text = stringResource(R.string.bypass_howto_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -344,7 +349,7 @@ private fun ResultCard(
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Key của bạn",
+                    text = stringResource(R.string.bypass_your_key),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -368,8 +373,8 @@ private fun ResultCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Còn lại: $mins phút" +
-                            (if (mins >= 60) " (~${mins / 60} giờ)" else ""),
+                        text = stringResource(R.string.bypass_remaining_minutes, mins) +
+                            (if (mins >= 60) stringResource(R.string.bypass_remaining_hours_suffix, mins / 60) else ""),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -378,7 +383,10 @@ private fun ResultCard(
 
             res.elapsedSeconds?.let { sec ->
                 Text(
-                    text = "Thời gian xử lý: ${String.format(java.util.Locale.US, "%.1f", sec)}s",
+                    text = stringResource(
+                        R.string.bypass_elapsed,
+                        String.format(java.util.Locale.US, "%.1f", sec),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -392,7 +400,7 @@ private fun ResultCard(
             ) {
                 Icon(Icons.Default.ContentCopy, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Sao chép key")
+                Text(stringResource(R.string.bypass_copy_key))
             }
         }
     }

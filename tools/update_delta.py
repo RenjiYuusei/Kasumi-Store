@@ -10,6 +10,8 @@ from bs4 import BeautifulSoup
 import cloudscraper
 from androguard.core.apk import APK
 
+from apps_json import save_apps
+
 # Configuration
 APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -446,8 +448,7 @@ def main():
 
     if any_update:
         print("Saving apps.json...")
-        with open(APPS_JSON_PATH, 'w', encoding='utf-8') as f:
-            json.dump(apps_data, f, indent=2, ensure_ascii=False)
+        save_apps(apps_data)
     else:
         print("No updates made.")
 

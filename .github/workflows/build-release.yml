@@ -16,9 +16,15 @@ on:
 permissions:
   contents: write
 
+# A newer push supersedes an in-flight build of the same ref.
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       TZ: Asia/Ho_Chi_Minh
 
@@ -31,17 +37,10 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+        # Built-in Gradle cache: keyed on the build files and the wrapper, and
+        # it also saves the dependency-verification and configuration caches.
+        cache: gradle
 
-    - name: Cache Gradle packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
@@ -104,19 +103,20 @@ jobs:
           exit 1
         fi
 
+    - name: Run unit tests
+      run: ./gradlew --no-daemon testDebugUnitTest
+
+    - name: Upload test report on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-report
+        path: app/build/reports/tests/
+        retention-days: 7
+
     - name: Build release APK
       id: build_apk
-      shell: bash
-      run: |
-        set -o pipefail
-        ./gradlew --no-daemon assembleRelease --stacktrace
-        STATUS=$?
-        if [ $STATUS -eq 0 ]; then
-          echo "- Status: ✅ Success"
-        else
-          echo "- Status: ❌ Failed"
-        fi
-        exit $STATUS
+      run: ./gradlew --no-daemon assembleRelease --stacktrace
 
     - name: Get commit info
       id: commit

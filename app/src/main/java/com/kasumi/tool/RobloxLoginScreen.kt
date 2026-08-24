@@ -21,10 +21,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -49,7 +48,7 @@ fun RobloxLoginScreen(
     onShowSnackbar: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
 
     // stringResource() chỉ gọi được trong @Composable; cache lại để dùng
@@ -135,9 +134,11 @@ fun RobloxLoginScreen(
                 }
             },
             onCopy = { cookie ->
-                clipboardManager.setText(AnnotatedString(cookie))
-                // Trên Android 13+, hệ thống đã hiển thị toast tự động; vẫn giữ snackbar.
-                onShowSnackbar(copiedMsg)
+                scope.launch {
+                    clipboard.setPlainText("ROBLOSECURITY", cookie)
+                    // Trên Android 13+, hệ thống đã hiển thị toast tự động; vẫn giữ snackbar.
+                    onShowSnackbar(copiedMsg)
+                }
             },
             onUseAsLogin = { cookie ->
                 cookieInput = cookie
@@ -151,12 +152,14 @@ fun RobloxLoginScreen(
             value = cookieInput,
             onValueChange = { cookieInput = it },
             onPasteFromClipboard = {
-                val clipboardText = clipboardManager.getText()?.toString()
-                if (clipboardText.isNullOrBlank()) {
-                    onShowSnackbar(clipboardEmptyMsg)
-                } else {
-                    cookieInput = clipboardText.trim()
-                    onShowSnackbar(pastedMsg)
+                scope.launch {
+                    val clipboardText = clipboard.readPlainText()
+                    if (clipboardText.isNullOrBlank()) {
+                        onShowSnackbar(clipboardEmptyMsg)
+                    } else {
+                        cookieInput = clipboardText.trim()
+                        onShowSnackbar(pastedMsg)
+                    }
                 }
             },
             onClear = { cookieInput = "" },

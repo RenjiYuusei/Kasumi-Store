@@ -1,8 +1,6 @@
-import os
-import json
-import requests
+import sys
 
-APPS_JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'source', 'apps.json')
+from apps_json import APPS_JSON_PATH, load_apps, make_session, save_apps_if_changed, snapshot
 
 # Only clear dead links for apps that have auto-update scripts
 AUTO_UPDATED_APPS = [
@@ -14,30 +12,36 @@ AUTO_UPDATED_APPS = [
     "Roblox VN (Delta)"
 ]
 
-def check_link(url):
+TIMEOUT = 15
+
+
+def check_link(session, url):
     if not url:
         return False
     try:
-        r = requests.head(url, allow_redirects=True, timeout=10)
+        r = session.head(url, allow_redirects=True, timeout=TIMEOUT)
         if r.status_code == 404:
             return False
         if r.status_code == 200:
             return True
-        r2 = requests.get(url, stream=True, timeout=10)
-        return r2.status_code == 200
+        # Some mirrors reject HEAD; confirm with a GET but never download the
+        # body — and close the response so the connection returns to the pool.
+        with session.get(url, stream=True, timeout=TIMEOUT) as r2:
+            return r2.status_code == 200
     except Exception as e:
         print(f"Error checking {url}: {e}")
         return False
 
+
 def main():
-    if not os.path.exists(APPS_JSON_PATH):
+    apps_data = load_apps()
+    if apps_data is None:
         print(f"Missing file: {APPS_JSON_PATH}")
-        return
+        return 1
 
-    with open(APPS_JSON_PATH, 'r', encoding='utf-8') as f:
-        apps_data = json.load(f)
+    before = snapshot(apps_data)
+    session = make_session()
 
-    modified = False
     for app in apps_data:
         app_name = app.get('name')
         url = app.get('url')
@@ -51,20 +55,18 @@ def main():
             continue
 
         print(f"Checking {app_name}...")
-        is_valid = check_link(url)
-        if not is_valid:
+        if check_link(session, url):
+            print(f"Link OK for {app_name}")
+        else:
             print(f"Link dead for {app_name}: {url}")
             app['url'] = ""  # Clear the URL so update scripts will re-upload
-            modified = True
-        else:
-            print(f"Link OK for {app_name}")
 
-    if modified:
-        with open(APPS_JSON_PATH, 'w', encoding='utf-8') as f:
-            json.dump(apps_data, f, indent=2, ensure_ascii=False)
+    if save_apps_if_changed(apps_data, before):
         print('Saved source/apps.json with cleared dead links')
     else:
         print('All auto-updated app links are active. No changes made.')
+    return 0
+
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

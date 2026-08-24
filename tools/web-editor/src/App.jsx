@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getFileContent, updateFileContent } from './github';
+import { ConflictError, getFileContent, updateFileContent } from './github';
 import Editor from './components/Editor';
 import VSPhoneManager from './components/VSPhoneManager';
 
@@ -104,7 +104,14 @@ function App() {
       setSuccessMsg('Saved successfully!');
       await fetchData();
     } catch (err) {
-      setError("Failed to save: " + err.message);
+      if (err instanceof ConflictError) {
+        // Do not keep the stale sha around: reload so the next save is based
+        // on what is actually on GitHub.
+        setError(err.message);
+        await fetchData();
+      } else {
+        setError("Failed to save: " + err.message);
+      }
     } finally {
       setLoading(false);
     }

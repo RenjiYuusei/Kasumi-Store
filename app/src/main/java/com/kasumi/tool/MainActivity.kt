@@ -1,1110 +1,131 @@
 package com.kasumi.tool
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
+import android.content.IntentFilter
+import android.content.pm.PackageInstaller
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Replay
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material.icons.automirrored.filled.Login
-import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.util.AtomicFile
-import androidx.lifecycle.lifecycleScope
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import com.google.gson.Gson
+import androidx.core.net.toUri
 import com.kasumi.tool.ui.theme.KasumiTheme
-import java.io.BufferedReader
-import java.io.BufferedWriter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.FileReader
-import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Hosts the UI and owns the two things that genuinely need an Activity: the
+ * package-installer intents and the install-status broadcast.
+ *
+ * All catalogue state and I/O now live in [AppsViewModel] / [ApkRepository], so
+ * this class no longer survives-or-loses the app list across rotation.
+ */
 class MainActivity : ComponentActivity() {
 
-    private val saveMutex = Mutex()
-    private val client: OkHttpClient by lazy {
-        (application as KasumiApplication).okHttpClient
-    }
-    private val gson = Gson()
+    private val viewModel: AppsViewModel by viewModels()
 
-    companion object {
-        private const val DEFAULT_SOURCE_URL =
-            "https://raw.githubusercontent.com/RenjiYuusei/Kasumi-Store/main/source/apps.json"
-    }
-
-    // Data states
-    private var appsList by mutableStateOf<List<ApkItem>>(emptyList())
-    private var isLoading by mutableStateOf(false)
-    private var sortMode by mutableStateOf(SortMode.NAME_ASC)
-    private val fileStats = mutableStateMapOf<String, FileStats>()
-    private var statsVersion by mutableIntStateOf(0)
-
-    private val installReceiver = object : android.content.BroadcastReceiver() {
+    private val installReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if ("${context.packageName}.INSTALL_COMMIT" == intent.action) {
-                val status = intent.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, android.content.pm.PackageInstaller.STATUS_FAILURE)
-                val message = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)
-                when (status) {
-                    android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                        val confirmIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                             intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                        } else {
-                             @Suppress("DEPRECATION")
-                             intent.getParcelableExtra(Intent.EXTRA_INTENT)
-                        }
-                        confirmIntent?.let {
-                            it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            try {
-                                context.startActivity(it)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Không thể mở hộp thoại xác nhận: ${e.message}", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                    android.content.pm.PackageInstaller.STATUS_SUCCESS -> {
-                        Toast.makeText(context, "Cài đặt thành công", Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        // Attempt to show more detailed error
-                        val errorMessage = message ?: "Lỗi không xác định ($status)"
-                        Toast.makeText(context, "Cài đặt thất bại: $errorMessage", Toast.LENGTH_LONG).show()
-                    }
+            if (intent.action != "${context.packageName}.INSTALL_COMMIT") return
+            val status = intent.getIntExtra(
+                PackageInstaller.EXTRA_STATUS,
+                PackageInstaller.STATUS_FAILURE,
+            )
+            when (status) {
+                PackageInstaller.STATUS_PENDING_USER_ACTION -> launchConfirmation(context, intent)
+                PackageInstaller.STATUS_SUCCESS -> toast(context, getString(R.string.install_success))
+                else -> {
+                    val reason = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                        ?: getString(R.string.install_failed_unknown, status)
+                    toast(context, getString(R.string.install_failed_with_reason, reason))
                 }
             }
         }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"), Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(installReceiver, android.content.IntentFilter("${packageName}.INSTALL_COMMIT"))
-        }
-
-        lifecycleScope.launch {
-            loadItems()
-            setBusy(true)
-            refreshPreloadedApps()
-            setBusy(false)
-        }
-
+        registerInstallReceiver()
         requestStoragePermission()
 
         setContent {
             KasumiTheme {
-                MainScreen()
+                KasumiApp(
+                    viewModel = viewModel,
+                    onInstallApk = ::installWithSystemInstaller,
+                    onInstallSplits = ::installSplitsWithSession,
+                )
             }
         }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         unregisterReceiver(installReceiver)
+        super.onDestroy()
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    fun MainScreen() {
-        var selectedTab by remember { mutableIntStateOf(0) }
-        var searchQuery by remember { mutableStateOf("") }
-        var showSortDialog by remember { mutableStateOf(false) }
-        var showAboutDialog by remember { mutableStateOf(false) }
+    // --- Install-status broadcast --------------------------------------------
 
-        val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-        val snackbarHostState = remember { SnackbarHostState() }
-        val drawerState = rememberDrawerState(DrawerValue.Closed)
-        val scope = rememberCoroutineScope()
-
-        // Compute file stats in background to avoid I/O in UI
-        LaunchedEffect(appsList) {
-            FileStatsHelper.updateFileStats(appsList, fileStats, cacheDir)
-            statsVersion++
-        }
-
-        val destinations = listOf(
-            NavDestination(0, stringResource(R.string.tab_apps), Icons.Default.Apps),
-            NavDestination(1, stringResource(R.string.tab_roblox_login), Icons.AutoMirrored.Filled.Login),
-            NavDestination(2, stringResource(R.string.tab_auto_rejoin), Icons.Default.Replay),
-            NavDestination(3, stringResource(R.string.tab_sync), Icons.Default.Sync),
-            NavDestination(4, stringResource(R.string.tab_bypass_delta), Icons.Default.VpnKey)
-        )
-
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
-                ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    Text(
-                        stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(24.dp)
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Spacer(Modifier.height(8.dp))
-                    destinations.forEach { dest ->
-                        NavigationDrawerItem(
-                            icon = { Icon(dest.icon, contentDescription = dest.title) },
-                            label = { Text(dest.title) },
-                            selected = selectedTab == dest.index,
-                            onClick = {
-                                selectedTab = dest.index
-                                searchQuery = ""
-                                scope.launch { drawerState.close() }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            colors = NavigationDrawerItemDefaults.colors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
-                }
-            }
-        ) {
-        Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-            containerColor = MaterialTheme.colorScheme.background,
-            topBar = {
-                LargeTopAppBar(
-                    scrollBehavior = scrollBehavior,
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu))
-                        }
-                    },
-                    title = {
-                        Text(
-                            destinations[selectedTab].title,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    actions = {
-                        if (selectedTab == 0) {
-                            IconButton(onClick = { showSortDialog = true }) {
-                                Icon(Icons.Default.FilterList, contentDescription = stringResource(R.string.sort))
-                            }
-                        }
-                        IconButton(onClick = { showAboutDialog = true }) {
-                            Icon(Icons.Default.Info, contentDescription = stringResource(R.string.about))
-                        }
-                    }
-                )
-            },
-            snackbarHost = {
-                SnackbarHost(snackbarHostState) { data ->
-                    Snackbar(
-                        snackbarData = data,
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                        actionColor = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(16.dp)
-                    )
-                }
-            },
-        ) { innerPadding ->
-            Column(modifier = Modifier.padding(innerPadding)) {
-                AnimatedVisibility(visible = isLoading) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-
-                if (selectedTab == 0) {
-                    KasumiSearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        hint = stringResource(R.string.search_hint)
-                    )
-                }
-
-                when (selectedTab) {
-                    0 -> AppsListContent(searchQuery, onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                    1 -> RobloxLoginScreen(onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                    2 -> AutoRejoinScreen(onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                    3 -> SyncScreen(onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                    else -> BypassKeyDeltaScreen(onShowSnackbar = { msg ->
-                        lifecycleScope.launch { snackbarHostState.showSnackbar(msg) }
-                    })
-                }
-            }
-
-            if (showSortDialog) {
-                SortDialog(
-                    onDismiss = { showSortDialog = false },
-                    onSortSelected = { mode ->
-                        sortMode = mode
-                        showSortDialog = false
-                    }
-                )
-            }
-
-            if (showAboutDialog) {
-                AboutDialog(onDismiss = { showAboutDialog = false })
-            }
-        }
-        }
-    }
-
-
-    @Composable
-    fun AboutDialog(onDismiss: () -> Unit) {
-        val context = LocalContext.current
-        val uriHandler = LocalUriHandler.current
-        val versionName = remember {
-            try {
-                val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.packageManager.getPackageInfo(
-                        context.packageName,
-                        PackageManager.PackageInfoFlags.of(0L)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.packageManager.getPackageInfo(context.packageName, 0)
-                }
-                info.versionName ?: ""
-            } catch (_: PackageManager.NameNotFoundException) {
-                ""
-            }
-        }
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp),
-            icon = {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                )
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Apps,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            },
-            title = {
-                Text(
-                    stringResource(R.string.app_name),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.about_version, versionName),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        stringResource(R.string.about_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    uriHandler.openUri("https://discord.gg/CuNhcJpWC7")
-                }) {
-                    Text(stringResource(R.string.about_discord), color = MaterialTheme.colorScheme.primary)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+    /**
+     * Registered NOT_EXPORTED on purpose.
+     *
+     * The status broadcast is delivered through a PendingIntent this app
+     * created, so the system sends it under our own identity and an
+     * unexported receiver still gets it. Registering it exported let any
+     * installed app fake a status broadcast — and because the handler pulls
+     * [Intent.EXTRA_INTENT] out and starts it, that was an arbitrary-intent
+     * launch through an unprotected component.
+     */
+    private fun registerInstallReceiver() {
+        ContextCompat.registerReceiver(
+            this,
+            installReceiver,
+            IntentFilter("$packageName.INSTALL_COMMIT"),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 
-    @Composable
-    fun KasumiSearchBar(query: String, onQueryChange: (String) -> Unit, hint: String) {
-        TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(20.dp)),
-            placeholder = {
-                Text(
-                    hint,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            },
-            trailingIcon = {
-                AnimatedVisibility(
-                    visible = query.isNotEmpty(),
-                    enter = fadeIn() + scaleIn(),
-                    exit = fadeOut() + scaleOut()
-                ) {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.clear_search),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary,
-                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-            )
-        )
-    }
+    // Lint cannot see through ContextCompat.registerReceiver, so it still treats
+    // this broadcast as untrusted. The receiver above is registered
+    // RECEIVER_NOT_EXPORTED and the intent is package-scoped, so the only sender
+    // is the PendingIntent this app handed to PackageInstaller.
+    @Suppress("UnsafeIntentLaunch")
+    private fun launchConfirmation(context: Context, intent: Intent) {
+        val confirmIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        } ?: return
 
-    @Composable
-    fun SortDialog(onDismiss: () -> Unit, onSortSelected: (SortMode) -> Unit) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(24.dp),
-            title = {
-                Text(
-                    stringResource(R.string.sort),
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    val options = listOf(
-                        SortMode.NAME_ASC to R.string.sort_by_name,
-                        SortMode.NAME_DESC to R.string.sort_by_name_desc,
-                        SortMode.SIZE_DESC to R.string.sort_by_size,
-                        SortMode.DATE_DESC to R.string.sort_by_date
-                    )
-                    options.forEach { (mode, labelRes) ->
-                        val isSelected = sortMode == mode
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                    else Color.Transparent
-                                )
-                                .clickable { onSortSelected(mode) }
-                                .padding(horizontal = 8.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = isSelected,
-                                onClick = null,
-                                colors = RadioButtonDefaults.colors(
-                                    selectedColor = MaterialTheme.colorScheme.primary,
-                                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                stringResource(labelRes),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.close), color = MaterialTheme.colorScheme.primary)
-                }
-            }
-        )
-    }
-    @Composable
-    fun AppsListContent(searchQuery: String, onShowSnackbar: (String) -> Unit) {
-        val scope = rememberCoroutineScope()
-        var showClearCacheConfirm by remember { mutableStateOf(false) }
-        val filteredApps by produceState(initialValue = emptyList(), appsList, searchQuery, sortMode, statsVersion) {
-            snapshotFlow {
-                Triple(appsList, searchQuery, sortMode) to fileStats.toMap()
-            }.collect { (params, stats) ->
-                val (list, query, mode) = params
-                value = withContext(Dispatchers.Default) {
-                    filterAndSortApps(list, query, mode, stats)
-                }
-            }
-        }
-
-        // Stats (filtered view – shown in the toolbar above the list)
-        val cachedCount = filteredApps.count { fileStats[it.id]?.exists == true }
-        val totalSize = filteredApps.sumOf { fileStats[it.id]?.size ?: 0L }
-
-        // Full cache stats – used by the clear-cache dialog because `clearCache()`
-        // wipes every cached APK on disk, not just the currently filtered subset.
-        val totalCachedCount = appsList.count { fileStats[it.id]?.exists == true }
-        val totalCachedSize = appsList.sumOf { fileStats[it.id]?.size ?: 0L }
-
-        var pullRefreshing by remember { mutableStateOf(false) }
-
-        @OptIn(ExperimentalMaterial3Api::class)
-        PullToRefreshBox(
-            isRefreshing = pullRefreshing,
-            onRefresh = {
-                scope.launch {
-                    pullRefreshing = true
-                    try {
-                        refreshPreloadedApps()
-                        onShowSnackbar("Đã làm mới nguồn")
-                    } finally {
-                        pullRefreshing = false
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxSize()
-        ) {
-            LazyColumn(
-                contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val statsText = if (cachedCount > 0) {
-                            stringResource(R.string.stats_format, filteredApps.size, "$cachedCount (${formatFileSize(totalSize)})")
-                        } else {
-                            stringResource(R.string.stats_format_no_cache, filteredApps.size)
-                        }
-
-                        Text(
-                            text = statsText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (totalCachedCount > 0) {
-                            TextButton(
-                                onClick = { showClearCacheConfirm = true },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error
-                                )
-                            ) {
-                                Text(
-                                    stringResource(R.string.clear_cache),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (filteredApps.isEmpty()) {
-                    item {
-                        EmptyState(
-                            icon = Icons.Default.SearchOff,
-                            title = stringResource(R.string.no_apps_title),
-                            subtitle = stringResource(R.string.no_apps_subtitle)
-                        )
-                    }
-                } else {
-                    itemsIndexed(filteredApps, key = { _, item -> item.id }) { index, item ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(tween(300, delayMillis = index.coerceAtMost(15) * 30)) +
-                                    slideInVertically(tween(300, delayMillis = index.coerceAtMost(15) * 30)) { it / 3 }
-                        ) {
-                            AppItemRow(item, stats = fileStats[item.id], onInstall = { onInstallClicked(it, onShowSnackbar) })
-                        }
-                    }
-                }
-            }
-        }
-
-        if (showClearCacheConfirm) {
-            AlertDialog(
-                onDismissRequest = { showClearCacheConfirm = false },
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(24.dp),
-                icon = {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                },
-                title = {
-                    Text(
-                        stringResource(R.string.clear_cache_confirm_title),
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                text = {
-                    Text(
-                        stringResource(R.string.clear_cache_confirm_message, totalCachedCount, formatFileSize(totalCachedSize)),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showClearCacheConfirm = false
-                            clearCache(onShowSnackbar)
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text(stringResource(R.string.clear_cache))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showClearCacheConfirm = false }) {
-                        Text(
-                            stringResource(R.string.cancel),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            )
-        }
-    }
-
-    @Composable
-    fun AppItemRow(item: ApkItem, stats: FileStats?, onInstall: (ApkItem) -> Unit) {
-        val context = LocalContext.current
-        val isCached = stats?.exists == true
-        val fileSize = stats?.size ?: 0L
-        
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            onClick = { onInstall(item) },
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
-            ),
-            border = BorderStroke(
-                width = 1.dp,
-                color = if (isCached) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (item.iconUrl != null) {
-                    AsyncImage(
-                        model = remember(item.iconUrl) {
-                            ImageRequest.Builder(context)
-                                .data(item.iconUrl)
-                                .crossfade(true)
-                                .build()
-                        },
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(14.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                        MaterialTheme.colorScheme.secondaryContainer
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Apps,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    if (isCached) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF66BB6A))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "${formatFileSize(fileSize)} • ${stringResource(R.string.cached)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    if (item.versionName != null) {
-                        Text(
-                            text = "v${item.versionName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                IconButton(onClick = { onInstall(item) }) {
-                    Icon(
-                        Icons.Default.Download,
-                        contentDescription = stringResource(R.string.download),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-        }
-    }
-
-    @Composable
-    fun EmptyState(
-        icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Default.SearchOff,
-        title: String,
-        subtitle: String
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(36.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
-            }
-        }
-    }
-
-
-    // --- Logic functions migrated from old MainActivity ---
-
-    private fun requestStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
-                }
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val permissions = arrayOf(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-            requestPermissions(permissions, 100)
-        }
-    }
-
-    private fun setBusy(busy: Boolean) {
-        isLoading = busy
-    }
-
-    private suspend fun loadItems() {
-        val loaded = withContext(Dispatchers.IO) {
-            val file = File(filesDir, "items.json")
-            if (file.exists()) {
-                try {
-                    BufferedReader(FileReader(file)).use { reader ->
-                        ApkItem.readListFrom(reader)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    emptyList()
-                }
-            } else {
-                val prefs = getSharedPreferences("apk_items", Context.MODE_PRIVATE)
-                val json = prefs.getString("list", null)
-                val list = ApkItem.fromJsonList(json)
-                if (list.isNotEmpty()) {
-                    saveMutex.withLock {
-                        val atomicFile = AtomicFile(File(filesDir, "items.json"))
-                        var fos: FileOutputStream? = null
-                        try {
-                            fos = atomicFile.startWrite()
-                            val writer = BufferedWriter(java.io.OutputStreamWriter(fos))
-                            ApkItem.writeListTo(list, writer)
-                            writer.flush()
-                            atomicFile.finishWrite(fos)
-                            prefs.edit().remove("list").apply()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                            if (fos != null) {
-                                atomicFile.failWrite(fos)
-                            }
-                        }
-                    }
-                }
-                list
-            }
-        }
-        appsList = loaded.ifEmpty { emptyList() }.toMutableList()
-    }
-
-    private suspend fun saveItems() {
-        saveMutex.withLock {
-            withContext(Dispatchers.IO) {
-                val atomicFile = AtomicFile(File(filesDir, "items.json"))
-                var fos: FileOutputStream? = null
-                try {
-                    fos = atomicFile.startWrite()
-                    val writer = BufferedWriter(java.io.OutputStreamWriter(fos))
-                    ApkItem.writeListTo(appsList, writer)
-                    writer.flush()
-                    atomicFile.finishWrite(fos)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    if (fos != null) {
-                        atomicFile.failWrite(fos)
-                    }
-                }
-            }
-        }
-    }
-
-
-    private fun normalizeUrl(raw: String): String {
-        if (!raw.contains("dropbox.com")) return raw
-        var u = raw
-            .replace("://www.dropbox.com", "://dl.dropboxusercontent.com")
-            .replace("://dropbox.com", "://dl.dropboxusercontent.com")
-        u = when {
-            u.contains("dl=0") -> u.replace("dl=0", "dl=1")
-            u.contains("dl=") -> u
-            u.contains("?") -> "$u&dl=1"
-            else -> "$u?dl=1"
-        }
-        return u
-    }
-
-    private suspend fun fetchPreloadedAppsRemote(url: String): List<PreloadApp>? = withContext(Dispatchers.IO) {
+        confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            val req = Request.Builder().url(url).header("User-Agent", "CloudPhoneTool/1.0").build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val body = resp.body?.string() ?: return@withContext null
-                val arr: Array<PreloadApp> = gson.fromJson(body, Array<PreloadApp>::class.java)
-                arr.toList()
-            }
+            context.startActivity(confirmIntent)
         } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            toast(context, getString(R.string.install_confirm_dialog_failed, e.message ?: ""))
         }
     }
 
-    private suspend fun refreshPreloadedApps() {
-        val preloaded: List<PreloadApp>? = fetchPreloadedAppsRemote(DEFAULT_SOURCE_URL)
-        if (preloaded != null) {
-            val newItems = preloaded.map { p ->
-                val normalized = normalizeUrl(p.url)
-                val id = FileUtils.stableIdFromUrl(p.url)
-                ApkItem(
-                    id = id,
-                    name = p.name,
-                    sourceType = SourceType.URL,
-                    url = normalized,
-                    uri = null,
-                    versionName = p.versionName,
-                    versionCode = p.versionCode,
-                    iconUrl = p.iconUrl
-                )
-            }
-            appsList = newItems
-            saveItems()
-        }
-    }
+    private fun toast(context: Context, message: String) =
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
-    private fun onInstallClicked(item: ApkItem, onShowSnackbar: (String) -> Unit) {
-        lifecycleScope.launch {
-            setBusy(true)
-            try {
-                val cachedFile = FileUtils.getCacheFile(item, cacheDir)
-                val apkFile = if (item.sourceType == SourceType.URL && cachedFile.exists() && cachedFile.length() > 0) {
-                     FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
-                     statsVersion++
-                     cachedFile
-                } else {
-                    when (item.sourceType) {
-                        SourceType.LOCAL -> if (item.uri != null) copyFromUriIfNeeded(Uri.parse(item.uri)) else null
-                        SourceType.URL -> downloadApk(item)
-                    }
-                }
+    // --- Installer intents ----------------------------------------------------
 
-                if (apkFile == null) {
-                    onShowSnackbar("Lỗi chuẩn bị tệp APK")
-                    return@launch
-                }
+    /** Hands a single APK to the system package installer. */
+    private fun installWithSystemInstaller(file: File, report: (UiText) -> Unit) {
+        if (!ensureCanRequestInstalls(report)) return
 
-                val urlLower = item.url?.lowercase(Locale.ROOT)
-                val fileNameLower = apkFile.name.lowercase(Locale.ROOT)
-                val isSplitPackage = (urlLower?.contains(".apks") == true || fileNameLower.endsWith(".apks"))
-                        || (urlLower?.contains(".xapk") == true || fileNameLower.endsWith(".xapk"))
-                        || (urlLower?.contains(".apkm") == true || fileNameLower.endsWith(".apkm"))
-
-                if (isSplitPackage) {
-                    // Logic for split APKs/XAPKs
-                     val (splits, obbInfo) = withContext(Dispatchers.IO) { extractSplitsAndObb(apkFile) }
-                     if (splits.isEmpty()) {
-                        onShowSnackbar("Không tìm thấy APK bên trong file")
-                        return@launch
-                    }
-                    if (obbInfo != null) {
-                        installObbFiles(obbInfo)
-                    }
-                    
-                    val rooted = RootInstaller.isDeviceRooted()
-                     if (rooted) {
-                            val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApks(splits) }
-                            if (ok) {
-                                onShowSnackbar("Cài đặt thành công")
-                            } else {
-                                installSplitsNormally(splits, onShowSnackbar)
-                            }
-                    } else {
-                        installSplitsNormally(splits, onShowSnackbar)
-                    }
-                    return@launch
-                }
-
-                 val rooted = RootInstaller.isDeviceRooted()
-                if (rooted) {
-                    val (ok, _) = withContext(Dispatchers.IO) { RootInstaller.installApk(apkFile) }
-                    if (ok) {
-                        onShowSnackbar("Cài đặt thành công")
-                    } else {
-                        installNormally(apkFile, onShowSnackbar)
-                    }
-                } else {
-                    installNormally(apkFile, onShowSnackbar)
-                }
-            } catch (e: Exception) {
-                onShowSnackbar("Lỗi: ${e.message}")
-                e.printStackTrace()
-            } finally {
-                setBusy(false)
-            }
-        }
-    }
-
-    private suspend fun downloadApk(item: ApkItem): File? = withContext(Dispatchers.IO) {
-        val url = item.url ?: return@withContext null
-        val outFile = FileUtils.getCacheFile(item, cacheDir)
-        outFile.parentFile?.mkdirs()
-        val req = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android) Kasumi/1.0")
-            .build()
-        client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) throw IllegalStateException("HTTP ${resp.code}")
-            resp.body?.byteStream()?.use { input ->
-                FileOutputStream(outFile).use { out ->
-                    input.copyTo(out)
-                }
-            }
-            FileStatsHelper.updateItemFileStats(item, fileStats, cacheDir)
-            withContext(Dispatchers.Main) { statsVersion++ }
-            outFile
-        }
-    }
-
-    private suspend fun copyFromUriIfNeeded(uri: Uri): File? = withContext(Dispatchers.IO) {
-        try {
-            val dir = File(cacheDir, "apks").apply { mkdirs() }
-            val outFile = File(dir, "picked_${System.currentTimeMillis()}.apk")
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(outFile).use { out ->
-                    input.copyTo(out)
-                }
-            }
-            outFile
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun installNormally(file: File, onShowSnackbar: (String) -> Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                data = Uri.parse("package:$packageName")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            try {
-                startActivity(intent)
-                onShowSnackbar(getString(R.string.grant_unknown_sources_hint))
-            } catch (e: Exception) {
-                onShowSnackbar(getString(R.string.open_unknown_sources_failed, e.message))
-            }
-            return
-        }
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -1114,192 +135,19 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(intent)
         } catch (e: Exception) {
-            onShowSnackbar(getString(R.string.open_installer_failed, e.message))
+            report(UiText.res(R.string.open_installer_failed, e.message ?: ""))
         }
     }
 
-    private fun formatFileSize(bytes: Long): String {
-        // Locale.US ensures '.' decimal separator regardless of system locale
-        // (vd: locale Việt sẽ ra "1,5 KB" làm vỡ phần text "1,5 KB · cached").
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> String.format(Locale.US, "%.1f KB", bytes / 1024.0)
-            bytes < 1024 * 1024 * 1024 -> String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0))
-            else -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-        }
-    }
+    /** Installs a split package through a PackageInstaller session. */
+    private suspend fun installSplitsWithSession(files: List<File>, report: (UiText) -> Unit) {
+        if (!ensureCanRequestInstalls(report)) return
 
-    private fun clearCache(onShowSnackbar: (String) -> Unit) {
-         lifecycleScope.launch {
-            val (count, size) = withContext(Dispatchers.IO) {
-            val apkCacheDir = File(cacheDir, "apks")
-            val splitsDir = File(cacheDir, "splits")
-            val obbCacheDir = File(cacheDir, "obb")
-            var count = 0
-            var size = 0L
-
-            // Clean up all cached apk files
-            if (apkCacheDir.exists()) {
-                val results = coroutineScope {
-                    apkCacheDir.listFiles()?.map { file ->
-                        async {
-                            if (file.isFile) {
-                                val len = file.length()
-                                if (file.delete()) 1 to len else 0 to 0L
-                            } else 0 to 0L
-                        }
-                    }?.awaitAll() ?: emptyList()
-                }
-                val (totalCount, totalSize) = results.fold(0 to 0L) { (c, s), (dc, ds) ->
-                    (c + dc) to (s + ds)
-                }
-                count += totalCount
-                size += totalSize
-            }
-             if (splitsDir.exists()) splitsDir.deleteRecursively()
-             if (obbCacheDir.exists()) obbCacheDir.deleteRecursively()
-
-             count to size
-            }
-
-            FileStatsHelper.refreshAll(appsList, fileStats, cacheDir)
-            statsVersion++
-            // Force recomposition in case list content stays the same but file stats changed.
-            appsList = appsList.toList()
-
-            val sizeStr = formatFileSize(size)
-            onShowSnackbar(getString(R.string.cache_cleared, count, sizeStr))
-         }
-    }
-
-    // Copied from old Main for splitting/OBB
-    data class ObbInfo(val packageName: String, val obbFiles: List<File>)
-    private fun extractSplitsAndObb(packageFile: File): Pair<List<File>, ObbInfo?> {
-        val outDir = File(cacheDir, "splits/${packageFile.nameWithoutExtension}")
-        if (outDir.exists()) outDir.deleteRecursively()
-        outDir.mkdirs()
-        val results = mutableListOf<File>()
-        val obbFiles = mutableListOf<File>()
-        var packageName: String? = null
-        
+        val installer = packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         try {
-            java.util.zip.ZipFile(packageFile).use { zipFile ->
-                val entries = zipFile.entries()
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    if (entry.isDirectory) continue
-                    val entryName = entry.name.lowercase()
-                    val fileName = entry.name.substringAfterLast('/')
-                    
-                    if (entryName.endsWith("manifest.json")) {
-                        try {
-                            val manifest = zipFile.getInputStream(entry).bufferedReader().readText()
-                            packageName = JSONObject(manifest).optString("package_name")
-                        } catch (e: Exception) {
-                            Log.w("Kasumi", "Failed to parse manifest.json: ${entry.name}", e)
-                        }
-                        continue
-                    }
-                    if (entryName.endsWith(".apk")) {
-                        // Check for encryption/invalidity by peeking 2 magic bytes: 'PK' (0x50 0x4B)
-                        // APK is a ZIP, so it must start with PK signature.
-                        zipFile.getInputStream(entry).use { input ->
-                            val buf = ByteArray(2)
-                            val read = input.read(buf)
-                            if (read == 2 && buf[0] == 0x50.toByte() && buf[1] == 0x4B.toByte()) {
-                                 val outFile = File(outDir, fileName)
-                                 outFile.parentFile?.mkdirs()
-                                 try {
-                                     outFile.outputStream().buffered(65536).use { output ->
-                                         output.write(buf, 0, read)
-                                         input.copyTo(output, 65536)
-                                     }
-                                     if (outFile.exists() && outFile.length() > 0) results.add(outFile)
-                                 } catch (e: Exception) {
-                                     outFile.delete()
-                                     Log.e("Kasumi", "Failed to extract APK: $fileName", e)
-                                 }
-                            } else {
-                                // Encrypted or invalid APK entry
-                                 Log.e("Kasumi", "Skipping invalid/encrypted APK entry: $fileName")
-                            }
-                        }
-                        continue
-                    }
-                    if (entryName.endsWith(".obb")) {
-                        val obbDir = File(cacheDir, "obb")
-                        obbDir.mkdirs()
-                        val outFile = File(obbDir, fileName)
-                        zipFile.getInputStream(entry).use { input -> FileOutputStream(outFile).use { output -> input.copyTo(output) } }
-                        if (outFile.exists() && outFile.length() > 0) obbFiles.add(outFile)
-                        continue
-                    }
-                }
-            }
-        } catch (e: Exception) { e.printStackTrace() }
-        
-        val sortedApks = results.map {
-            val name = it.name
-            val c1 = !name.startsWith("base.") && !name.contains("com.")
-            val c2 = name.startsWith("config.") || name.startsWith("split_")
-            SortKey(it, c1, c2, name)
-        }.sortedWith(compareBy({ it.c1 }, { it.c2 }, { it.name }))
-            .map { it.file }
-        val obbInfo = if (obbFiles.isNotEmpty() && packageName != null) ObbInfo(packageName, obbFiles) else null
-        return sortedApks to obbInfo
-    }
-    
-    private suspend fun installObbFiles(obbInfo: ObbInfo) = coroutineScope {
-         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (!Environment.isExternalStorageManager()) return@coroutineScope
-            }
-            val obbDir = File(Environment.getExternalStorageDirectory(), "Android/obb/${obbInfo.packageName}")
-            if (!obbDir.exists()) obbDir.mkdirs()
-
-            val semaphore = Semaphore(2)
-            obbInfo.obbFiles.map { obbFile ->
-                async(Dispatchers.IO) {
-                    semaphore.withPermit {
-                        val destFile = File(obbDir, obbFile.name)
-                        FileInputStream(obbFile).use { fis ->
-                            FileOutputStream(destFile).use { fos ->
-                                val src = fis.channel
-                                val dest = fos.channel
-                                var position = 0L
-                                val size = src.size()
-                                while (position < size) {
-                                    position += src.transferTo(position, size - position, dest)
-                                }
-                            }
-                        }
-                    }
-                }
-            }.awaitAll()
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            e.printStackTrace()
-        }
-    }
-
-    private suspend fun installSplitsNormally(files: List<File>, onShowSnackbar: (String) -> Unit) {
-         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (!packageManager.canRequestPackageInstalls()) {
-                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                        data = Uri.parse("package:$packageName")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                    onShowSnackbar("Hãy cấp quyền, sau đó thử lại")
-                    return
-                }
-            }
-            val installer = packageManager.packageInstaller
-            val params = android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             val sessionId = installer.createSession(params)
-            val session = installer.openSession(sessionId)
-            try {
+            installer.openSession(sessionId).use { session ->
                 withContext(Dispatchers.IO) {
                     for (f in files) {
                         FileInputStream(f).use { input ->
@@ -1310,29 +158,78 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                val intent = Intent("$packageName.INSTALL_COMMIT").apply {
-                     setPackage(packageName)
+                val intent = Intent("$packageName.INSTALL_COMMIT").setPackage(packageName)
+                val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    android.app.PendingIntent.FLAG_MUTABLE
+                } else {
+                    0
                 }
                 val pi = android.app.PendingIntent.getBroadcast(
-                    this, sessionId,
+                    this,
+                    sessionId,
                     intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.app.PendingIntent.FLAG_MUTABLE else 0)
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or mutability,
                 )
                 session.commit(pi.intentSender)
-                onShowSnackbar("Đang tiến hành cài đặt…")
-            } finally {
-                session.close()
+                report(UiText.res(R.string.install_in_progress))
             }
         } catch (e: Exception) {
-            onShowSnackbar("Lỗi cài đặt splits: ${e.message}")
+            report(UiText.res(R.string.install_splits_error, e.message ?: ""))
         }
     }
+
+    /**
+     * Returns true when the app may install packages; otherwise sends the user to
+     * the "install unknown apps" screen and reports why nothing happened.
+     */
+    private fun ensureCanRequestInstalls(report: (UiText) -> Unit): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        if (packageManager.canRequestPackageInstalls()) return true
+
+        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+            data = "package:$packageName".toUri()
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+            report(UiText.res(R.string.grant_unknown_sources_hint))
+        } catch (e: Exception) {
+            report(UiText.res(R.string.open_unknown_sources_failed, e.message ?: ""))
+        }
+        return false
+    }
+
+    // --- Permissions ----------------------------------------------------------
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) return
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = "package:$packageName".toUri()
+                    }
+                )
+            } catch (e: Exception) {
+                try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                } catch (_: Exception) {
+                    // No settings activity on this ROM; the feature degrades on its own.
+                }
+            }
+        } else {
+            // minSdk is 24, so runtime permissions are always available here.
+            requestPermissions(
+                arrayOf(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                ),
+                REQUEST_STORAGE,
+            )
+        }
+    }
+
+    private companion object {
+        const val REQUEST_STORAGE = 100
+    }
 }
-
-private data class SortKey(val file: File, val c1: Boolean, val c2: Boolean, val name: String)
-
-private data class NavDestination(
-    val index: Int,
-    val title: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)
