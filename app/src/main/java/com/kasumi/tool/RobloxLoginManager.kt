@@ -658,15 +658,16 @@ object RobloxLoginManager {
                 // theo phiên bản WebView (v12 → v23+); ta chỉ insert những cột
                 // mà schema thực sự có, tránh INSERT fail vì cột không tồn tại
                 // (DB cũ) hoặc thiếu cột bắt buộc không default (DB mới).
-                val schemaCols = listCookieColumns(db)
-                if (schemaCols.isEmpty()) {
+                val columns = getCookieColumns(db)
+                if (columns.isEmpty()) {
                     throw IllegalStateException(context.getString(R.string.rbx_err_no_schema))
                 }
+                val colNames = columns.map { it.name }
                 steps += StepResult(
                     context.getString(R.string.rbx_step_read_schema),
                     true,
                     0,
-                    context.getString(R.string.rbx_out_schema_cols, schemaCols.size, schemaCols.joinToString(",")),
+                    context.getString(R.string.rbx_out_schema_cols, columns.size, colNames.joinToString(",")),
                     ""
                 )
 
@@ -678,7 +679,7 @@ object RobloxLoginManager {
                         /* whereArgs = */ arrayOf("%roblox.com")
                     )
 
-                    val cv = buildCookieValues(trimmed, schemaCols)
+                    val cv = buildCookieValues(trimmed, columns)
                     db.insertOrThrow("cookies", null, cv)
                     db.setTransactionSuccessful()
 
@@ -840,24 +841,46 @@ object RobloxLoginManager {
         )
     }
 
+    /** Thông tin metadata của một cột trong bảng `cookies`. */
+    data class ColumnMeta(
+        val name: String,
+        val type: String,
+        val notNull: Boolean,
+        val hasDefault: Boolean,
+        val isPrimaryKey: Boolean = false
+    )
+
     /**
-     * Trả về tập tên cột hiện có trong bảng `cookies` của Chromium WebView.
+     * Đọc metadata toàn bộ cột hiện có trong bảng `cookies` của Chromium WebView.
      *
      * Schema Chromium thay đổi theo thời gian:
      *  - v12 (Chrome <80, ROM cũ): 15 cột, không có `top_frame_site_key`,
      *    `source_port`, `last_update_utc`.
-     *  - v15+ (Chrome 92+): thêm `top_frame_site_key`, `source_port`.
+     *  - v13+ (Chrome 88+): thêm `source_port`, `is_same_party`.
+     *  - v15+ (Chrome 92+): thêm `top_frame_site_key`.
+     *  - v16 (Chrome 96+): bỏ DEFAULT ở nhiều cột, yêu cầu NOT NULL chặt chẽ.
      *  - v17+ (Chrome 105+): thêm `last_update_utc`.
      *  - v20+ (Chrome 112+): thêm `source_type`.
+     *  - v21 (Chrome 114+): bỏ `is_same_party`.
      *  - v23+ (Chrome 118+): thêm `has_cross_site_ancestor`.
      */
-    private fun listCookieColumns(db: SQLiteDatabase): Set<String> {
-        val cols = mutableSetOf<String>()
+    private fun getCookieColumns(db: SQLiteDatabase): List<ColumnMeta> {
+        val cols = mutableListOf<ColumnMeta>()
         db.rawQuery("PRAGMA table_info(cookies)", null).use { c ->
             val nameIdx = c.getColumnIndex("name")
+            val typeIdx = c.getColumnIndex("type")
+            val notNullIdx = c.getColumnIndex("notnull")
+            val dfltIdx = c.getColumnIndex("dflt_value")
+            val pkIdx = c.getColumnIndex("pk")
+
             if (nameIdx < 0) return cols
             while (c.moveToNext()) {
-                cols.add(c.getString(nameIdx))
+                val name = c.getString(nameIdx)
+                val type = if (typeIdx >= 0) c.getString(typeIdx).orEmpty().uppercase() else ""
+                val notNull = if (notNullIdx >= 0) c.getInt(notNullIdx) == 1 else false
+                val hasDefault = if (dfltIdx >= 0) !c.isNull(dfltIdx) else false
+                val isPk = if (pkIdx >= 0) c.getInt(pkIdx) > 0 else false
+                cols.add(ColumnMeta(name, type, notNull, hasDefault, isPk))
             }
         }
         return cols
@@ -866,11 +889,14 @@ object RobloxLoginManager {
     /**
      * Build [ContentValues] cho 1 dòng cookie `.ROBLOSECURITY` với host `.roblox.com`.
      *
-     * Chỉ set những cột có mặt trong [schemaCols] — để tương thích cả schema
-     * Chromium cũ (v12: không có `top_frame_site_key`/`source_port`/...) và mới
-     * (v23+: có thêm `source_type`, `has_cross_site_ancestor`).
+     * Chỉ set những cột có mặt trong bảng `cookies` — tương thích từ Chromium cũ
+     * (v12: không có `top_frame_site_key`/`source_port`/...) đến mới nhất (v23+: `has_cross_site_ancestor`).
+     *
+     * Đồng thời tự động phát hiện và gán giá trị mặc định cho bất kỳ cột NOT NULL nào không có DEFAULT
+     * (như `is_same_party` trên Chromium v13-v20) để ngăn lỗi SQLite 1299 SQLITE_CONSTRAINT_NOTNULL.
      */
-    private fun buildCookieValues(cookieValue: String, schemaCols: Set<String>): ContentValues {
+    private fun buildCookieValues(cookieValue: String, columns: List<ColumnMeta>): ContentValues {
+        val schemaCols = columns.map { it.name }.toSet()
         // Chromium dùng microseconds kể từ epoch Windows (1601-01-01).
         // Khoảng cách giữa 1601-01-01 và 1970-01-01 là 11644473600 giây.
         val unixEpochOffsetMicros = 11644473600L * 1_000_000L
@@ -890,22 +916,39 @@ object RobloxLoginManager {
         if ("is_secure" in schemaCols) cv.put("is_secure", 1)
         if ("is_httponly" in schemaCols) cv.put("is_httponly", 1)
         if ("last_access_utc" in schemaCols) cv.put("last_access_utc", nowMicros)
-        // Có DEFAULT trong mọi phiên bản nhưng vẫn nên set để đúng ngữ nghĩa:
+        // Có DEFAULT trong một số phiên bản nhưng có thể mất DEFAULT từ Chromium v16:
         if ("has_expires" in schemaCols) cv.put("has_expires", 1)
         if ("is_persistent" in schemaCols) cv.put("is_persistent", 1)
         if ("priority" in schemaCols) cv.put("priority", 1)
         if ("encrypted_value" in schemaCols) cv.put("encrypted_value", ByteArray(0))
         if ("samesite" in schemaCols) cv.put("samesite", -1)
         if ("source_scheme" in schemaCols) cv.put("source_scheme", 2)
+        // Chromium v8 - v10:
+        if ("firstpartyonly" in schemaCols) cv.put("firstpartyonly", 0)
+        // Chromium v13+:
+        if ("source_port" in schemaCols) cv.put("source_port", 443)
+        // Chromium v13 - v20 (Chrome 88 - 113):
+        if ("is_same_party" in schemaCols) cv.put("is_same_party", 0)
         // Chromium v15+:
         if ("top_frame_site_key" in schemaCols) cv.put("top_frame_site_key", "")
-        if ("source_port" in schemaCols) cv.put("source_port", 443)
         // Chromium v17+:
         if ("last_update_utc" in schemaCols) cv.put("last_update_utc", nowMicros)
         // Chromium v20+ (Chrome 112+):
         if ("source_type" in schemaCols) cv.put("source_type", 0)
         // Chromium v23+ (Chrome 118+):
         if ("has_cross_site_ancestor" in schemaCols) cv.put("has_cross_site_ancestor", 0)
+
+        // Fallback an toàn cho bất kỳ cột NOT NULL nào không có DEFAULT mà chưa được set:
+        // Đảm bảo không bao giờ bị SQLITE_CONSTRAINT_NOTNULL trên bất kỳ biến thể schema WebView nào.
+        for (col in columns) {
+            if (!col.isPrimaryKey && col.notNull && !col.hasDefault && !cv.containsKey(col.name)) {
+                when {
+                    col.type.contains("INT") -> cv.put(col.name, 0)
+                    col.type.contains("BLOB") -> cv.put(col.name, ByteArray(0))
+                    else -> cv.put(col.name, "")
+                }
+            }
+        }
         return cv
     }
 }
