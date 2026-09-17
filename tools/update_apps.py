@@ -5,9 +5,9 @@ import requests
 import time
 import re
 import oss2
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 from bs4 import BeautifulSoup
-from apksearch import APKMirror
+from apksearch import APKMirror, APKPure
 
 from apps_json import save_apps
 
@@ -382,6 +382,85 @@ def process_app(client, apps_data, app_name, package_name, output_prefix, stable
     return True
 
 
+def process_apkpure_app(client, apps_data, app_name, package_name, output_prefix):
+    target = next((a for a in apps_data if a.get('name') == app_name), None)
+    if target is None:
+        target = {
+            'name': app_name,
+            'url': '',
+            'versionName': '',
+            'iconUrl': ''
+        }
+        apps_data.append(target)
+        print(f"Added missing app entry: {app_name}")
+
+    pure = APKPure(package_name)
+    api_result = pure._api_search()
+    if api_result and api_result[1]:
+        latest_version, download_url = api_result[1][0]
+    else:
+        search_res = pure.search_apk()
+        if not search_res:
+            print(f"{app_name}: no APKPure result for {package_name}")
+            return False
+        latest_version = None
+        download_url = search_res[1]
+
+    print(f"{app_name}: current={target.get('versionName')} latest={latest_version}")
+    if latest_version and latest_version == target.get('versionName') and target.get('url'):
+        print(f"{app_name}: already up to date")
+        return False
+
+    ext = '.apk'
+    temp_path = os.path.join(BASE_DIR, f"{output_prefix}_new{ext}")
+    if not download_file(download_url, temp_path):
+        return False
+
+    try:
+        from androguard.core.apk import APK
+        apk = APK(temp_path)
+        apk_version = apk.get_androidversion_name()
+        if apk_version:
+            latest_version = str(apk_version).strip()
+    except Exception as e:
+        print(f"Warning: could not read APK manifest via androguard: {e}")
+
+    if not latest_version:
+        print(f"{app_name}: could not determine version")
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        return False
+
+    if latest_version == target.get('versionName') and target.get('url'):
+        print(f"{app_name}: already up to date after inspecting APK")
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        return False
+
+    clean_version = ''.join(c for c in str(latest_version) if c.isalnum() or c in '.-_')
+    upload_name = f"{output_prefix}_{clean_version}{ext}"
+    new_url = client.upload_file(temp_path, upload_name)
+
+    try:
+        os.remove(temp_path)
+    except OSError:
+        pass
+
+    if not new_url:
+        print(f"{app_name}: upload failed")
+        return False
+
+    target['url'] = new_url
+    target['versionName'] = latest_version
+
+    print(f"{app_name}: updated to {latest_version}")
+    return True
+
+
 def main():
     if not os.path.exists(APPS_JSON_PATH):
         print(f"Missing file: {APPS_JSON_PATH}")
@@ -403,6 +482,8 @@ def main():
     if process_app(client, apps_data, 'Discord', 'com.discord', 'discord', stable_only=True):
         any_update = True
     if process_app(client, apps_data, 'ZArchiver', 'ru.zdevs.zarchiver', 'zarchiver'):
+        any_update = True
+    if process_apkpure_app(client, apps_data, 'Auto Clicker app for games', 'com.ksxkq.autoclick', 'autoclicker_games'):
         any_update = True
 
     if any_update:

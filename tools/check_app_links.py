@@ -9,7 +9,8 @@ AUTO_UPDATED_APPS = [
     "Discord",
     "ZArchiver",
     "Roblox Quốc Tế (Delta)",
-    "Roblox VN (Delta)"
+    "Roblox VN (Delta)",
+    "Auto Clicker app for games"
 ]
 
 TIMEOUT = 15
